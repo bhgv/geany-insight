@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* EN: Exercise instruction reading and real manual-name dialogs without moving the source execution point.
- * RU: Проверяет чтение инструкций и настоящие диалоги имён без смены позиции исполнения исходного сценария. */
+/* EN: Exercise instruction reading, names and automatic PC refresh with two controlled machine steps.
+ * RU: Проверяет чтение инструкций, имена и слежение за PC двумя контролируемыми машинными шагами. */
 
 /* EN: Fill the real name dialog with main's address and name in data, then apply the production validation.
  * RU: Заполняет настоящий диалог адресом main и именем data, затем применяет производственную проверку. */
@@ -17,24 +17,32 @@ static gboolean native_assembly_gui_name(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Return whether window's real instruction text includes expected, without treating console text as disassembly.
- * RU: Проверяет наличие expected в настоящем тексте инструкций window, не подменяя его текстом консоли. */
-static gboolean native_assembly_gui_text(GtkWidget *window, const gchar *expected)
+/* EN: Return an owned copy of window's production instruction snapshot for step/follow comparisons.
+ * RU: Возвращает собственную копию настоящего снимка инструкций window для сравнения шага/слежения. */
+static gchar *native_assembly_gui_snapshot(GtkWidget *window)
 {
     GtkWidget *view = find(window, "insight-gdb-instructions");
     GtkTextIter start, end;
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
     gtk_text_buffer_get_bounds(buffer, &start, &end);
-    gchar *text = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    return gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+}
+
+/* EN: Return whether window's real instruction text includes expected, without treating console text as disassembly.
+ * RU: Проверяет наличие expected в настоящем тексте инструкций window, не подменяя его текстом консоли. */
+static gboolean native_assembly_gui_text(GtkWidget *window, const gchar *expected)
+{
+    gchar *text = native_assembly_gui_snapshot(window);
     gboolean valid = expected ? strstr(text, expected) != NULL : !*text;
     g_free(text);
     return valid;
 }
 
-/* EN: Advance phases 70..76 through add/rename/save/error recovery in window, then resume value tests in tabs.
- * RU: Продвигает фазы 70..76 добавления/переименования/сохранения/ошибки window, затем возвращает тесты значений в tabs. */
+/* EN: Advance phases 70..78 through names, profiles, errors and instruction following in window, then resume value tests in tabs.
+ * RU: Продвигает фазы 70..78 имён, профилей, ошибок и слежения window, затем возвращает тесты значений в tabs. */
 static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
+    static gchar *previous_instruction;
     GtkWidget *entry = find(window, "insight-gdb-instruction-address");
     if (!entry || !gtk_widget_is_sensitive(entry))
         return G_SOURCE_CONTINUE;
@@ -85,8 +93,35 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 72 && native_assembly_gui_text(window, NULL))
     {
         gtk_entry_set_text(GTK_ENTRY(entry), "$pc");
-        g_print("C/C++ GTK: disassembly, automatic name refresh, rename, profile save and error recovery passed.\n");
-        phase = 16;
+        phase = 76;
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-follow-instructions")), TRUE);
+    }
+    else if (phase == 76 && native_assembly_gui_text(window, "main") &&
+             find(window, "local: local_child.code"))
+    {
+        previous_instruction = native_assembly_gui_snapshot(window);
+        if (click(window, "Step instruction"))
+            phase = 77;
+    }
+    else if (phase == 77 || phase == 78)
+    {
+        gchar *current = native_assembly_gui_snapshot(window);
+        gboolean moved = g_strcmp0(current, previous_instruction) != 0;
+        if (moved && phase == 77)
+        {
+            g_free(previous_instruction);
+            previous_instruction = g_strdup(current);
+            if (click(window, "Next instruction"))
+                phase = 78;
+        }
+        else if (moved)
+        {
+            g_clear_pointer(&previous_instruction, g_free);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-follow-instructions")), FALSE);
+            g_print("C/C++ GTK: automatic local fields, manual names, profiles, instruction steps and PC following passed.\n");
+            phase = 16;
+        }
+        g_free(current);
     }
     return G_SOURCE_CONTINUE;
 }

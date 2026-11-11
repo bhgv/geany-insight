@@ -52,6 +52,12 @@ static void native_debug_update(NativeDebug *session)
 {
     (void)session;
 }
+/* EN: Automatic page activation is tested by the real GTK scenario; this transport starts explicit reads only.
+ * RU: Автоматическое включение страницы проверяет настоящий GTK-сценарий; этот транспорт запускает только явное чтение. */
+static void native_assembly_follow(NativeDebug *session)
+{
+    (void)session;
+}
 '''
 MAIN = r'''
 /* EN: Create one typed-data rule, process MI records from stdin and emit the actual pipeline commands.

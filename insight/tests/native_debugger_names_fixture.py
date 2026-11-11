@@ -24,6 +24,7 @@ typedef struct GMatchInfo GMatchInfo;
 #define g_ascii_isxdigit(c) isxdigit((unsigned char)(c))
 #define g_ascii_isalnum(c) isalnum((unsigned char)(c))
 extern int g_key_file_has_group(GKeyFile *, const char *);
+extern int g_key_file_has_key(GKeyFile *, const char *, const char *, GError **);
 extern GString *g_string_append_c(GString *, char);
 extern char **g_strsplit(const char *, const char *, int);
 extern void g_strfreev(char **);

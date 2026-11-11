@@ -59,6 +59,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/disassembly/views.inc"
 #include "insight-debuggers/disassembly/names-ui.inc"
 #include "insight-debuggers/disassembly/pipeline.inc"
+#include "insight-debuggers/disassembly/follow-ui.inc"
 #include "insight-debuggers/gdb-disassembly-ui.inc"
 #include "insight-debuggers/gdb-remote-model.inc"
 #include "insight-debuggers/gdb-remote-process.inc"

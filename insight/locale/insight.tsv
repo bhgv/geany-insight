@@ -3355,3 +3355,6 @@ Invalid assembly names (maximum 256 rules).	Неверные имена диза
 Previous instruction snapshot. Pause and read again to resolve names in the new context.	Предыдущий снимок инструкций. Приостановите и прочитайте заново для разрешения имён в новом контексте.
 Intel on x86/x64; native syntax on ARM/RISC-V. Names annotate original addresses. Up to 128 data locations, 64 symbols, 3 field levels. Refresh after stepping or changing frames.	Intel на x86/x64; родной синтаксис на ARM/RISC-V. Имена дополняют исходные адреса. До 128 адресов данных, 64 символов и 3 уровней полей. Обновите после шага или смены кадра.
 Instruction snapshot ready. Unresolved name/type queries: %u. %s	Снимок инструкций готов. Неразрешённых запросов имён/типов: %u. %s
+Follow the selected frame at each stop	Следовать за выбранным кадром при каждой остановке
+Following the selected frame's program counter…	Слежение за счётчиком команд выбранного кадра…
+While this page is visible, refresh $pc and names after stops and frame changes. Manual address reads remain available.	Пока страница видна, обновлять $pc и имена после остановок и смены кадра. Ручное чтение адресов остаётся доступным.

@@ -83,6 +83,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             session->stopped = !g_str_has_prefix(line, "*stopped,reason=\"exited");
             if (session->stopped)
             {
+                if (session->assembly)
+                    session->assembly->follow_needed = TRUE;
                 native_values_reset(session);
                 g_free(session->stop_detail);
                 session->stop_detail = native_catch_stop_detail(session, line);

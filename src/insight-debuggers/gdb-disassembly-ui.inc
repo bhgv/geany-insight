@@ -44,6 +44,7 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
     assembly->objects = g_ptr_array_new_with_free_func(g_free);
     assembly->registers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    assembly->page = page;
     GtkWidget *label = gtk_label_new(insight_tr("Address expression ($pc, function or 0x…):"));
     gtk_widget_set_halign(label, GTK_ALIGN_START);
     gtk_box_pack_start(GTK_BOX(page), label, FALSE, FALSE, 0);
@@ -67,6 +68,12 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
         gtk_flow_box_insert(GTK_FLOW_BOX(bar), button, -1);
     }
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
+    assembly->follow = gtk_check_button_new_with_label(insight_tr("Follow the selected frame at each stop"));
+    gtk_widget_set_name(assembly->follow, "insight-gdb-follow-instructions");
+    gtk_widget_set_tooltip_text(assembly->follow, insight_tr("While this page is visible, refresh $pc and names after stops and frame changes. Manual address reads remain available."));
+    g_signal_connect(assembly->follow, "toggled", G_CALLBACK(native_assembly_follow_changed), session);
+    g_signal_connect(session->tabs, "switch-page", G_CALLBACK(native_assembly_follow_page), session);
+    gtk_box_pack_start(GTK_BOX(page), assembly->follow, FALSE, FALSE, 0);
     assembly->status = gtk_label_new(insight_tr("Pause the program, then read instructions. This is a snapshot, not a live view."));
     gtk_widget_set_name(assembly->status, "insight-gdb-instruction-status");
     gtk_label_set_line_wrap(GTK_LABEL(assembly->status), TRUE);

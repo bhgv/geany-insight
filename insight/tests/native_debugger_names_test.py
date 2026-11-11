@@ -193,9 +193,15 @@ int main(int argc, char **argv)
     native_assembly_metadata(&assembly, &automatic, "^done,variables=[{name=\"input\"}]");
     assert(!assembly.work.length);
     GKeyFile *profile = g_key_file_new();
+    assembly.follow_enabled = TRUE;
     native_name_profile_store(&session, profile);
     GError *error = NULL;
     assert(native_name_profile_validate(profile, &error));
+    assert(g_key_file_get_boolean(profile, "assembly-names", "follow", NULL));
+    g_key_file_set_string(profile, "assembly-names", "follow", "not-a-boolean");
+    assert(!native_name_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_boolean(profile, "assembly-names", "follow", TRUE);
     NativeNameRule *loaded = native_name_rule_read(profile, 0);
     assert(loaded && !strcmp(loaded->name, "argument"));
     native_name_rule_free(loaded);

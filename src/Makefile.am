@@ -340,6 +340,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-disassembly-model.inc \
 	insight-debuggers/gdb-disassembly-ui.inc \
 	insight-debuggers/disassembly/annotations.inc \
+	insight-debuggers/disassembly/follow-ui.inc \
 	insight-debuggers/disassembly/names-ui.inc \
 	insight-debuggers/disassembly/pipeline.inc \
 	insight-debuggers/disassembly/resolve.inc \

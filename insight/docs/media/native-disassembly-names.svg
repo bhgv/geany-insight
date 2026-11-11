@@ -19,7 +19,7 @@
 <text x="42" y="366" font-size="14">GDB local/arg types → fields / Типы переменных и параметров → поля</text>
 <rect x="24" y="398" width="872" height="108" rx="8" fill="#fff" stroke="#6685a3"/>
 <text x="42" y="426" font-size="17">mov eax,0x2a  ; const 0x2a</text>
-<text x="42" y="456" font-size="16">Read → resolve names → annotate / Прочитать → разрешить имена → подписать</text>
+<text x="42" y="456" font-size="16">Stop / Остановка → $pc → symbols / имена → fields / поля</text>
 <text x="42" y="484" font-size="15">Save debugger profile: rules persist, runtime addresses are reevaluated.</text>
 </g>
 </svg>

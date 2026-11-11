@@ -116,6 +116,11 @@ static gboolean native_name_profile_validate(GKeyFile *profile, GError **error)
     GError *failure = NULL;
     gint count = g_key_file_get_integer(profile, "assembly-names", "count", &failure);
     gboolean valid = !failure && count >= 0 && count <= 256;
+    if (valid && g_key_file_has_key(profile, "assembly-names", "follow", NULL))
+    {
+        g_key_file_get_boolean(profile, "assembly-names", "follow", &failure);
+        valid = failure == NULL;
+    }
     for (gint i = 0; valid && i < count; i++)
     {
         NativeNameRule *rule = native_name_rule_read(profile, (guint)i);

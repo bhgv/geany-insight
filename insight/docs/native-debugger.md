@@ -415,3 +415,17 @@ Missing types, inaccessible addresses and bit-fields that have no address are
 reported as unresolved queries. No missing debug information is invented.
 
 ![Illustrative naming and architecture forms](media/native-disassembly-names.svg)
+
+### Follow the current instruction
+
+Enable **Follow the selected frame at each stop** on the instruction page to
+refresh `$pc`, symbols and field names after a confirmed stop, an instruction
+step or a thread/frame selection. The refresh waits for frame variables and
+watches; it never interrupts a running program. It runs only while this page is
+visible. Pending Continue, Stop, Restart and remote detach take precedence.
+
+Manual address reads remain available. After the next stop, follow mode returns
+the address entry to `$pc`. Disable the checkbox to keep a manual snapshot.
+
+The follow-mode choice is saved with debugger profiles. Older profiles without
+this option preserve the current checkbox setting.

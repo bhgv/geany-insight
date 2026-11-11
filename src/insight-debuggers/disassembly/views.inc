@@ -50,6 +50,7 @@ static void native_assembly_context(NativeDebug *session)
         else
             i++;
     }
+    assembly->follow_needed = TRUE;
     g_hash_table_remove_all(assembly->registers);
     g_clear_pointer(&assembly->function, g_free);
     g_free(assembly->context_thread);

@@ -33,6 +33,7 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
 {
     NativeAssembly *assembly = session->assembly;
     assembly->active = TRUE;
+    assembly->follow_needed = FALSE;
     g_free(assembly->context_thread);
     g_free(assembly->context_frame);
     assembly->context_thread = g_strdup(session->selected_thread);
@@ -68,7 +69,11 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
 static gboolean native_assembly_next(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
-    if (!assembly || !assembly->active)
+    if (!assembly)
+        return FALSE;
+    if (!assembly->active)
+        native_assembly_follow(session);
+    if (!assembly->active)
         return FALSE;
     if (!session->stopped)
     {

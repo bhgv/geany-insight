@@ -24,7 +24,7 @@ typedef struct
 
 typedef struct
 {
-    GtkWidget *expression, *status, *text, *rules_view;
+    GtkWidget *expression, *status, *text, *rules_view, *page, *follow;
     GtkListStore *rule_rows;
     GPtrArray *rules, *ranges;
     GQueue work;
@@ -32,7 +32,7 @@ typedef struct
     gchar *record, *function, *request, *last_error, *request_expression;
     gchar *context_thread, *context_frame;
     guint64 temporary_address;
-    gboolean active;
+    gboolean active, visible, follow_needed, follow_enabled;
     GPtrArray *objects, *register_names;
     GHashTable *registers;
     guint collected, unresolved, span;
