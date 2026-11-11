@@ -64,6 +64,7 @@ static gboolean remote_attach_main_frame(GtkWidget *window)
         g_free(name);
         if (matches)
         {
+            gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), &row);
             GtkTreePath *path = gtk_tree_model_get_path(model, &row);
             gtk_tree_view_row_activated(GTK_TREE_VIEW(view), path, gtk_tree_view_get_column(GTK_TREE_VIEW(view), 0));
             gtk_tree_path_free(path);
