@@ -258,7 +258,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: insight-native-linux-${{ github.ref }}
+  group: insight-native-linux-v2-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   native:
@@ -328,6 +328,7 @@ jobs:
         run: |
           LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-remote.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a python3 insight/tests/native_debugger_remote_fixture.py _native/tests/test_insight_native_debugger_gui
       - name: Publish native debugger diagnostics
+        timeout-minutes: 2
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
@@ -350,6 +351,7 @@ jobs:
           cp _native/meson-logs/testlog.txt virtual-list-testlog.txt
           exit "$virtual_failed"
       - name: Publish bounded list check evidence
+        timeout-minutes: 2
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         uses: actions/upload-artifact@v4
         with:
