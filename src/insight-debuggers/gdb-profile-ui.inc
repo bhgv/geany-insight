@@ -65,7 +65,7 @@ static void native_profile_save(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
     GKeyFile *profile = g_key_file_new();
-    g_key_file_set_integer(profile, "debugger", "version", 2);
+    g_key_file_set_integer(profile, "debugger", "version", 3);
     g_key_file_set_integer(profile, "debugger", "mode", gtk_combo_box_get_active(GTK_COMBO_BOX(remote->mode)));
     g_key_file_set_integer(profile, "debugger", "ssh-port", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)));
     g_key_file_set_integer(profile, "debugger", "server-port", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->server_port)));

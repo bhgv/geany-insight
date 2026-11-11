@@ -2,6 +2,8 @@
 /* EN: Validate saved source breakpoints/watches and construct bounded MI restoration commands.
  * RU: Проверяет сохранённые точки/наблюдения и создаёт ограниченные команды восстановления MI. */
 
+static gboolean native_profile_locations_validate(GKeyFile *profile, gint points, GError **error);
+
 /* EN: Check value's UTF-8 length and single-line shape against limit; NULL is invalid.
  * RU: Проверяет UTF-8, длину и однострочность value по limit; NULL недопустим. */
 static gboolean native_profile_text_valid(const gchar *value, glong limit)
@@ -45,6 +47,8 @@ static gboolean native_profile_debug_validate(GKeyFile *profile, GError **error)
     if (!valid)
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
             insight_tr("Invalid saved breakpoints or watches (limits: 256 points, 32 watches)."));
+    if (valid && g_key_file_get_integer(profile, "debugger", "version", NULL) >= 3)
+        valid = native_profile_locations_validate(profile, points, error);
     return valid;
 }
 

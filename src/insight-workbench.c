@@ -296,6 +296,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/scripts/window.inc"
 
 #include "insight-debuggers/gdb-remote-state.inc"
+#include "insight-debuggers/gdb-profile-location-state.inc"
 #include "insight-debuggers/gdb-session.inc"
 #include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
@@ -313,6 +314,9 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/gdb-remote-process.inc"
 #include "insight-debuggers/gdb-remote-connection.inc"
 #include "insight-debuggers/gdb-profile-debug-model.inc"
+#include "insight-debuggers/gdb-profile-locations-model.inc"
+#include "insight-debuggers/gdb-profile-locations-snapshot.inc"
+#include "insight-debuggers/gdb-profile-locations-storage.inc"
 #include "insight-debuggers/gdb-profile-model.inc"
 #include "insight-debuggers/gdb-profile-debug-ui.inc"
 #include "insight-debuggers/gdb-profile-ui.inc"

@@ -64,6 +64,7 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
         g_free(number);
         return;
     }
+    gchar *function = native_debug_field(tuple, "func");
     gchar *file = native_debug_field(tuple, "fullname");
     gchar *line = native_debug_field(tuple, "line");
     gchar *original = native_debug_field(tuple, "original-location");
@@ -75,6 +76,7 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
     gchar *kind = native_debug_field(tuple, "type");
     if (strstr(tuple, "locations=["))
     {
+        g_clear_pointer(&function, g_free);
         g_clear_pointer(&file, g_free);
         g_clear_pointer(&line, g_free);
     }
@@ -97,7 +99,7 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
                                     g_strdup(original ? original : what ? what : number);
     gtk_list_store_insert_with_values(session->point_rows, NULL, -1,
         0, location, 1, number, 2, enabled, 3, condition, 4, hits, 5, ignore,
-        6, file, 7, line, 8, kind, -1);
+        6, file, 7, line, 8, kind, 9, function, -1);
     if (file && native_context_id(line))
     {
         guint64 row = g_ascii_strtoull(line, NULL, 10);
@@ -119,6 +121,7 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
     g_free(enabled);
     g_free(original);
     g_free(line);
+    g_free(function);
     g_free(file);
     g_free(number);
 }
@@ -341,12 +344,15 @@ static void native_point_open(GtkTreeView *view, GtkTreePath *path, GtkTreeViewC
 static GtkWidget *native_points_widget(NativeDebug *session, GtkWidget *dialog)
 {
     GtkWidget *page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-    session->point_rows = gtk_list_store_new(9, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    session->point_rows = gtk_list_store_new(10, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     session->points_view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->point_rows));
     gtk_widget_set_name(session->points_view, "insight-gdb-breakpoints");
-    const gchar *titles[] = {"Function or file:line", "Number", "Enabled", "Type", "Condition", "Hit count", "Ignore first hits"};
-    const guint columns[] = {0, 1, 2, 8, 3, 4, 5};
+    const gchar *titles[] = {
+        "Function or file:line", "Number", "Enabled", "Type", "Condition",
+        "Hit count", "Ignore first hits", "Function"
+    };
+    const guint columns[] = {0, 1, 2, 8, 3, 4, 5, 9};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {
         GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(

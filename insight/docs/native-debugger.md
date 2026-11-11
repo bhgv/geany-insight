@@ -283,7 +283,15 @@ It does not run or connect the target. Pending source points use GDB's normal
 resolution when their code becomes available. A rejected GDB command stops the
 remaining restoration and shows an error; the saved file stays intact.
 
-Data watchpoints, temporary/absolute-address breakpoints and individual C++
-sub-location enable overrides belong to the current session and are not saved.
-Parent C++ source breakpoint settings are saved. Version-one profiles still
-restore connection/launch settings; an explicit Save upgrades them to version two.
+Disabled C++ sub-locations are also saved (up to 1024 per profile). The Function
+column distinguishes overloads and template specializations. Restoration matches
+file, full function name and line under the newly created parent breakpoint;
+process addresses and old GDB numbers are never reused. Ambiguous or unavailable
+locations remain pending, with a status message, until a later breakpoint refresh
+can match them uniquely. Changing these settings manually after restoration takes
+precedence. Save retains unresolved selectors for parents that still exist.
+
+Data watchpoints and temporary/absolute-address breakpoints remain session-only.
+Versions one and two are readable; Save upgrades to version three. The existing
+256 KiB profile limit also includes C++ location metadata. Missing source coordinates
+on a disabled location prevent Save with an explanation, preserving the old file.

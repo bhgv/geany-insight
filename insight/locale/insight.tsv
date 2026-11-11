@@ -3290,3 +3290,5 @@ Forget saved profile	Забыть сохранённый профиль
 Invalid saved breakpoints or watches (limits: 256 points, 32 watches).	Недопустимые сохранённые точки или наблюдения (пределы: 256 точек, 32 наблюдения).
 Restoring saved source breakpoints…	Восстановление сохранённых точек исходников…
 Some source breakpoints could not be restored. See the GDB console.	Некоторые точки исходников не восстановлены. Подробности в консоли GDB.
+Invalid saved C++ locations (maximum 1024 entries; source coordinates are required).	Неверные сохранённые подпозиции C++ (не более 1024; нужны координаты исходников).
+Profile restored; %u C++ locations await matching symbols.	Профиль восстановлен; подпозиции C++, ожидающие однозначных символов: %u.

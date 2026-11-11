@@ -308,6 +308,10 @@ libgeany_la_SOURCES += \
 	insight-debuggers/scripts/window.inc \
 	insight-debuggers/gdb-profile-debug-model.inc \
 	insight-debuggers/gdb-profile-debug-ui.inc \
+	insight-debuggers/gdb-profile-location-state.inc \
+	insight-debuggers/gdb-profile-locations-model.inc \
+	insight-debuggers/gdb-profile-locations-snapshot.inc \
+	insight-debuggers/gdb-profile-locations-storage.inc \
 	insight-debuggers/gdb-profile-model.inc \
 	insight-debuggers/gdb-profile-ui.inc \
 	insight-debuggers/gdb-remote-state.inc \

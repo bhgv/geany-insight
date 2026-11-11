@@ -76,7 +76,7 @@ int main(void)
     for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
         g_key_file_set_string(profile, "debugger", native_profile_names[i], "");
     assert(native_profile_validate(profile, &error) && !error);
-    g_key_file_set_integer(profile, "debugger", "version", 3);
+    g_key_file_set_integer(profile, "debugger", "version", 4);
     assert(!native_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_set_integer(profile, "debugger", "version", 1);
@@ -100,6 +100,22 @@ int main(void)
     g_key_file_set_boolean(profile, "breakpoint-0", "enabled", FALSE);
     g_key_file_set_integer(profile, "breakpoint-0", "ignore", 3);
     assert(native_profile_validate(profile, &error));
+    g_key_file_set_integer(profile, "debugger", "version", 3);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1);
+    g_key_file_set_string(profile, "breakpoint-0-location-0", "file", "overloads.cpp");
+    g_key_file_set_string(profile, "breakpoint-0-location-0", "function", "sample<int>(int)");
+    g_key_file_set_integer(profile, "breakpoint-0-location-0", "line", 1);
+    assert(native_profile_validate(profile, &error));
+    g_key_file_set_integer(profile, "breakpoint-0-location-0", "line", 0);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_integer(profile, "breakpoint-0-location-0", "line", 1);
+    g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1025);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1);
     char *point_command = native_profile_point_command(profile, 0);
     puts(point_command);
     g_free(point_command);
@@ -146,8 +162,8 @@ class NativeProfile(unittest.TestCase):
             self.skipTest('Needs cc and GLib/GIO runtime libraries.')
         model = Path(__file__).resolve().parents[2] / 'src/insight-debuggers/gdb-profile-model.inc'
         names = model.read_text().split('static const gchar *native_profile_names[] = {', 1)[1].split('};', 1)[0]
-        debug_helpers = '\n'.join(function('src/insight-debuggers/gdb-profile-debug-model.inc', name)
-                                  for name in ('native_profile_text_valid', 'native_profile_debug_validate', 'native_profile_point_command'))
+        debug_helpers = function('src/insight-debuggers/gdb-profile-debug-model.inc', 'native_profile_text_valid') + '\n' + function('src/insight-debuggers/gdb-profile-locations-model.inc', 'native_profile_locations_validate') + '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-debug-model.inc', name)
+                                  for name in ('native_profile_debug_validate', 'native_profile_point_command'))
         helpers = debug_helpers + '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-model.inc', name)
                             for name in ('native_profile_validate', 'native_profile_path'))
         with tempfile.TemporaryDirectory(dir=model.parents[2]) as directory:

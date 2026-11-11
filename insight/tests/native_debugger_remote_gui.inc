@@ -20,6 +20,32 @@ static gboolean remote_test_status(GtkWidget *window, const gchar *text)
     return label && strstr(gtk_label_get_text(GTK_LABEL(label)), text);
 }
 
+/* EN: Select window's C++ sub-location matching function text and enabled state; return FALSE while refreshing.
+ * RU: Выбирает подпозицию C++ window по функции function и состоянию enabled; при обновлении возвращает FALSE. */
+static gboolean profile_cpp_location(GtkWidget *window, const gchar *function, const gchar *enabled)
+{
+    GtkWidget *view = find(window, "insight-gdb-breakpoints");
+    if (!view)
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+         valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *name = NULL, *state = NULL;
+        gtk_tree_model_get(model, &row, 9, &name, 2, &state, -1);
+        gboolean matches = name && strstr(name, function) && !g_strcmp0(state, enabled);
+        g_free(state);
+        g_free(name);
+        if (matches)
+        {
+            gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), &row);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 /* EN: Fill the profile breakpoint editor from title in data, testing a nonzero saved ignore count.
  * RU: Заполняет редактор точки по заголовку data, проверяя сохранение ненулевого числа пропусков. */
 static gboolean profile_point_rule(gpointer data)
@@ -58,6 +84,8 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
                     ==, g_getenv("INSIGHT_GDB_SSH_HOST"));
                 g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-remote-executable"))),
                     ==, g_getenv("INSIGHT_GDB_REMOTE_EXECUTABLE"));
+                g_assert(profile_cpp_location(window, "profile_twice<int>", "n"));
+                g_assert(profile_cpp_location(window, "profile_twice<double>", "y"));
                 g_assert(point_column(window, 2, "n"));
                 g_assert(point_column(window, 3, "1"));
                 g_assert(point_column(window, 5, "3"));
@@ -107,14 +135,25 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_timeout_add(100, profile_point_rule, "Ignore first hits");
         click(window, "Ignore first hits");
     }
-    else if (phase == 23 && point_column(window, 5, "3") && click(window, "Save debugger profile"))
+    else if (phase == 23 && point_column(window, 5, "3"))
+    {
+        gtk_entry_set_text(GTK_ENTRY(find(window, "Function or file:line")), "profile_twice");
+        if (click(window, "Add Breakpoint"))
+            phase = 30;
+    }
+    else if (phase == 30 && profile_cpp_location(window, "profile_twice<int>", "y") &&
+             click(window, "Enable / Disable"))
+        phase = 31;
+    else if (phase == 31 && profile_cpp_location(window, "profile_twice<int>", "n") &&
+             profile_cpp_location(window, "profile_twice<double>", "y") && click(window, "Save debugger profile"))
     {
         g_assert(remote_test_status(window, "Debugger profile saved"));
         profile_reopened = TRUE;
         gtk_widget_destroy(window);
         phase = 0;
     }
-    else if (phase == 24 && point_column(window, 2, "n") && point_column(window, 5, "3") &&
+    else if (phase == 24 && profile_cpp_location(window, "profile_twice<int>", "n") &&
+             profile_cpp_location(window, "profile_twice<double>", "y") && point_column(window, 2, "n") && point_column(window, 5, "3") &&
              click(window, "Enable / Disable"))
         phase = 25;
     else if (phase == 25 && point_column(window, 2, "y") &&

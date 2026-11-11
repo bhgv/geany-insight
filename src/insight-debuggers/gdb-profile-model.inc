@@ -13,7 +13,7 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
 {
     const gchar *integer_names[] = {"version", "mode", "ssh-port", "server-port"};
     const gint minimum[] = {1, 0, 0, 1};
-    const gint maximum[] = {2, 2, 65535, 65535};
+    const gint maximum[] = {3, 2, 65535, 65535};
     for (guint i = 0; i < G_N_ELEMENTS(integer_names); i++)
     {
         GError *failure = NULL;

@@ -13,7 +13,8 @@ typedef struct {
 
 typedef struct
 {
-    gchar *location, *condition;
+    gchar *location, *condition, *number;
+    GPtrArray *disabled_locations;
     gboolean enabled;
     guint ignore;
 } NativeSavedPoint;
@@ -44,7 +45,9 @@ typedef struct {
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
-    GPtrArray *expressions, *locals, *saved_source_points;
+    GPtrArray *expressions, *locals, *saved_source_points, *profile_disabled_pending;
+    guint profile_insert_next, profile_insert_count, profile_insert_index;
+    gboolean profile_insert_pending;
     gboolean profile_restoring, profile_restore_failed;
     GtkListStore *local_rows, *point_rows, *stack_rows;
     GtkWidget *threads, *stack;
@@ -120,6 +123,7 @@ static gchar *native_stop_detail(const gchar *record);
 static gchar *native_launch_next(NativeDebug *session);
 static void native_source_stopped(NativeDebug *session);
 static gchar *native_point_key(const gchar *filename, guint line);
+static void native_profile_command_sent(NativeDebug *session, const gchar *command);
 static void native_debug_send(GtkWidget *dialog, const gchar *command);
 static void native_all_stacks_reply(NativeDebug *session, const gchar *record);
 static gboolean native_context_id(const gchar *value);
@@ -218,6 +222,7 @@ static void native_debug_free(gpointer data)
         gtk_tree_row_reference_free(session->value_pending_row);
     insight_queue_clear_full(&session->value_cleanup, g_free);
     g_ptr_array_unref(session->saved_source_points);
+    g_ptr_array_unref(session->profile_disabled_pending);
     g_ptr_array_unref(session->expressions);
     g_ptr_array_unref(session->locals);
     g_object_unref(session->local_rows);
@@ -452,6 +457,7 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command)
         session->remote->pending = NATIVE_REMOTE_SYSROOT;
     if (session->remote && g_str_has_prefix(command, "-target-select "))
         session->remote->pending = NATIVE_REMOTE_CONNECT;
+    native_profile_command_sent(session, command);
     gchar *scoped = native_debug_scoped(session, command);
     gchar *line = g_strconcat(scoped, "\n", NULL);
     g_free(scoped);

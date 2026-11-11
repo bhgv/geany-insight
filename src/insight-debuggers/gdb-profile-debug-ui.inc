@@ -7,6 +7,8 @@
 static void native_saved_point_free(gpointer data)
 {
     NativeSavedPoint *point = data;
+    g_free(point->number);
+    g_ptr_array_unref(point->disabled_locations);
     g_free(point->location);
     g_free(point->condition);
     g_free(point);
@@ -21,6 +23,7 @@ static void native_profile_points_snapshot(NativeDebug *session, const gchar *re
         return;
     g_ptr_array_set_size(session->saved_source_points, 0);
     const gchar *cursor = body + strlen("body=["), *start, *end;
+    NativeSavedPoint *current = NULL;
     while (session->saved_source_points->len < 257 && (end = native_next_tuple(&cursor, &start)))
     {
         gchar *tuple = g_strndup(start, end - start);
@@ -28,10 +31,15 @@ static void native_profile_points_snapshot(NativeDebug *session, const gchar *re
         gchar *kind = native_debug_field(tuple, "type");
         gchar *disposition = native_debug_field(tuple, "disp");
         gchar *location = native_debug_field(tuple, "original-location");
+        if (native_context_id(number))
+            current = NULL;
         if (native_context_id(number) && !g_strcmp0(kind, "breakpoint") &&
             !g_strcmp0(disposition, "keep") && location && *location && *location != '*')
         {
             NativeSavedPoint *point = g_new0(NativeSavedPoint, 1);
+            point->number = g_strdup(number);
+            point->disabled_locations = g_ptr_array_new_with_free_func(native_saved_location_free);
+            current = point;
             point->location = g_steal_pointer(&location);
             point->condition = native_debug_field(tuple, "cond");
             if (!point->condition)
@@ -46,16 +54,37 @@ static void native_profile_points_snapshot(NativeDebug *session, const gchar *re
             g_free(ignore);
             g_free(enabled);
         }
+        native_profile_location_capture(current, tuple);
+        const gchar *nested = strstr(tuple, "locations=[");
+        if (nested)
+        {
+            nested += strlen("locations=[");
+            const gchar *child_start, *child_end;
+            guint scanned = 0;
+            while (scanned++ < 4096 && (child_end = native_next_tuple(&nested, &child_start)))
+            {
+                gchar *child = g_strndup(child_start, child_end - child_start);
+                native_profile_location_capture(current, child);
+                g_free(child);
+            }
+        }
         g_free(location);
         g_free(disposition);
         g_free(kind);
         g_free(number);
         g_free(tuple);
     }
-    if (session->profile_restoring)
+    guint unresolved = native_profile_locations_apply(session, record);
+    if (session->profile_restoring && g_queue_is_empty(&session->launch_commands))
     {
         session->profile_restoring = FALSE;
-        if (!session->profile_restore_failed)
+        if (unresolved && !session->profile_restore_failed)
+        {
+            gchar *message = g_strdup_printf(insight_tr("Profile restored; %u C++ locations await matching symbols."), unresolved);
+            gtk_label_set_text(GTK_LABEL(session->remote->status), message);
+            g_free(message);
+        }
+        else if (!session->profile_restore_failed)
             gtk_label_set_text(GTK_LABEL(session->remote->status),
                 insight_tr("Debugger profile restored. Connect or Run explicitly."));
     }
@@ -82,12 +111,13 @@ static void native_profile_debug_store(NativeDebug *session, GKeyFile *profile)
         g_key_file_set_string(profile, group, "condition", point->condition);
         g_key_file_set_boolean(profile, group, "enabled", point->enabled);
         g_key_file_set_integer(profile, group, "ignore", point->ignore);
+        native_profile_locations_store(session, profile, point, i);
         g_free(group);
     }
 }
 
-/* EN: Restore validated version-two profile into session without running the target; replace source points and watches.
- * RU: Восстанавливает проверенный профиль версии два в session без запуска; заменяет точки исходников и наблюдения. */
+/* EN: Restore validated profile into session without running the target; replace source points and watches.
+ * RU: Восстанавливает проверенный профиль в session без запуска; заменяет точки исходников и наблюдения. */
 static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
 {
     if (g_key_file_get_integer(profile, "debugger", "version", NULL) < 2)
@@ -99,12 +129,15 @@ static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
     {
         gchar *number = NULL, *kind = NULL;
         gtk_tree_model_get(model, &row, 1, &number, 8, &kind, -1);
+        if (native_context_id(number))
+            current = NULL;
         if (native_context_id(number) && !g_strcmp0(kind, "breakpoint"))
             g_queue_push_tail(&session->launch_commands, g_strdup_printf("-break-delete %s", number));
         g_free(kind);
         g_free(number);
     }
     gint count = g_key_file_get_integer(profile, "debugger", "point-count", NULL);
+    native_profile_locations_load(session, profile, (guint)count);
     for (gint i = 0; i < count; i++)
         g_queue_push_tail(&session->launch_commands, native_profile_point_command(profile, (guint)i));
     g_ptr_array_set_size(session->expressions, 0);
@@ -129,6 +162,7 @@ static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
  * RU: Отмечает ошибку восстановления record в session, сохраняя файл и показывая ошибку GDB. */
 static void native_profile_debug_reply(NativeDebug *session, const gchar *record)
 {
+    native_profile_location_parent_reply(session, record);
     if (session->profile_restoring && g_str_has_prefix(record, "^error"))
     {
         session->profile_restore_failed = TRUE;

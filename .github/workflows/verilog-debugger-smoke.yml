@@ -75,6 +75,7 @@ jobs:
           python3 insight/tests/native_debugger_memory_test.py
           python3 insight/tests/native_debugger_remote_test.py
           python3 insight/tests/native_debugger_profile_test.py
+          python3 insight/tests/native_debugger_profile_locations_test.py
           python3 insight/tests/native_debugger_compile_test.py
       - name: Build and install on Linux
         id: linux_build

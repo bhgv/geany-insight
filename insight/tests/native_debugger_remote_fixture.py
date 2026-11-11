@@ -70,18 +70,19 @@ def main():
                 f' ControlMaster auto\n ControlPath {root / "mux"}\n RemoteCommand false\n')
             source_root = root / 'local source'
             source_root.mkdir()
-            source = source_root / 'remote-main.c'
+            source = source_root / 'remote-main.cpp'
             # EN: A bounded live loop permits Pause; append PIDs to reap detached inferiors too.
             # RU: Ограниченный цикл позволяет проверить Pause; PID нужны для очистки отсоединённых программ.
             pid_file = root / 'inferior-pids'
             source.write_text(
                 '#include <unistd.h>\n#include <stdio.h>\n'
+                'template<typename T> __attribute__((noinline)) int profile_twice(T x) { return (int)x * 2; }\n'
                 'int main(void) {\n volatile int marker = 41;\n alarm(30);\n'
                 f' FILE *pids = fopen("{pid_file}", "a");\n'
                 ' if (pids) { fprintf(pids, "%d\\n", (int)getpid()); fclose(pids); }\n'
-                ' while (marker == 41) usleep(10000);\n return marker;\n}\n')
+                ' while (marker == 41) usleep(10000);\n return profile_twice(marker) + profile_twice(1.0);\n}\n')
             executable = root / 'remote app'
-            subprocess.run([programs['cc'], '-g', '-O0', f'-fdebug-prefix-map={source_root}=/insight-remote-build',
+            subprocess.run([shutil.which('c++') or 'c++', '-g', '-O0', f'-fdebug-prefix-map={source_root}=/insight-remote-build',
                             str(source), '-o', str(executable)], check=True)
             with (root / 'ssh.log').open('w+') as ssh_log, (root / 'gdbserver.log').open('w+') as server_log:
                 children.append(subprocess.Popen([sshd, '-D', '-e', '-f', str(config)], stdout=ssh_log, stderr=ssh_log))
