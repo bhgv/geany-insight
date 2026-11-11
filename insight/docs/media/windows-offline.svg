@@ -20,8 +20,8 @@
     <text x="642" y="157" font-size="15">Verify / проверить</text>
     <text x="642" y="182" font-size="15">Restore / распаковать</text>
     <text x="642" y="207" font-size="15">Build / собрать редактор</text>
-    <text x="24" y="276" font-size="15">Use empty tool/source folders on first restore. Repeated builds reuse the same bundle.</text>
-    <text x="24" y="298" font-size="15">Первое восстановление — в пустые папки. Повторная сборка использует тот же набор.</text>
+    <text x="24" y="276" font-size="15">Occupied folder → separate bundle folder. Repeated builds reuse the same bundle.</text>
+    <text x="24" y="298" font-size="15">Занятая папка → отдельная папка комплекта. Повторная сборка использует тот же набор.</text>
   </g>
   <g fill="none" stroke="#58799b" stroke-width="3">
     <path d="M282 148h33m-8-7 8 7-8 7"/>

@@ -48,12 +48,39 @@ function Read-InsightBundle([string]$Bundle) {
     return $info
 }
 
+# EN: Return whether Destination is empty/new or already restored from BundleId; never modify it.
+# RU: Проверяет пустой/новый Destination либо восстановленный из BundleId, ничего не изменяя.
+function Test-InsightBundleDestination([string]$Destination, [string]$BundleId) {
+    if (-not (Test-Path -LiteralPath $Destination)) { return $true }
+    if (-not (Test-Path -LiteralPath $Destination -PathType Container)) { return $false }
+    $stamp = Join-Path $Destination '.insight-offline-bundle'
+    if (Test-Path -LiteralPath $stamp -PathType Leaf) {
+        return [IO.File]::ReadAllText($stamp).Trim() -eq $BundleId
+    }
+    return @(Get-ChildItem -LiteralPath $Destination -Force).Count -eq 0
+}
+
+# EN: Resolve Destination for Role without replacing user files; use a stable BundleId-specific sibling.
+# RU: Выбирает Destination для Role без замены пользовательских файлов; использует соседнюю папку BundleId.
+function Resolve-InsightBundleDestination([string]$Destination, [string]$BundleId, [string]$Role) {
+    if ($BundleId -notmatch '^[a-fA-F0-9]{64}$') { throw 'Invalid offline bundle identity.' }
+    $Destination = [IO.Path]::GetFullPath($Destination).TrimEnd('\')
+    if (Test-InsightBundleDestination $Destination $BundleId) { return $Destination }
+    $alternative = $Destination + '.bundle-' + $BundleId.Substring(0, 12).ToLowerInvariant()
+    if (-not (Test-InsightBundleDestination $alternative $BundleId)) {
+        throw "${Role}: reserved bundle directory is occupied: $alternative. Choose another -$Role path. Existing files were preserved."
+    }
+    Write-Host "[Offline] Keeping existing $Role directory: $Destination"
+    Write-Host "[Offline] Using bundled $Role in: $alternative"
+    return $alternative
+}
+
 # EN: Restore Archive to an empty Destination, or reuse its matching BundleId stamp.
 # RU: Распаковывает Archive в пустой Destination либо использует набор с меткой BundleId.
 function Expand-InsightBundleArchive([string]$Archive, [string]$Destination, [string]$BundleId) {
     $stamp = Join-Path $Destination '.insight-offline-bundle'
-    if (Test-Path -LiteralPath $stamp) {
-        if ((Get-Content -LiteralPath $stamp -Raw).Trim() -eq $BundleId) {
+    if (Test-Path -LiteralPath $stamp -PathType Leaf) {
+        if ([IO.File]::ReadAllText($stamp).Trim() -eq $BundleId) {
             Write-Host "[Offline] Reusing $Destination"
             return
         }
@@ -98,6 +125,17 @@ function Restore-InsightBundle([string]$Bundle) {
         throw "Bundle Clang provider is $($info.clangProvider); use -ClangProvider $($info.clangProvider)."
     }
     $bundleId = (Get-FileHash -LiteralPath (Join-Path $Bundle 'bundle.json') -Algorithm SHA256).Hash
+    # EN: Resolve and validate both paths before unpacking either payload.
+    # RU: Выбираем и проверяем оба пути до распаковки любого из архивов.
+    $tools = Resolve-InsightBundleDestination $MsysRoot $bundleId 'MsysRoot'
+    $sources = Resolve-InsightBundleDestination $SourceDir $bundleId 'SourceDir'
+    $locations = Test-InsightLocations @{
+        RootDir=$RootDir; MsysRoot=$tools; SourceDir=$sources; InstallDir=$InstallDir
+    }
+    $script:MsysRoot = $locations.MsysRoot
+    $script:SourceDir = $locations.SourceDir
+    $script:bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
+    Test-InsightBundleLocation $Bundle
     Expand-InsightBundleArchive (Join-Path $Bundle 'msys2.tar') $MsysRoot $bundleId
     Expand-InsightBundleArchive (Join-Path $Bundle 'sources.tar.gz') $SourceDir $bundleId
     New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
@@ -111,6 +149,7 @@ function Restore-InsightBundle([string]$Bundle) {
     $env:INSIGHT_OFFLINE = '1'
     $env:GIT_ALLOW_PROTOCOL = 'file'
     $env:INSIGHT_BOOTSTRAP_SOURCE = [IO.Path]::GetFullPath($SourceDir)
+    Write-Host "[Offline] Building the bundled source snapshot in $SourceDir"
     Write-Host '[Offline] Dependencies restored. Repository updates and source downloads are skipped.'
 }
 

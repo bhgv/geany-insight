@@ -48,6 +48,8 @@ Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson b
 -BuildEditor builds Icarus Verilog from pinned sources and logs output under RootDir\logs.
 -DownloadBundle PATH prepares all editor sources and tools for transfer, without compiling.
 -UseBundle PATH restores that bundle and builds without network downloads.
+Occupied tool/source folders are preserved; bundle-specific sibling folders are used.
+The source snapshot inside the bundle is built, not the checkout hosting this launcher.
 Use the same ClangProvider/Autotools/Packaging options for preparation and offline use.
 -Plan prints the download/package plan without changing anything.
 Close other MSYS2 processes before running. Existing MSYS2 receives a full update.

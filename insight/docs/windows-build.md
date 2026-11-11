@@ -38,10 +38,24 @@ build.cmd -UseBundle .
 The launcher verifies SHA-256 checksums, restores the bundled MSYS2 and
 sources, and builds and installs the editor. Both flags imply `-BuildEditor`.
 Offline sources default to `offline-source` under the selected build root.
-The first restore needs empty tool and source directories. Repeated builds
-reuse destinations stamped with the same bundle. Existing unrelated
-installations and source checkouts cause a clear error. To switch bundles,
-choose new empty destinations.
+New or empty tool/source directories keep the requested names. If a selected
+folder contains an unrelated MSYS2 installation or an existing checkout, the
+launcher preserves it and restores into a sibling named
+`<selected-path>.bundle-<12-character-id>`. Both destinations are checked before
+either archive is unpacked. Repeated builds reuse folders stamped with the same
+bundle. An occupied reserved sibling causes a clear error; no user files are
+replaced. The console reports the actual paths used for the build.
+
+You can run the updated launcher from an existing checkout as well:
+
+```bat
+build.cmd -UseBundle E:\GeanyTransfer
+```
+
+This restores and builds the **source snapshot inside the bundle**, including
+its bundled dependencies. It preserves the checkout from which the launcher
+was invoked. You do not need to delete or empty that checkout. To build newer
+editor sources offline, prepare a new bundle containing those sources.
 
 Use the same `-ClangProvider`, `-Autotools` and `-Packaging` options when
 preparing and consuming a bundle. You can pass `-NonInteractive`,

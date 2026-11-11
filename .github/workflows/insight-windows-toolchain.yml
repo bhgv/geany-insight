@@ -16,6 +16,7 @@ on:
       - insight/tests/windows_bundle_test.py
       - insight/tools/windows-toolchain.json
       - insight/tests/windows_toolchain_test.ps1
+      - insight/tests/windows_offline_restore_test.ps1
       - .github/workflows/insight-windows-toolchain.yml
   workflow_dispatch:
 permissions:
@@ -28,10 +29,14 @@ jobs:
       - uses: actions/checkout@v4
       - name: Parse and test plans on Windows PowerShell 5.1
         shell: powershell
-        run: ./insight/tests/windows_toolchain_test.ps1
+        run: |
+          ./insight/tests/windows_toolchain_test.ps1
+          ./insight/tests/windows_offline_restore_test.ps1
       - name: Parse and test plans on PowerShell 7
         shell: pwsh
-        run: ./insight/tests/windows_toolchain_test.ps1
+        run: |
+          ./insight/tests/windows_toolchain_test.ps1
+          ./insight/tests/windows_offline_restore_test.ps1
       - name: Verify portable source exports and offline asset guards
         shell: pwsh
         run: python insight/tests/windows_bundle_test.py
