@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="310" viewBox="0 0 900 310">
+  <rect width="900" height="310" rx="14" fill="#f3f6fb"/>
+  <g font-family="sans-serif" fill="#18324e">
+    <text x="24" y="34" font-size="21" font-weight="bold">Windows x64 · portable build / переносимая сборка</text>
+    <rect x="24" y="60" width="250" height="180" rx="10" fill="#dfebff"/>
+    <text x="40" y="90" font-size="17">Online PC / ПК с сетью</text>
+    <text x="40" y="122" font-size="15">-DownloadBundle PATH</text>
+    <text x="40" y="157" font-size="15">MSYS2 + UCRT64 packages</text>
+    <text x="40" y="182" font-size="15">Editor + Clang + slang</text>
+    <text x="40" y="207" font-size="15">Icarus sources / исходники</text>
+    <rect x="325" y="60" width="250" height="180" rx="10" fill="#e0f1e6"/>
+    <text x="341" y="90" font-size="17">USB / флешка</text>
+    <text x="341" y="122" font-size="15">Copy entire bundle folder</text>
+    <text x="341" y="147" font-size="15">Перенести папку целиком</text>
+    <text x="341" y="182" font-size="15">Archives + SHA-256</text>
+    <text x="341" y="207" font-size="15">build.cmd + bundle.json</text>
+    <rect x="626" y="60" width="250" height="180" rx="10" fill="#eee4fa"/>
+    <text x="642" y="90" font-size="17">Offline PC / ПК без сети</text>
+    <text x="642" y="122" font-size="15">-UseBundle PATH</text>
+    <text x="642" y="157" font-size="15">Verify / проверить</text>
+    <text x="642" y="182" font-size="15">Restore / распаковать</text>
+    <text x="642" y="207" font-size="15">Build / собрать редактор</text>
+    <text x="24" y="276" font-size="15">Use empty tool/source folders on first restore. Repeated builds reuse the same bundle.</text>
+    <text x="24" y="298" font-size="15">Первое восстановление — в пустые папки. Повторная сборка использует тот же набор.</text>
+  </g>
+  <g fill="none" stroke="#58799b" stroke-width="3">
+    <path d="M282 148h33m-8-7 8 7-8 7"/>
+    <path d="M583 148h33m-8-7 8 7-8 7"/>
+  </g>
+</svg>

@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #requires -Version 5.1
-# Run with Windows PowerShell 5.1 or PowerShell 7 on Windows x64.
+# EN: Provision Windows tools, prepare portable bundles and build the editor.
+# RU: Устанавливает инструменты Windows, готовит переносимые наборы и собирает редактор.
 [CmdletBinding()]
 param(
     [string]$RootDir = '',
     [string]$MsysRoot = '',
     [string]$CacheDir = '',
+    [string]$DownloadBundle = '',
+    [string]$UseBundle = '',
     [ValidatePattern('^(?:auto|https://[A-Za-z0-9.-]+(?::[0-9]+)?(?:/[A-Za-z0-9._~-]+)*/?)$')]
     [string]$MsysMirror = 'auto',
     [switch]$MsysSkipTlsVerify,
@@ -35,6 +38,7 @@ Geany Insight Windows x64 toolchain bootstrap
     [-FetchSources] [-SourceDir C:\src\geany-insight] [-Autotools] [-Packaging]
     [-RootDir D:\Development\Insight] [-InstallDir PATH] [-CacheDir PATH]
     [-MsysMirror auto|HTTPS-URL] [-MsysSkipTlsVerify]
+    [-DownloadBundle PATH | -UseBundle PATH]
     [-BuildEditor] [-Jobs 0|N] [-UseCheckout] [-NonInteractive] [-Plan] [-Help]
 From a repository checkout: build.cmd -BuildEditor
 -UseCheckout defaults SourceDir to the checkout containing this script.
@@ -42,17 +46,26 @@ Default: show the location chooser, then install/update MSYS2 UCRT64 and Meson b
 -FetchSources also clones the editor and initializes external/llvm-project.
 -Jobs defaults to 0 (automatic); pass a positive value to set the build job limit.
 -BuildEditor builds Icarus Verilog from pinned sources and logs output under RootDir\logs.
+-DownloadBundle PATH prepares all editor sources and tools for transfer, without compiling.
+-UseBundle PATH restores that bundle and builds without network downloads.
+Use the same ClangProvider/Autotools/Packaging options for preparation and offline use.
 -Plan prints the download/package plan without changing anything.
 Close other MSYS2 processes before running. Existing MSYS2 receives a full update.
 No Visual Studio, WSL, global PATH or machine execution-policy changes are needed.
 '@ | Write-Output
     return
 }
+if ($DownloadBundle -and $UseBundle) { throw 'Use either -DownloadBundle or -UseBundle.' }
+if ($DownloadBundle -or $UseBundle) { $BuildEditor = $true }
 if (-not $RootDir) {
     $RootDir = Join-Path $env:LOCALAPPDATA 'GeanyInsight'
     if ($RootDir -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') { $RootDir = Join-Path $env:SystemDrive 'Development\GeanyInsight' }
 }
-if (-not $MsysRoot) { $MsysRoot = Join-Path $RootDir 'tools\msys64' }
+if (-not $MsysRoot) {
+    $toolsDirectory = if ($DownloadBundle) { 'tools\bundle-msys64' } else { 'tools\msys64' }
+    $MsysRoot = Join-Path $RootDir $toolsDirectory
+}
+if (-not $SourceDir -and $UseBundle) { $SourceDir = Join-Path $RootDir 'offline-source' }
 if (-not $SourceDir) {
     $SourceDir = if ($UseCheckout) { [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..')) } else { Join-Path $RootDir 'src' }
 }
@@ -68,7 +81,7 @@ if ($Packaging) { $packages += @($manifest.packages.packaging) }
 if ($ClangProvider -eq 'System') { $packages += @($manifest.packages.systemClang) }
 if ($Plan) {
     [ordered]@{ msysRoot=$MsysRoot; msysMirror=$MsysMirror; installer=$manifest.installer; packages=$packages;
-        clangProvider=$ClangProvider; simulator=$(if ($BuildEditor) { $manifest.iverilog }); jobs=$Jobs; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
+        downloadBundle=$DownloadBundle; useBundle=$UseBundle; clangProvider=$ClangProvider; simulator=$(if ($BuildEditor) { $manifest.iverilog }); jobs=$Jobs; fetchSources=[bool]$FetchSources; sourceDir=$SourceDir; rootDir=$RootDir; installDir=$InstallDir; cacheDir=$CacheDir; buildEditor=[bool]$BuildEditor; nonInteractive=[bool]$NonInteractive } |
         ConvertTo-Json -Depth 6
     return
 }
@@ -87,7 +100,7 @@ if (-not $NonInteractive) {
             foreach ($name in $locations.Keys) { $remembered[$name] = $saved.$name }
             $remembered = Test-InsightLocations $remembered
             foreach ($name in $remembered.Keys) {
-                if (-not $PSBoundParameters.ContainsKey($name)) { $locations[$name] = $remembered[$name] }
+                if (-not $PSBoundParameters.ContainsKey($name) -and -not $UseBundle) { $locations[$name] = $remembered[$name] }
             }
         } catch {
             Write-Verbose 'No usable saved build locations.'
@@ -107,13 +120,16 @@ $locations = Test-InsightLocations $locations
 $RootDir=$locations.RootDir; $MsysRoot=$locations.MsysRoot
 $SourceDir=$locations.SourceDir; $InstallDir=$locations.InstallDir
 if ($defaultCache) { $CacheDir=Join-Path $RootDir 'downloads' }
+if ($DownloadBundle -and -not $PSBoundParameters.ContainsKey('MsysRoot')) {
+    $MsysRoot = Join-Path $RootDir 'toolsundle-msys64'
+}
 # Keep installation paths compatible with the MSYS2 installer and shell launchers.
 if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {
     throw 'MsysRoot must be an absolute drive path without spaces, e.g. C:\msys64.'
 }
 $MsysRoot = [IO.Path]::GetFullPath($MsysRoot).TrimEnd('\')
 $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
-$envNames = @('MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE','INSIGHT_BOOTSTRAP_BASH')
+$envNames = @('INSIGHT_OFFLINE','GIT_ALLOW_PROTOCOL','INSIGHT_BUNDLE_PATH','INSIGHT_MSYS_SKIP_TLS_VERIFY','MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE','INSIGHT_BOOTSTRAP_BASH')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
@@ -245,58 +261,65 @@ function Receive-InsightInstaller([string]$Url, [string]$Destination) {
         if ($response) { $response.Dispose() }
     }
 }
+. (Join-Path $PSScriptRoot 'windows-offline.ps1')
+if ($DownloadBundle) { Test-InsightBundleLocation ([IO.Path]::GetFullPath($DownloadBundle)) }
+if ($UseBundle) { Test-InsightBundleLocation ([IO.Path]::GetFullPath($UseBundle)) }
 try {
-    if (-not (Test-Path -LiteralPath $bash)) {
-        if ((Test-Path -LiteralPath $MsysRoot) -and @(Get-ChildItem -LiteralPath $MsysRoot -Force).Count) {
-            throw 'MSYS2 directory is nonempty but has no bash.exe; choose a new MsysRoot.'
-        }
-        New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
-        $installer = Join-Path $CacheDir $manifest.installer.file
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-        if (-not (Test-Path -LiteralPath $installer)) {
-            $partial = "$installer.partial"
-            Write-Host "[Download] $($manifest.installer.file) from $($manifest.installer.url)"
-            try {
-                for ($attempt = 1; $attempt -le 3; $attempt++) {
-                    try {
-                        Receive-InsightInstaller $manifest.installer.url $partial
-                        break
-                    } catch {
-                        if ($attempt -eq 3) { throw }
-                        if (Test-Path -LiteralPath $partial) {
-                            Remove-Item -LiteralPath $partial -Force
-                        }
-                        $retryDelay = 5 * $attempt
-                        Write-Warning "Installer download attempt $attempt failed. Retrying in $retryDelay seconds. $($_.Exception.Message)"
-                        Start-Sleep -Seconds $retryDelay
-                    }
-                }
-                Move-Item -LiteralPath $partial -Destination $installer -Force
-            } finally {
-                if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
-            }
-        } else {
-            Write-Host "[Cache] Verifying $installer"
-        }
-        $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($hash -ne $manifest.installer.sha256) { throw "Installer SHA256 mismatch. Remove $installer and retry." }
-        Write-Host '[Install] MSYS2 (the installer reports its own progress)...'
-        $process = Start-Process -FilePath $installer -ArgumentList @('in','--confirm-command','--accept-messages','--root',($MsysRoot -replace '\\','/')) -PassThru
-        $code = Wait-InsightProcess $process 'MSYS2 installer'
-        if ($code -ne 0) { throw "MSYS2 installer failed ($code)." }
-        if (-not (Test-Path -LiteralPath $bash)) { throw 'Installer did not create usr\bin\bash.exe.' }
+    if ($UseBundle) {
+        Restore-InsightBundle ([IO.Path]::GetFullPath($UseBundle))
     }
-    $env:MSYSTEM = 'UCRT64'
-    $env:CHERE_INVOKING = '1'
-    $env:INSIGHT_BOOTSTRAP_MIRROR = if ($MsysMirror -eq 'auto') { 'https://repo.msys2.org' } else { $MsysMirror.TrimEnd('/') }
-    $env:INSIGHT_BOOTSTRAP_PACKAGES = $packages -join ' '
-    # Core updates may terminate their shell; always resume in a new login shell.
-    # Only this first exit is tolerated; the second full upgrade must succeed.
-    Write-Host '[Update] MSYS2 (close all other MSYS2 terminals first)...'
-    Invoke-InsightPacman 'pacman -Syu --noconfirm' -Stage 'MSYS2 core update' -AllowCoreRestart
-    Invoke-InsightPacman 'set -e; pacman -Syu --noconfirm' -Stage 'MSYS2 full update'
-    Write-Host '[Packages] Downloading and installing UCRT64 build tools...'
-    Invoke-InsightPacman -Stage 'UCRT64 packages' -Script @'
+    if (-not $UseBundle) {
+        if (-not (Test-Path -LiteralPath $bash)) {
+            if ((Test-Path -LiteralPath $MsysRoot) -and @(Get-ChildItem -LiteralPath $MsysRoot -Force).Count) {
+                throw 'MSYS2 directory is nonempty but has no bash.exe; choose a new MsysRoot.'
+            }
+            New-Item -ItemType Directory -Path $CacheDir -Force | Out-Null
+            $installer = Join-Path $CacheDir $manifest.installer.file
+            [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+            if (-not (Test-Path -LiteralPath $installer)) {
+                $partial = "$installer.partial"
+                Write-Host "[Download] $($manifest.installer.file) from $($manifest.installer.url)"
+                try {
+                    for ($attempt = 1; $attempt -le 3; $attempt++) {
+                        try {
+                            Receive-InsightInstaller $manifest.installer.url $partial
+                            break
+                        } catch {
+                            if ($attempt -eq 3) { throw }
+                            if (Test-Path -LiteralPath $partial) {
+                                Remove-Item -LiteralPath $partial -Force
+                            }
+                            $retryDelay = 5 * $attempt
+                            Write-Warning "Installer download attempt $attempt failed. Retrying in $retryDelay seconds. $($_.Exception.Message)"
+                            Start-Sleep -Seconds $retryDelay
+                        }
+                    }
+                    Move-Item -LiteralPath $partial -Destination $installer -Force
+                } finally {
+                    if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+                }
+            } else {
+                Write-Host "[Cache] Verifying $installer"
+            }
+            $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($hash -ne $manifest.installer.sha256) { throw "Installer SHA256 mismatch. Remove $installer and retry." }
+            Write-Host '[Install] MSYS2 (the installer reports its own progress)...'
+            $process = Start-Process -FilePath $installer -ArgumentList @('in','--confirm-command','--accept-messages','--root',($MsysRoot -replace '\\','/')) -PassThru
+            $code = Wait-InsightProcess $process 'MSYS2 installer'
+            if ($code -ne 0) { throw "MSYS2 installer failed ($code)." }
+            if (-not (Test-Path -LiteralPath $bash)) { throw 'Installer did not create usr\bin\bash.exe.' }
+        }
+        $env:MSYSTEM = 'UCRT64'
+        $env:CHERE_INVOKING = '1'
+        $env:INSIGHT_BOOTSTRAP_MIRROR = if ($MsysMirror -eq 'auto') { 'https://repo.msys2.org' } else { $MsysMirror.TrimEnd('/') }
+        $env:INSIGHT_BOOTSTRAP_PACKAGES = $packages -join ' '
+        # Core updates may terminate their shell; always resume in a new login shell.
+        # Only this first exit is tolerated; the second full upgrade must succeed.
+        Write-Host '[Update] MSYS2 (close all other MSYS2 terminals first)...'
+        Invoke-InsightPacman 'pacman -Syu --noconfirm' -Stage 'MSYS2 core update' -AllowCoreRestart
+        Invoke-InsightPacman 'set -e; pacman -Syu --noconfirm' -Stage 'MSYS2 full update'
+        Write-Host '[Packages] Downloading and installing UCRT64 build tools...'
+        Invoke-InsightPacman -Stage 'UCRT64 packages' -Script @'
 set -euo pipefail
 read -r -a packages <<< "$INSIGHT_BOOTSTRAP_PACKAGES"
 pacman -S --needed --noconfirm "${packages[@]}"
@@ -310,12 +333,12 @@ meson --version
 cmake --version
 pacman -Q "${packages[@]}"
 '@
-    if ($FetchSources) {
-        Write-Host "[Sources] Geany Insight and compiler sources: $SourceDir"
-        $env:INSIGHT_BOOTSTRAP_SOURCE = [IO.Path]::GetFullPath($SourceDir)
-        $env:INSIGHT_BOOTSTRAP_FETCH = $manifest.repository
-        $env:INSIGHT_BOOTSTRAP_INTERNAL = if ($ClangProvider -eq 'Internal') { '1' } else { '0' }
-        $null = Invoke-Msys -Stage 'Git source checkout' -Script @'
+        if ($FetchSources) {
+            Write-Host "[Sources] Geany Insight and compiler sources: $SourceDir"
+            $env:INSIGHT_BOOTSTRAP_SOURCE = [IO.Path]::GetFullPath($SourceDir)
+            $env:INSIGHT_BOOTSTRAP_FETCH = $manifest.repository
+            $env:INSIGHT_BOOTSTRAP_INTERNAL = if ($ClangProvider -eq 'Internal') { '1' } else { '0' }
+            $null = Invoke-Msys -Stage 'Git source checkout' -Script @'
 set -euo pipefail
 source_dir=$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")
 github_repo_key() {
@@ -344,6 +367,13 @@ fi
 # Never pull/reset an existing checkout or overwrite initialized Clang sources.
 git -C "$source_dir" rev-parse HEAD
 '@
+        }
+    }
+    $env:MSYSTEM = 'UCRT64'
+    $env:CHERE_INVOKING = '1'
+    if ($DownloadBundle) {
+        Save-InsightBundle ([IO.Path]::GetFullPath($DownloadBundle))
+        return
     }
     if ($BuildEditor) {
         if ($Jobs -eq 0) {
@@ -378,6 +408,9 @@ log_file=$(cygpath -u "$INSIGHT_BOOTSTRAP_BUILD_LOG") || exit 1
 set -euo pipefail
 cd "$(cygpath -u "$INSIGHT_BOOTSTRAP_SOURCE")"
 printf '[Source revision] %s\n' "$(git rev-parse HEAD)"
+if [ "${INSIGHT_OFFLINE:-0}" = 1 ]; then
+    python3 insight/tools/windows_bundle.py validate --cache "$INSIGHT_BOOTSTRAP_CACHE" --provider "$INSIGHT_BOOTSTRAP_PROVIDER"
+fi
 export CC=gcc CXX=g++
 export NINJA_STATUS='[ %f/%t %p ] '
 install_dir=$(cygpath -m "$INSIGHT_BOOTSTRAP_INSTALL")

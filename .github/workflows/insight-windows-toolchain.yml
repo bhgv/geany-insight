@@ -11,6 +11,9 @@ on:
       - insight/tests/slang_build_test.py
       - insight/tools/select-windows-folders.ps1
       - insight/tools/setup-windows.ps1
+      - insight/tools/windows-offline.ps1
+      - insight/tools/windows_bundle.py
+      - insight/tests/windows_bundle_test.py
       - insight/tools/windows-toolchain.json
       - insight/tests/windows_toolchain_test.ps1
       - .github/workflows/insight-windows-toolchain.yml
@@ -29,6 +32,9 @@ jobs:
       - name: Parse and test plans on PowerShell 7
         shell: pwsh
         run: ./insight/tests/windows_toolchain_test.ps1
+      - name: Verify portable source exports and offline asset guards
+        shell: pwsh
+        run: python insight/tests/windows_bundle_test.py
       - name: Verify LF/CRLF compatibility patch and install guards
         shell: pwsh
         run: python insight/tests/slang_build_test.py

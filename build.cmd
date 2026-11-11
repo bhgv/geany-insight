@@ -1,5 +1,7 @@
 @echo off
 setlocal
+rem EN: Forward -DownloadBundle PATH / -UseBundle PATH to the bootstrap.
+rem RU: Передаёт флаги подготовки и использования переносимого набора в сборщик.
 set "insight_setup=%~dp0insight\tools\setup-windows.ps1"
 if "%~1"=="" goto menu
 powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%insight_setup%" -UseCheckout %*

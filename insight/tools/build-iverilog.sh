@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-2.0-or-later
+# EN: Build and install the pinned simulator, using a verified cache when offline.
+# RU: Собирает закреплённый симулятор из проверенного кэша при работе без сети.
 set -euo pipefail
 
 cache_dir=$1
@@ -166,6 +168,10 @@ fi
 
 mkdir -p -- "$cache_dir"
 if [[ ! -f "$archive" ]] || ! verify_archive "$archive"; then
+    if [[ ${INSIGHT_OFFLINE:-0} == 1 ]]; then
+        printf 'Offline build needs a verified source archive: %s\n' "$archive" >&2
+        exit 1
+    fi
     printf '[Simulator] Downloading Icarus Verilog %s sources.\n' "$version"
     download=$(mktemp "$cache_dir/.iverilog-$version.XXXXXXXX")
     curl --fail --location --retry 3 --output "$download" "$url"

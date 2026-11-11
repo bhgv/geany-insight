@@ -70,6 +70,8 @@ def simulator_shell():
     return Path(shell).as_posix() if shell else 'bash'
 
 
+# EN: Return build commands for args and root; offline mode prohibits Meson downloads.
+# RU: Возвращает команды сборки args для root, запрещая загрузки Meson в режиме без сети.
 def plan(args, root=ROOT):
     steps = []
     def add(command, cwd=root, env=None):
@@ -103,6 +105,8 @@ def plan(args, root=ROOT):
                 add(['make', 'install'], args.build_dir)
     else:
         command = ['meson', 'setup']
+        if os.environ.get('INSIGHT_OFFLINE') == '1':
+            command += ['--wrap-mode=nodownload']
         if (args.build_dir / 'meson-private/coredata.dat').is_file():
             command += ['--reconfigure']
         command += [args.build_dir, root, '--prefix=' + str(args.prefix), '-Dclang-bundle=auto']

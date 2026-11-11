@@ -18,6 +18,57 @@ This guide describes a **native Windows x64 build using MSYS2 UCRT64**, GCC and 
 
 ![Windows build stages](../media/windows-build.svg)
 
+
+## Build on a computer without Internet access
+
+On a Windows x64 computer with working downloads, run from your checkout:
+
+```bat
+build.cmd -DownloadBundle D:\GeanyTransfer
+```
+
+This prepares the complete UCRT64 toolchain, the editor's committed sources,
+LLVM/Clang, slang and its dependencies, and the pinned Icarus archive. It
+does not compile the editor. By default preparation uses a separate
+`tools\bundle-msys64` under the selected build root. Commit tracked editor
+changes before preparing the bundle. Existing initialized compiler revisions
+must match the pinned versions. The command stops on a missing or incompatible
+dependency.
+
+Copy the entire `D:\GeanyTransfer` directory to the other computer, including
+its launcher, metadata and archives. In that copy run:
+
+```bat
+build.cmd -UseBundle .
+```
+
+The launcher verifies SHA-256 checksums, restores the bundled MSYS2 and
+sources, and builds and installs the editor. Both flags imply `-BuildEditor`.
+Offline sources default to `offline-source` under the selected build root.
+The first restore needs empty tool and source directories. Repeated builds
+reuse destinations stamped with the same bundle. Existing unrelated
+installations and source checkouts cause a clear error. To switch bundles,
+choose new empty destinations.
+
+Use the same `-ClangProvider`, `-Autotools` and `-Packaging` options when
+preparing and consuming a bundle. You can pass `-NonInteractive`,
+`-RootDir`, `-SourceDir`, `-MsysRoot`, `-InstallDir` and `-Jobs` as usual.
+Bundle and working directories must be separate. The restored tools can
+live on a different drive. Native Windows `tar.exe` (Windows 10 1803 or newer)
+is required for extraction. Plan for several GiB of transfer data and
+substantially more free space for building LLVM. Use a flash filesystem
+that supports files larger than 4 GiB.
+
+`bundle.json` is written only after preparation succeeds. A failed preparation
+can be retried using the same empty output destination; downloaded tools and
+the verified source cache are reused. `packages.txt` records installed package
+versions. Offline execution skips pacman updates and Git downloads, validates
+the dependency revisions and Icarus archive before compilation, and disables
+Meson's automatic dependency downloads.
+
+![Transfer bundle](../media/windows-offline.svg)
+
+
 ## Required tools
 
 | Component | Purpose / MSYS2 package |
