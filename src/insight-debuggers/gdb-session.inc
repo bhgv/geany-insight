@@ -123,6 +123,9 @@ static gchar *native_stop_detail(const gchar *record);
 static gchar *native_launch_next(NativeDebug *session);
 static void native_source_stopped(NativeDebug *session);
 static gchar *native_point_key(const gchar *filename, guint line);
+static gboolean native_attach_interrupt(NativeDebug *session, const gchar *command);
+static void native_attach_stopped(NativeDebug *session, const gchar *record);
+static gboolean native_attach_interrupt_reply(NativeDebug *session, const gchar *line);
 static void native_profile_command_sent(NativeDebug *session, const gchar *command);
 static void native_debug_send(GtkWidget *dialog, const gchar *command);
 static void native_all_stacks_reply(NativeDebug *session, const gchar *record);
@@ -452,6 +455,8 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command)
 {
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
     if (session->closed || session->pending || session->writing)
+        return;
+    if (native_attach_interrupt(session, command))
         return;
     if (session->remote && !strcmp(command, "-gdb-show sysroot"))
         session->remote->pending = NATIVE_REMOTE_SYSROOT;

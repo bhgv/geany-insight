@@ -16,7 +16,7 @@ static void native_remote_update(NativeDebug *session)
     NativeRemote *remote = session->remote;
     if (!remote)
         return;
-    gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy;
+    gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy && !remote->interrupt_pending;
     native_attach_update(session, idle);
     gtk_widget_set_sensitive(remote->mode, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->form, idle && !remote->ssh && !session->running && !session->stopped);
@@ -28,7 +28,7 @@ static void native_remote_update(NativeDebug *session)
         !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->disconnect, remote->ssh &&
         ((remote->busy && !remote->connected) || (idle && !session->stop_requested)));
-    if (remote->busy)
+    if (remote->busy || remote->interrupt_pending)
     {
         for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
             gtk_widget_set_sensitive(session->buttons[i], FALSE);
@@ -50,6 +50,12 @@ static gchar *native_remote_next(NativeDebug *session)
     NativeRemote *remote = session->remote;
     if (!remote)
         return NULL;
+    if (remote->clear_stop_signal)
+    {
+        remote->clear_stop_signal = FALSE;
+        remote->pending = NATIVE_REMOTE_CLEAR_STOP;
+        return g_strdup("-interpreter-exec console \"queue-signal 0\"");
+    }
     if (remote->detach_needed)
     {
         remote->detach_needed = FALSE;
@@ -131,10 +137,22 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
             "SSH gdbserver connected. Run starts the remote executable." :
             "SSH gdbserver connected. Continue resumes the remote program."));
     }
+    else if (request == NATIVE_REMOTE_CLEAR_STOP)
+    {
+        if (!success)
+        {
+            remote->busy = remote->detach_needed = remote->disconnect_needed = FALSE;
+            session->stop_requested = FALSE;
+            insight_queue_clear_full(&session->launch_commands, g_free);
+            gtk_label_set_text(GTK_LABEL(remote->status),
+                insight_tr("Could not clear the SSH pause signal. See the GDB console before resuming."));
+        }
+    }
     else if (request == NATIVE_REMOTE_ATTACH)
     {
         if (success)
         {
+            remote->attached_pid = (guint)g_ascii_strtoull(gtk_entry_get_text(GTK_ENTRY(remote->pid)), NULL, 10);
             session->running = FALSE;
             session->stopped = TRUE;
             session->points_needed = TRUE;

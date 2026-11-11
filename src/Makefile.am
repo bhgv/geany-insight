@@ -317,6 +317,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-remote-state.inc \
 	insight-debuggers/gdb-remote-model.inc \
 	insight-debuggers/gdb-remote-process.inc \
+	insight-debuggers/gdb-attach-interrupt.inc \
 	insight-debuggers/gdb-attach-model.inc \
 	insight-debuggers/gdb-attach-ui.inc \
 	insight-debuggers/gdb-remote-connection.inc \

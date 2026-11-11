@@ -90,10 +90,11 @@ def main():
                 for mode in (2, 1):
                     attach_process = None
                     if mode == 2:
-                        # EN: Isolate the inferior process group for gdbserver SIGINT; permit PID attach under Linux Yama.
-                        # RU: Изолирует группу процесса для SIGINT gdbserver; разрешает подключение при Linux Yama.
-                        attach_process = subprocess.Popen([str(executable)], start_new_session=True)
+                        # EN: Keep a nonleader process to verify PID-specific SSH pause despite gdbserver group-SIGINT limitations.
+                        # RU: Оставляет процесс вне отдельной группы для проверки адресной паузы SSH при ограничениях SIGINT gdbserver.
+                        attach_process = subprocess.Popen([str(executable)])
                         children.append(attach_process)
+                        assert os.getpgid(attach_process.pid) != attach_process.pid
                         for _ in range(100):
                             if pid_file.exists() and str(attach_process.pid) in pid_file.read_text().splitlines():
                                 break
@@ -141,6 +142,9 @@ def main():
                     stop(children.pop())
                     if attach_process:
                         assert attach_process.poll() is None, 'Detach must leave the attached program alive'
+                        state = next(line for line in Path(f'/proc/{attach_process.pid}/status').read_text().splitlines()
+                                     if line.startswith('State:')).split()[1]
+                        assert state not in ('T', 't'), 'Detach must resume the attached program'
                         stop(children.pop())
             assert not (root / 'mux').exists(), 'Debugger must not reuse or leave an SSH control master'
             return 0

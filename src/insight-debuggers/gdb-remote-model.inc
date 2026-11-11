@@ -53,9 +53,16 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
     g_free(address);
     g_ptr_array_add(args, g_strdup("--"));
     g_ptr_array_add(args, g_strdup(host));
-    /* EN: This constant POSIX command confirms forwarding setup without touching the GDB port.
-     * RU: Эта постоянная POSIX-команда подтверждает туннель, не обращаясь к порту GDB. */
-    g_ptr_array_add(args, g_strdup("printf 'GEANY-GDB-SSH-READY\\n'; cat >/dev/null"));
+    /* EN: Confirm forwarding without probing GDB, then accept only bounded pause:PID requests.
+     * RU: Подтверждает туннель без проверки порта GDB, затем принимает только ограниченные запросы pause:PID. */
+    g_ptr_array_add(args, g_strdup(
+        "printf 'GEANY-GDB-SSH-READY\\n'; "
+        "while IFS= read -r request; do "
+        "case \"$request\" in pause:*) pid=${request#pause:};; *) continue;; esac; "
+        "case \"$pid\" in ''|0|*[!0-9]*) continue;; esac; "
+        "[ ${#pid} -le 10 ] && [ \"$pid\" -ge 1 ] && [ \"$pid\" -le 2147483647 ] || continue; "
+        "if kill -STOP \"$pid\"; then printf 'GEANY-GDB-SSH-STOPPED\\n'; "
+        "else printf 'GEANY-GDB-SSH-STOP-FAILED\\n'; fi; done"));
     g_ptr_array_add(args, NULL);
     return (gchar **)g_ptr_array_free(args, FALSE);
 }

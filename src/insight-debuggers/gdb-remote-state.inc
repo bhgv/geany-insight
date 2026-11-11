@@ -4,7 +4,7 @@
 
 typedef enum
 {
-    NATIVE_REMOTE_NONE, NATIVE_REMOTE_SYSROOT, NATIVE_REMOTE_CONNECT, NATIVE_REMOTE_ATTACH, NATIVE_REMOTE_DETACH, NATIVE_REMOTE_DISCONNECT
+    NATIVE_REMOTE_NONE, NATIVE_REMOTE_SYSROOT, NATIVE_REMOTE_CONNECT, NATIVE_REMOTE_CLEAR_STOP, NATIVE_REMOTE_ATTACH, NATIVE_REMOTE_DETACH, NATIVE_REMOTE_DISCONNECT
 } NativeRemoteRequest;
 
 typedef struct
@@ -16,7 +16,8 @@ typedef struct
     GSubprocess *ssh;
     GDataInputStream *output, *errors;
     GCancellable *cancel;
-    guint timer, local_port;
+    guint timer, local_port, attached_pid;
+    gboolean interrupt_pending, pause_requested, clear_stop_signal;
     gboolean busy, connected, extended, detach_needed, disconnect_needed;
     NativeRemoteRequest pending;
     gchar *source_mapping, *original_sysroot, *profile_path;

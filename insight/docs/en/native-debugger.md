@@ -234,6 +234,14 @@ Attach is unavailable while another target is active and in plain `remote` mode.
 **Detach and close SSH** leaves the attached process running; **Stop** terminates it.
 PID is deliberately not stored in debugger profiles.
 
+When gdbserver is on the SSH server's loopback address (`127.0.0.1`, `::1`, or
+`localhost`), Pause targets the attached PID through the existing SSH channel.
+This also works when the process is not a process-group leader. The SSH account
+needs permission to signal that process. GDB must confirm the stop before controls
+are enabled; only this pause's pending SIGSTOP is cleared before continuing or
+detaching, without changing global signal policies. For gdbserver on a different
+forwarded host, Pause uses GDB's normal interrupt command.
+
 If the build recorded paths such as `/build/project`, fill **Source root recorded
 in remote build** with that prefix and **Matching local source root** with the
 existing local project directory. GDB applies `set substitute-path` before

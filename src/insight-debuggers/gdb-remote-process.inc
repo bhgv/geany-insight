@@ -22,6 +22,9 @@ static void native_remote_drop(NativeDebug *session)
     g_clear_object(&remote->output);
     g_clear_object(&remote->errors);
     g_clear_object(&remote->cancel);
+    remote->attached_pid = 0;
+    remote->interrupt_pending = FALSE;
+    remote->pause_requested = remote->clear_stop_signal = FALSE;
     remote->busy = remote->connected = remote->detach_needed = remote->disconnect_needed = FALSE;
     remote->pending = NATIVE_REMOTE_NONE;
 }
@@ -107,6 +110,10 @@ static void native_remote_read(GObject *object, GAsyncResult *result, gpointer d
         g_strchomp(line);
         if (object == G_OBJECT(remote->output) && !strcmp(line, "GEANY-GDB-SSH-READY") && remote->timer)
             native_remote_ready(session);
+        else if (object == G_OBJECT(remote->output) && native_attach_interrupt_reply(session, line))
+        {
+            /* EN/RU: The acknowledgement is protocol data, not console text. / Подтверждение — данные протокола. */
+        }
         else if (*line)
         {
             gchar *text = g_strdup_printf("SSH: %.2000s", line);

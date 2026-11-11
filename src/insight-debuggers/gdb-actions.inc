@@ -86,6 +86,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 session->locals_needed = TRUE;
                 session->threads_needed = session->stack_needed = TRUE;
                 session->points_needed = TRUE;
+                native_attach_stopped(session, line);
                 native_debug_observe(session, line);
             }
         }

@@ -3300,3 +3300,9 @@ PID on the gdbserver machine. Connect using extended-remote first; the remote ac
 Remote process attached. Inspect or Continue; Detach leaves it running.	Подключено к удалённому процессу. Исследуйте или продолжите; отсоединение оставляет его работающим.
 Attach failed; SSH connection remains open: %s	Не удалось подключиться к процессу; SSH остаётся открытым: %s
 Unknown GDB error	Неизвестная ошибка GDB
+Could not send the remote pause request.	Не удалось отправить запрос удалённой паузы.
+Requesting a pause of the attached process through SSH…	Запрос паузы подключённого процесса через SSH…
+SSH could not pause the process. Check signal permissions in Console.	SSH не смог остановить процесс. Проверьте права отправки сигналов в консоли.
+Remote process paused.	Удалённый процесс на паузе.
+Pause signal sent; waiting for GDB to confirm the stop.	Сигнал паузы отправлен; ожидается подтверждение остановки GDB.
+Could not clear the SSH pause signal. See the GDB console before resuming.	Не удалось снять сигнал паузы SSH. Перед продолжением проверьте консоль GDB.

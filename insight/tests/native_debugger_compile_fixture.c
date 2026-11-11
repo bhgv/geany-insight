@@ -52,6 +52,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/gdb-remote-process.inc"
 #include "insight-debuggers/gdb-attach-model.inc"
 #include "insight-debuggers/gdb-attach-ui.inc"
+#include "insight-debuggers/gdb-attach-interrupt.inc"
 #include "insight-debuggers/gdb-remote-connection.inc"
 #include "insight-debuggers/gdb-profile-debug-model.inc"
 #include "insight-debuggers/gdb-profile-locations-model.inc"
