@@ -46,7 +46,8 @@ static void native_remote_clicked(GtkButton *button, gpointer data)
     const gchar *config = gtk_entry_get_text(GTK_ENTRY(remote->config));
     const gchar *from = gtk_entry_get_text(GTK_ENTRY(remote->remote_source));
     const gchar *to = gtk_entry_get_text(GTK_ENTRY(remote->local_source));
-    gboolean valid = native_remote_host_valid(host) && native_remote_host_valid(server) &&
+    const gchar *sysroot = gtk_entry_get_text(GTK_ENTRY(remote->sysroot));
+    gboolean valid = !strpbrk(sysroot, "\r\n") && native_remote_host_valid(host) && native_remote_host_valid(server) &&
         (!*identity || g_file_test(identity, G_FILE_TEST_IS_REGULAR)) &&
         (!*config || g_file_test(config, G_FILE_TEST_IS_REGULAR)) &&
         ((!*from && !*to) || (*from && g_path_is_absolute(to) && g_file_test(to, G_FILE_TEST_IS_DIR)));

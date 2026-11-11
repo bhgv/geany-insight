@@ -3,6 +3,7 @@
 # EN: Execute production SSH argument and source-mapping builders against real GLib without network access.
 # RU: Выполняет производственные построители аргументов SSH и сопоставлений путей с GLib без сети.
 import ctypes.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -86,6 +87,21 @@ int main(void)
     assert(strstr(command, "unset substitute-path") && strstr(command, "/build with spaces"));
     g_free(command);
     assert(!g_queue_pop_head(&queue));
+    command = native_remote_setting("remote exec-file", "/remote/path with spaces/app");
+    assert(command);
+    puts(command);
+    g_free(command);
+    puts("-gdb-show remote exec-file");
+    command = native_remote_setting("sysroot", "target:");
+    puts(command);
+    g_free(command);
+    puts("-gdb-show sysroot");
+    command = native_remote_setting("sysroot", "");
+    puts(command);
+    g_free(command);
+    puts("-gdb-show sysroot");
+    assert(!native_remote_setting("sysroot", "/path\nquit"));
+    assert(!native_remote_setting("shell", "touch file"));
     return 0;
 }
 '''
@@ -99,13 +115,22 @@ class NativeRemote(unittest.TestCase):
         if not library or not shutil.which('cc'):
             self.skipTest('Needs cc and the GLib runtime library.')
         helpers = [function('src/insight-debuggers/gdb-remote-model.inc', name) for name in
-                   ('native_remote_host_valid', 'native_remote_argv', 'native_remote_console', 'native_remote_mapping')]
+                   ('native_remote_host_valid', 'native_remote_argv', 'native_remote_console', 'native_remote_mapping', 'native_remote_setting')]
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as temporary:
             root = Path(temporary)
             (root / 'remote.c').write_text(DECLARATIONS + '\n'.join(helpers) + MAIN)
             subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', str(root / 'remote.c'),
                             '-o', str(root / 'remote'), '-l:' + library], check=True)
-            subprocess.run([str(root / 'remote')], check=True)
+            commands = subprocess.check_output([str(root / 'remote')], text=True)
+            gdb = os.environ.get('GDB', shutil.which('gdb'))
+            if gdb:
+                result = subprocess.run([gdb, '--nx', '--quiet', '--interpreter=mi2'],
+                                        input=commands + '-gdb-exit\n', text=True,
+                                        capture_output=True, check=True, timeout=15)
+                self.assertNotIn('^error', result.stdout)
+                self.assertIn('^done,value="/remote/path with spaces/app"', result.stdout)
+                self.assertIn('^done,value="target:"', result.stdout)
+                self.assertIn('^done,value=""', result.stdout)
 
 
 if __name__ == '__main__':

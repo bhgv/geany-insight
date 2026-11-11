@@ -67,9 +67,9 @@ static void native_remote_restore(NativeDebug *session)
     NativeRemote *remote = session->remote;
     if (remote->original_sysroot)
     {
-        gchar *escaped = g_strescape(remote->original_sysroot, NULL);
-        g_queue_push_tail(&session->launch_commands, g_strdup_printf("-gdb-set sysroot \"%s\"", escaped));
-        g_free(escaped);
+        gchar *setting = native_remote_setting("sysroot", remote->original_sysroot);
+        if (setting)
+            g_queue_push_tail(&session->launch_commands, setting);
     }
     if (remote->source_mapping)
         native_remote_mapping(&session->launch_commands, remote->source_mapping, NULL);
@@ -111,6 +111,17 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
         remote->busy = FALSE;
         remote->connected = TRUE;
         session->points_needed = TRUE;
+        if (!remote->extended && !session->stopped)
+        {
+            /* EN: Some GDB versions report the initial remote stop only in ^connected.
+             * RU: Некоторые версии GDB сообщают начальную остановку только через ^connected. */
+            session->running = FALSE;
+            session->stopped = TRUE;
+            native_values_reset(session);
+            session->threads_needed = session->stack_needed = session->locals_needed = TRUE;
+            session->watch_next = 0;
+            native_debug_observe(session, record);
+        }
         gtk_label_set_text(GTK_LABEL(remote->status), insight_tr(remote->extended ?
             "SSH gdbserver connected. Run starts the remote executable." :
             "SSH gdbserver connected. Continue resumes the remote program."));
@@ -154,20 +165,20 @@ static gboolean native_remote_launch(NativeDebug *session)
     const gchar *path = gtk_entry_get_text(GTK_ENTRY(remote->executable));
     GError *error = NULL;
     gchar *arguments = native_launch_arguments(gtk_entry_get_text(GTK_ENTRY(session->launch_args)), &error);
-    gboolean valid = remote->connected && remote->extended && !remote->busy && *path && arguments;
+    gchar *executable = native_remote_setting("remote exec-file", path);
+    gboolean valid = remote->connected && remote->extended && !remote->busy && *path && arguments && executable;
     if (!valid)
     {
         gtk_label_set_text(GTK_LABEL(remote->status), error ? error->message :
             insight_tr("Connect in extended-remote mode and specify the remote executable before Run or Restart."));
         g_clear_error(&error);
         g_free(arguments);
+        g_free(executable);
         return FALSE;
     }
     insight_queue_clear_full(&session->launch_commands, g_free);
-    gchar *escaped = g_strescape(path, NULL);
-    g_queue_push_tail(&session->launch_commands, g_strdup_printf("-gdb-set remote exec-file \"%s\"", escaped));
+    g_queue_push_tail(&session->launch_commands, executable);
     g_queue_push_tail(&session->launch_commands, arguments);
     g_queue_push_tail(&session->launch_commands, g_strdup("-exec-run"));
-    g_free(escaped);
     return TRUE;
 }

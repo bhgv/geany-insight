@@ -82,3 +82,18 @@ static void native_remote_mapping(GQueue *commands, const gchar *remote, const g
     g_free(to);
     g_free(from);
 }
+
+/* EN: Set a filename/string setting using GDB CLI's complete remainder, with MI escaping only outside it.
+ * setting must be sysroot or remote exec-file; value may contain spaces but no line breaks. Caller owns the result.
+ * RU: Устанавливает строковый/файловый параметр через остаток команды CLI; экранирование MI применяется снаружи.
+ * setting — sysroot либо remote exec-file; value допускает пробелы, но не переводы строк. Результат принадлежит вызывающему. */
+static gchar *native_remote_setting(const gchar *setting, const gchar *value)
+{
+    if (!value || strpbrk(value, "\r\n") ||
+        (strcmp(setting, "sysroot") && strcmp(setting, "remote exec-file")))
+        return NULL;
+    gchar *text = g_strdup_printf("set %s %s", setting, value);
+    gchar *command = native_remote_console(text);
+    g_free(text);
+    return command;
+}

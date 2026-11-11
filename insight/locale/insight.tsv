@@ -3274,3 +3274,4 @@ Enter valid SSH/server hosts, existing optional key/config files, and both sourc
 GDB executable (gdb, gdb-multiarch or cross GDB)	Исполняемый файл GDB (gdb, gdb-multiarch или кросс-GDB)
 GDB was not found. Choose an installed GDB executable.	GDB не найден. Выберите установленный исполняемый файл GDB.
 SSH port (0: SSH config)	Порт SSH (0: из конфигурации)
+Paths must not contain line breaks.	Пути не должны содержать переводы строк.

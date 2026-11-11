@@ -77,9 +77,14 @@ static void native_remote_ready(NativeDebug *session)
         remote->source_mapping = g_strdup(from);
     }
     const gchar *sysroot = gtk_entry_get_text(GTK_ENTRY(remote->sysroot));
-    gchar *escaped = g_strescape(*sysroot ? sysroot : "target:", NULL);
-    g_queue_push_tail(&session->launch_commands, g_strdup_printf("-gdb-set sysroot \"%s\"", escaped));
-    g_free(escaped);
+    gchar *setting = native_remote_setting("sysroot", *sysroot ? sysroot : "target:");
+    if (!setting)
+    {
+        native_remote_drop(session);
+        gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Paths must not contain line breaks."));
+        return;
+    }
+    g_queue_push_tail(&session->launch_commands, setting);
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set remotetimeout 15"));
     g_queue_push_tail(&session->launch_commands, g_strdup_printf("-target-select %s 127.0.0.1:%u",
         remote->extended ? "extended-remote" : "remote", remote->local_port));
