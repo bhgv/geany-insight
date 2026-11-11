@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 196" role="img" aria-labelledby="title">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 330" role="img" aria-labelledby="title">
   <title id="title">C/C++ Debugger buttons, command console and Watch graph</title>
-  <rect width="620" height="196" rx="12" fill="#eef4fa"/>
+  <rect width="620" height="330" rx="12" fill="#eef4fa"/>
   <g fill="#fff" stroke="#6d88a7">
     <rect x="20" y="22" width="580" height="42" rx="8"/>
     <rect x="20" y="80" width="350" height="96" rx="8"/>
@@ -14,5 +14,15 @@
   <g font-family="monospace" font-size="15" fill="#345b80">
     <text x="40" y="143">break main</text>
     <text x="408" y="143">marker = 41</text>
+  </g>
+  <rect x="20" y="192" width="580" height="120" rx="8" fill="#fff" stroke="#6d88a7"/>
+  <g fill="none" stroke="#8a50ae" stroke-width="2">
+    <path d="M43 242v48h18M43 262h18"/>
+  </g>
+  <g font-family="sans-serif" font-size="15">
+    <text x="36" y="217" fill="#162d45">All thread stacks / Стеки всех потоков</text>
+    <text x="36" y="241" fill="#8a50ae">▾ Thread 2 / Поток 2</text>
+    <text x="65" y="265" fill="#167c70">#0 worker → worker.c:24</text>
+    <text x="65" y="290" fill="#167c70">#1 start_thread → pthread_create.c:447</text>
   </g>
 </svg>

@@ -151,6 +151,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_box_pack_start(GTK_BOX(context), stack_scroll, TRUE, TRUE, 0);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), context,
                              gtk_label_new(insight_tr("Threads and stack")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_all_stacks_widget(session, dialog),
+                             gtk_label_new(insight_tr("All thread stacks")));
     g_signal_connect(session->threads, "changed", G_CALLBACK(native_select_thread), dialog);
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), "changed",
                      G_CALLBACK(native_select_frame), dialog);
@@ -173,6 +175,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     insight_debug_register(dialog, session->breakpoint, native_debug_toggle, dialog, debug_commands);
     g_signal_connect(dialog, "destroy", G_CALLBACK(native_debug_close), session);
     g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
+    g_signal_connect(tabs, "switch-page", G_CALLBACK(native_all_stacks_page), dialog);
     gtk_widget_show_all(dialog);
 
     g_data_input_stream_read_line_async(session->output, G_PRIORITY_DEFAULT,

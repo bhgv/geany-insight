@@ -308,6 +308,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/scripts/window.inc \
 	insight-debuggers/gdb-session.inc \
 	insight-debuggers/gdb-context.inc \
+	insight-debuggers/gdb-backtraces.inc \
 	insight-debuggers/gdb-actions.inc \
 	insight-debuggers/gdb-window.inc \
 	insight-python-debug.c \

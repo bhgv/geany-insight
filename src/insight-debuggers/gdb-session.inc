@@ -14,7 +14,7 @@ typedef struct {
 typedef enum
 {
     NATIVE_CONTEXT_NONE, NATIVE_CONTEXT_THREADS, NATIVE_CONTEXT_STACK,
-    NATIVE_CONTEXT_SELECT_THREAD, NATIVE_CONTEXT_SELECT_FRAME
+    NATIVE_CONTEXT_SELECT_THREAD, NATIVE_CONTEXT_SELECT_FRAME, NATIVE_CONTEXT_ALL_STACK
 } NativeContextRequest;
 
 typedef struct {
@@ -28,6 +28,13 @@ typedef struct {
     GtkListStore *local_rows, *point_rows, *stack_rows;
     GtkWidget *threads, *stack;
     NativeContextRequest context_pending;
+    GtkTreeStore *all_stack_rows;
+    GtkWidget *all_stacks_page, *all_stacks_view, *all_stacks_status;
+    GPtrArray *thread_ids;
+    GHashTable *thread_roots;
+    guint all_stack_next;
+    gboolean all_stacks_visible, all_stacks_needed, frame_select_needed;
+    gchar *all_stack_thread, *requested_frame, *selected_thread, *selected_frame;
     gboolean threads_needed, stack_needed, filling_context;
     gboolean locals_needed, locals_pending;
     ScriptDebugWindow *graph_view;
@@ -46,6 +53,9 @@ typedef struct {
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
+static void native_all_stacks_reply(NativeDebug *session, const gchar *record);
+static gboolean native_context_id(const gchar *value);
+
 /* EN: Refresh controls and status for session.
  * RU: Обновляет кнопки и состояние session. */
 static void native_debug_update(NativeDebug *session)
@@ -60,6 +70,14 @@ static void native_debug_update(NativeDebug *session)
              i == NATIVE_RUN ? !session->running : session->stopped && !session->running));
     gtk_widget_set_sensitive(session->threads, idle && session->stopped);
     gtk_widget_set_sensitive(session->stack, idle && session->stopped);
+    if (session->all_stacks_view)
+    {
+        gtk_widget_set_sensitive(session->all_stacks_view, idle && session->stopped);
+        if (session->running || session->all_stacks_needed)
+            gtk_label_set_text(GTK_LABEL(session->all_stacks_status), insight_tr(
+                session->running ? "Previous stop; pause to refresh thread stacks." :
+                                   "Collecting thread stacks…"));
+    }
     gtk_widget_set_sensitive(session->command, idle && !session->running);
     gtk_widget_set_sensitive(session->watch_entry, idle && !session->running);
     gtk_widget_set_sensitive(session->watch_add, idle && !session->running);
@@ -171,6 +189,13 @@ static void native_debug_free(gpointer data)
     g_object_unref(session->local_rows);
     g_object_unref(session->point_rows);
     g_object_unref(session->stack_rows);
+    g_object_unref(session->all_stack_rows);
+    g_ptr_array_unref(session->thread_ids);
+    g_hash_table_unref(session->thread_roots);
+    g_free(session->all_stack_thread);
+    g_free(session->requested_frame);
+    g_free(session->selected_thread);
+    g_free(session->selected_frame);
     g_ptr_array_unref(session->graph_view->watch_paths);
     g_clear_pointer(&session->graph_view->watch_previous_values, g_hash_table_unref);
     g_free(session->graph_view);
@@ -218,6 +243,14 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         session->context_pending = NATIVE_CONTEXT_STACK;
         native_debug_send(dialog, "-stack-list-frames 0 63");
     }
+    else if (session->frame_select_needed)
+    {
+        session->frame_select_needed = FALSE;
+        session->context_pending = NATIVE_CONTEXT_SELECT_FRAME;
+        gchar *command = g_strdup_printf("-stack-select-frame %s", session->requested_frame);
+        native_debug_send(dialog, command);
+        g_free(command);
+    }
     else if (session->locals_needed)
     {
         session->locals_needed = FALSE;
@@ -232,6 +265,25 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         native_debug_send(dialog, command);
         g_free(command);
         g_free(escaped);
+    }
+    else if (session->all_stacks_visible && session->all_stacks_needed)
+    {
+        if (session->all_stack_next < session->thread_ids->len)
+        {
+            const gchar *thread = session->thread_ids->pdata[session->all_stack_next++];
+            g_free(session->all_stack_thread);
+            session->all_stack_thread = g_strdup(thread);
+            session->context_pending = NATIVE_CONTEXT_ALL_STACK;
+            gchar *command = g_strdup_printf("-stack-list-frames --thread %s 0 63", thread);
+            native_debug_send(dialog, command);
+            g_free(command);
+        }
+        else
+        {
+            session->all_stacks_needed = FALSE;
+            gtk_label_set_text(GTK_LABEL(session->all_stacks_status),
+                               insight_tr("Stacks at the current stop (up to 64 threads, 64 frames each)."));
+        }
     }
 }
 
@@ -262,6 +314,34 @@ static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer
     g_object_unref(dialog);
 }
 
+/* EN: Bind frame-sensitive command to session's UI selection, preserving explicit scopes.
+ * RU: Привязывает command к выбранному в интерфейсе кадру session, сохраняя явный контекст. */
+static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
+{
+    const gchar *space = strchr(command, ' ');
+    gsize length = space ? (gsize)(space - command) : strlen(command);
+    const gchar *scoped[] = {
+        "-stack-list-frames", "-stack-list-variables", "-stack-select-frame",
+        "-data-evaluate-expression", "-exec-continue", "-exec-step",
+        "-exec-next", "-exec-finish", "-interpreter-exec"
+    };
+    gboolean matches = FALSE;
+    for (guint i = 0; i < G_N_ELEMENTS(scoped); i++)
+        matches |= strlen(scoped[i]) == length && !strncmp(command, scoped[i], length);
+    const gchar *explicit_thread = strstr(command, " --thread ");
+    const gchar *quote = strchr(command, '"');
+    if (!matches || !native_context_id(session->selected_thread) ||
+        (explicit_thread && (!quote || explicit_thread < quote)))
+        return g_strdup(command);
+    gchar *verb = g_strndup(command, length);
+    gchar *result = g_strdup_printf("%s --thread %s%s%s%s", verb, session->selected_thread,
+        native_context_id(session->selected_frame) ? " --frame " : "",
+        native_context_id(session->selected_frame) ? session->selected_frame : "",
+        space ? space : "");
+    g_free(verb);
+    return result;
+}
+
 /* EN: Queue command for the GDB session attached to dialog.
  * RU: Ставит command в очередь GDB, связанного с dialog. */
 static void native_debug_send(GtkWidget *dialog, const gchar *command)
@@ -269,7 +349,9 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command)
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
     if (session->closed || session->pending || session->writing)
         return;
-    gchar *line = g_strconcat(command, "\n", NULL);
+    gchar *scoped = native_debug_scoped(session, command);
+    gchar *line = g_strconcat(scoped, "\n", NULL);
+    g_free(scoped);
     session->pending = session->writing = TRUE;
     native_debug_update(session);
     g_object_set_data_full(G_OBJECT(dialog), "native-debug-command", line, g_free);

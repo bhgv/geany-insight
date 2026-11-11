@@ -66,3 +66,19 @@ end
 **Watches** and **Watch graph**.
 Return `false` to continue or `true` to keep the program paused.
 Manual pauses and stepping stops stay available for inspection.
+
+## All thread stacks
+
+While paused, open **All thread stacks** to collect a collapsible tree:
+threads at the top, their frames underneath. **Expand all** and **Collapse all**
+control the branches. Frame numbers, function names and source lines use distinct
+colors. Double-click a frame to select its thread and frame, open its source,
+and refresh locals, watches and the watch graph in that context.
+
+This view collects at most 64 threads and 64 frames per thread. It refreshes
+at stops while the tab is open; while running it keeps the previous snapshot
+and labels it accordingly. A thread whose stack cannot be read is marked
+**Stack unavailable**. GDB must supply source paths and line numbers for source
+navigation; optimized code may lack locals or source locations.
+
+![Thread and frame tree](media/native-debugger.svg)

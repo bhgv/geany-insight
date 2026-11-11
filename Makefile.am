@@ -827,3 +827,5 @@ EXTRA_DIST += insight/tests/hdl_instance_models_test.py
 dist_insightdocmedia_DATA += insight/docs/media/verilog-hierarchy.svg
 
 EXTRA_DIST += insight/tests/verilog-debugger-gui/controls.inc insight/tests/verilog-debugger-gui/devices.inc insight/tests/verilog-debugger-gui/history.inc insight/tests/verilog-debugger-gui/session.inc
+
+EXTRA_DIST += insight/tests/native_debugger_models_test.py

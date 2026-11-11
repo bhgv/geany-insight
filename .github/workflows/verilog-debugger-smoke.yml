@@ -31,6 +31,8 @@ on:
       - 'src/insight-waveforms.*'
       - 'src/insight-waveforms/**'
       - 'src/insight-workbench.c'
+      - 'src/insight-debuggers/**'
+      - 'insight/tests/native_debugger_models_test.py'
       - 'insight/desktop/slang_completion.c'
       - 'external/slang-compat/**'
       - 'insight/tests/verilog_debugger_gui_test.c'
@@ -61,6 +63,9 @@ jobs:
           sudo apt-get install -y build-essential autoconf automake bison flex \
             cmake gdb gettext gperf libgtk-3-dev libreadline-dev libxml2-dev libzstd-dev \
             meson ninja-build pkg-config python3-docutils xauth xvfb zlib1g-dev
+      - name: Check native debugger thread models and GDB context
+        if: runner.os == 'Linux'
+        run: python3 insight/tests/native_debugger_models_test.py
       - name: Build and install on Linux
         id: linux_build
         if: runner.os == 'Linux'

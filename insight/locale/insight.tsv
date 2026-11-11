@@ -3165,3 +3165,10 @@ Definition file	Файл определения
 Instance	Экземпляр
 Expand all	Развернуть всё
 Collapse all	Свернуть всё
+All thread stacks	Стеки всех потоков
+Thread / frame	Поток / кадр
+Stack unavailable	Стек недоступен
+Open this page while paused to collect all thread stacks.	Откройте эту вкладку на паузе для получения стеков всех потоков.
+Stacks at the current stop (up to 64 threads, 64 frames each).	Стеки на текущей остановке (до 64 потоков, по 64 кадра).
+Previous stop; pause to refresh thread stacks.	Предыдущая остановка; приостановите выполнение для обновления стеков.
+Collecting thread stacks…	Получение стеков потоков…

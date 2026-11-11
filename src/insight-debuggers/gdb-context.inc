@@ -72,20 +72,30 @@ static gboolean native_context_id(const gchar *value)
     return value && *value && strspn(value, "0123456789") == strlen(value);
 }
 
-/* EN: Fill the thread picker or frame table from the MI reply in record.
- * RU: Заполняет список потоков или таблицу кадров из ответа MI record. */
+/* EN: Fill session from MI record: threads chooses the thread picker instead of frames.
+ * RU: Заполняет session из MI record: threads выбирает список потоков вместо кадров. */
 static void native_fill_context(NativeDebug *session, const gchar *record, gboolean threads)
 {
     const gchar *prefix = threads ? "^done,threads=[" : "^done,stack=[";
     const gchar *cursor = g_str_has_prefix(record, prefix) ? record + strlen(prefix) : "]";
-    gchar *selected = threads ? native_debug_field(record, "current-thread-id") : NULL;
+    gchar *selected = threads ? (session->selected_thread ? g_strdup(session->selected_thread) :
+                                  native_debug_field(record, "current-thread-id")) : NULL;
     session->filling_context = TRUE;
     if (threads)
+    {
         gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(session->threads));
+        gtk_tree_store_clear(session->all_stack_rows);
+        g_ptr_array_set_size(session->thread_ids, 0);
+        g_hash_table_remove_all(session->thread_roots);
+        session->all_stack_next = 0;
+        session->all_stacks_needed = session->all_stacks_visible;
+    }
     else
         gtk_list_store_clear(session->stack_rows);
 
     const gchar *start, *end;
+    GtkTreePath *wanted = NULL;
+    const gchar *desired = session->requested_frame ? session->requested_frame : session->selected_frame;
     guint count = 0;
     while (count++ < 256 && (end = native_next_tuple(&cursor, &start)))
     {
@@ -100,6 +110,14 @@ static void native_fill_context(NativeDebug *session, const gchar *record, gbool
                 gchar *label = g_strdup_printf("#%s  %s", id, name ? name : function ? function : "");
                 gchar *valid = g_utf8_make_valid(label, -1);
                 gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(session->threads), id, valid);
+                if (session->thread_ids->len < 64)
+                {
+                    GtkTreeIter *root = g_new(GtkTreeIter, 1);
+                    gtk_tree_store_insert_with_values(session->all_stack_rows, root, NULL, -1,
+                        0, valid, 5, id, -1);
+                    g_hash_table_insert(session->thread_roots, g_strdup(id), root);
+                    g_ptr_array_add(session->thread_ids, g_strdup(id));
+                }
                 g_free(valid);
                 g_free(label);
                 g_free(name);
@@ -110,8 +128,11 @@ static void native_fill_context(NativeDebug *session, const gchar *record, gbool
                 gchar *line = native_debug_field(tuple, "line");
                 gchar *display = path ? g_filename_display_name(path) : g_strdup("");
                 gchar *label = g_utf8_make_valid(function ? function : "??", -1);
-                gtk_list_store_insert_with_values(session->stack_rows, NULL, -1,
+                GtkTreeIter row;
+                gtk_list_store_insert_with_values(session->stack_rows, &row, -1,
                     0, id, 1, label, 2, display, 3, line, 4, path, -1);
+                if (!g_strcmp0(id, desired))
+                    wanted = gtk_tree_model_get_path(GTK_TREE_MODEL(session->stack_rows), &row);
                 g_free(label);
                 g_free(display);
                 g_free(line);
@@ -124,9 +145,14 @@ static void native_fill_context(NativeDebug *session, const gchar *record, gbool
     }
     if (threads && (!selected || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), selected)))
         gtk_combo_box_set_active(GTK_COMBO_BOX(session->threads), 0);
-    if (!threads)
+    if (threads)
     {
-        GtkTreePath *first = gtk_tree_path_new_from_indices(0, -1);
+        g_free(session->selected_thread);
+        session->selected_thread = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(session->threads)));
+    }
+    else
+    {
+        GtkTreePath *first = wanted ? wanted : gtk_tree_path_new_from_indices(0, -1);
         gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), first);
         gtk_tree_path_free(first);
     }
@@ -158,13 +184,31 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
 {
     NativeContextRequest request = session->context_pending;
     session->context_pending = NATIVE_CONTEXT_NONE;
+    if (request == NATIVE_CONTEXT_ALL_STACK)
+    {
+        native_all_stacks_reply(session, record);
+        return;
+    }
     if (request == NATIVE_CONTEXT_THREADS || request == NATIVE_CONTEXT_STACK)
         native_fill_context(session, record, request == NATIVE_CONTEXT_THREADS);
     if (!g_str_has_prefix(record, "^done"))
+    {
+        g_clear_pointer(&session->requested_frame, g_free);
+        session->frame_select_needed = FALSE;
+        if (request == NATIVE_CONTEXT_SELECT_THREAD)
+        {
+            session->filling_context = TRUE;
+            gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), session->selected_thread);
+            session->filling_context = FALSE;
+        }
         return;
+    }
     if (request == NATIVE_CONTEXT_SELECT_THREAD)
     {
         session->stack_needed = TRUE;
+        g_free(session->selected_thread);
+        session->selected_thread = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(session->threads)));
+        g_clear_pointer(&session->selected_frame, g_free);
         g_clear_pointer(&session->stop_file, g_free);
         session->stop_line = 0;
     }
@@ -174,6 +218,16 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         gchar *level = native_selected_frame(session, &path, &line);
         if (level)
         {
+            g_free(session->selected_frame);
+            session->selected_frame = g_strdup(level);
+            if (request == NATIVE_CONTEXT_STACK && session->requested_frame)
+            {
+                session->locals_needed = TRUE;
+                session->watch_next = 0;
+                session->frame_select_needed = !strcmp(level, session->requested_frame);
+                if (!session->frame_select_needed)
+                    g_clear_pointer(&session->requested_frame, g_free);
+            }
             g_free(session->stop_file);
             session->stop_file = g_steal_pointer(&path);
             guint64 number = 0;
@@ -184,6 +238,8 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         g_free(path);
         g_free(line);
     }
+    if (request == NATIVE_CONTEXT_SELECT_FRAME)
+        g_clear_pointer(&session->requested_frame, g_free);
     if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_SELECT_THREAD)
     {
         session->locals_needed = TRUE;

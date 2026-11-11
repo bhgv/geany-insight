@@ -137,6 +137,9 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
         {
             session->running = TRUE;
             session->stopped = FALSE;
+            session->all_stacks_needed = FALSE;
+            g_clear_pointer(&session->requested_frame, g_free);
+            session->frame_select_needed = FALSE;
         }
         else if (g_str_has_prefix(line, "*stopped"))
         {
@@ -145,6 +148,10 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             if (session->stopped)
             {
                 session->watch_next = 0;
+                g_clear_pointer(&session->selected_thread, g_free);
+                g_clear_pointer(&session->selected_frame, g_free);
+                g_clear_pointer(&session->requested_frame, g_free);
+                session->frame_select_needed = FALSE;
                 session->locals_needed = TRUE;
                 session->threads_needed = session->stack_needed = TRUE;
                 native_debug_observe(session, line);

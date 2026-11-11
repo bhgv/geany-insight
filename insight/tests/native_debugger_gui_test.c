@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Exercise the native GDB window, variables, watches and thread stack tree.
+ * RU: Проверяет окно GDB, переменные, наблюдения и дерево стеков потоков. */
 #include "geany.h"
 #include "main.h"
 #include "document.h"
@@ -123,6 +125,8 @@ static gboolean timeout(gpointer data)
     exit(1);
 }
 
+/* EN: Advance the debugger GUI scenario; data is unused. Stop after all checks pass.
+ * RU: Продвигает сценарий интерфейса; data не используется. Завершает успешную проверку. */
 static gboolean drive(gpointer data)
 {
     (void)data;
@@ -189,7 +193,35 @@ static gboolean drive(gpointer data)
     else if (phase == 6 && gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs)) == 3 &&
              find(gtk_notebook_get_nth_page(GTK_NOTEBOOK(tabs), 3), "marker = 41"))
     {
-        g_print("C/C++ GTK: real GDB breakpoint, Lua observer, watch, step and locals passed.\n");
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),
+                                     gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)) - 1);
+        phase++;
+    }
+    else if (phase == 7)
+    {
+        GtkWidget *tree = find(window, "insight-gdb-all-thread-stacks");
+        if (!GTK_IS_TREE_VIEW(tree) || !gtk_widget_is_sensitive(tree))
+            return G_SOURCE_CONTINUE;
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+        GtkTreeIter thread, frame;
+        if (!gtk_tree_model_get_iter_first(model, &thread) ||
+            !gtk_tree_model_iter_children(model, &frame, &thread))
+            return G_SOURCE_CONTINUE;
+        gchar *name = NULL;
+        gtk_tree_model_get(model, &frame, 1, &name, -1);
+        gboolean correct = !g_strcmp0(name, "main");
+        g_free(name);
+        if (!correct)
+            return G_SOURCE_CONTINUE;
+        GtkTreePath *path = gtk_tree_model_get_path(model, &frame);
+        gtk_tree_view_row_activated(GTK_TREE_VIEW(tree), path, NULL);
+        gtk_tree_path_free(path);
+        phase++;
+    }
+    else if (phase == 8 && has_local(window, "marker", "41") &&
+             gtk_widget_is_sensitive(find(window, "insight-gdb-all-thread-stacks")))
+    {
+        g_print("C/C++ GTK: GDB breakpoint, observer, watches, locals and thread stack navigation passed.\n");
         passed = TRUE;
         gtk_widget_destroy(window);
         gtk_main_quit();
