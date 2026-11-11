@@ -34,6 +34,7 @@ on:
       - 'insight/desktop/slang_completion.c'
       - 'external/slang-compat/**'
       - 'insight/tests/verilog_debugger_gui_test.c'
+      - 'insight/tests/verilog-debugger-gui/**'
       - 'insight/tests/native_debugger_gui_test.c'
       - 'insight/tests/native-debug/**'
       - 'tests/meson.build'

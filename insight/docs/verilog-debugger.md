@@ -240,9 +240,11 @@ time and cycle limits begin when VCD capture starts. If the debugger is
 paused, click the test-device button and then **Continue** so the model
 can process the pulse.
 
-The **HDL Signals → Instances** tree shows the static signals reported
+The **HDL Signals → Instance tree** view opens by default and shows the static signals reported
 by VVP for the design hierarchy, regardless of the open editor tab.
-Choose **Alphabetical order** or **Simulator order**. **Changed** compares the current
+Choose **Alphabetical order** or **Simulator order**. Use the expanders beside
+instances or **Expand all / Collapse all** to navigate. **Flat signal list**
+keeps the full dotted paths and the port/net/register categories. **Changed** compares the current
 snapshot with the previous one. On a source breakpoint, the debugger
 opens and highlights the stopped line.
 
@@ -803,3 +805,27 @@ Icarus compilation diagnostics appear in **Messages**. The debugger
 opens the first available source location, scrolls to it, and selects it.
 Click another diagnostic to open and select its location. When the tool
 supplies only a line number, the whole line is selected.
+
+
+### Pause, stop and restart
+
+**Pause** requests a debugger prompt and preserves simulation time and values.
+Use **Continue** to resume. **Stop simulation** cancels the running simulator
+(or compilation) and keeps the stopped window available. **Restart simulation**
+waits for the previous process to exit, then recompiles and starts at time zero
+using the same sources, test-device recipe and saved breakpoints. You can
+restart from a running, paused or manually stopped session.
+
+### Module navigation in Relations
+
+With the cursor inside a Verilog/SystemVerilog module, open **Relations** and
+select **Module instances (slang HDL)**, or press the module-tree button.
+The project semantic analyzer shows the elaborated instances of that module
+and their descendants. Each row contains an instance name, its module type and
+the definition file. Double-click a row to open that module definition.
+Generated scopes appear as grouping branches. Repeated occurrences of the
+current module remain separate roots. The view is limited to 4,000 nodes and
+reports when the limit is reached. Unresolved definitions are left without
+a navigation target.
+
+![HDL instance views](media/verilog-hierarchy.svg)

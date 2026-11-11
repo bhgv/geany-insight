@@ -167,12 +167,86 @@ static void signal_pin_kind(GtkTreeViewColumn *column, GtkCellRenderer *cell, Gt
 static void signal_instance_order_changed(GtkComboBox *combo, gpointer data)
 {
     WaveSimulation *run = data;
-    gint column = gtk_combo_box_get_active(combo) == 1 ? 0
+    gint column = gtk_combo_box_get_active(combo) == 1 ? 5
                                                      : GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID;
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(run->signal_instances), column,
                                          GTK_SORT_ASCENDING);
     if (column < 0)
         signal_tables_refresh(run);
+}
+
+/* EN: Select the signal layout named by combo in the stack passed as data.
+ * RU: Выбирает вид сигналов из combo в стеке data. */
+static void signal_layout_changed(GtkComboBox *combo, gpointer data)
+{
+    gtk_stack_set_visible_child_name(GTK_STACK(data), gtk_combo_box_get_active_id(combo));
+}
+
+/* EN: Expand or collapse all scopes in the tree passed as data.
+ * RU: Раскрывает или сворачивает все области дерева data по действию button. */
+static void signal_tree_expand(GtkButton *button, gpointer data)
+{
+    if (g_object_get_data(G_OBJECT(button), "expand"))
+        gtk_tree_view_expand_all(GTK_TREE_VIEW(data));
+    else
+        gtk_tree_view_collapse_all(GTK_TREE_VIEW(data));
+}
+
+/* EN: Return whether iter identifies a signal, rather than a scope, in model.
+ * RU: Проверяет, что iter указывает на сигнал, а не область, в model. */
+static gboolean signal_tree_leaf(GtkTreeModel *model, GtkTreeIter *iter)
+{
+    gchar *kind = NULL;
+    gtk_tree_model_get(model, iter, 4, &kind, -1);
+    gboolean leaf = kind != NULL;
+    g_free(kind);
+    return leaf;
+}
+
+/* EN: Update context for a selected signal in selection; data is the session.
+ * RU: Обновляет контекст выбранного сигнала selection для сеанса data. */
+static void signal_tree_selected(GtkTreeSelection *selection, gpointer data)
+{
+    GtkTreeModel *model;
+    GtkTreeIter iter;
+    if (gtk_tree_selection_get_selected(selection, &model, &iter) && signal_tree_leaf(model, &iter))
+        signal_table_selected(selection, data);
+}
+
+/* EN: Toggle a scope or open the signal at path in tree for the session data.
+ * RU: Раскрывает область либо открывает сигнал path дерева tree для сеанса data. */
+static void signal_tree_activated(GtkTreeView *tree, GtkTreePath *path,
+                                  GtkTreeViewColumn *column, gpointer data)
+{
+    GtkTreeModel *model = gtk_tree_view_get_model(tree);
+    GtkTreeIter iter;
+    if (!gtk_tree_model_get_iter(model, &iter, path))
+        return;
+    if (signal_tree_leaf(model, &iter))
+        signal_table_activated(tree, path, column, data);
+    else
+    {
+        if (gtk_tree_view_row_expanded(tree, path))
+            gtk_tree_view_collapse_row(tree, path);
+        else
+            gtk_tree_view_expand_row(tree, path, FALSE);
+        g_signal_stop_emission_by_name(tree, "row-activated");
+    }
+}
+
+/* EN: Show signal actions for the row under event in tree, using session data.
+ * RU: Открывает действия сигнала под event в tree для сеанса data. */
+static gboolean signal_tree_popup(GtkWidget *tree, GdkEventButton *event, gpointer data)
+{
+    GtkTreePath *path = NULL;
+    GtkTreeIter iter;
+    GtkTreeView *view = GTK_TREE_VIEW(tree);
+    if (!gtk_tree_view_get_path_at_pos(view, (gint)event->x, (gint)event->y, &path, NULL, NULL, NULL))
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(view);
+    gboolean leaf = gtk_tree_model_get_iter(model, &iter, path) && signal_tree_leaf(model, &iter);
+    gtk_tree_path_free(path);
+    return leaf && signal_table_popup(tree, event, data);
 }
 
 /* EN: Build signal and pin tables, regex search and declaration context for run.
@@ -201,16 +275,32 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_label_set_line_wrap(GTK_LABEL(run->signal_status), TRUE);
     gtk_box_pack_start(GTK_BOX(box), run->signal_status, FALSE, FALSE, 0);
     GtkWidget *tabs = gtk_notebook_new();
-    gtk_box_pack_start(GTK_BOX(box), tabs, TRUE, TRUE, 0);
-    run->signal_instances = gtk_tree_store_new(4, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-                                                G_TYPE_STRING);
+    GtkWidget *layout = gtk_stack_new();
+    GtkComboBoxText *mode = GTK_COMBO_BOX_TEXT(gtk_combo_box_text_new());
+    gtk_widget_set_name(GTK_WIDGET(mode), "insight-verilog-signal-layout");
+    gtk_combo_box_text_append(mode, "tree", insight_tr("Instance tree"));
+    gtk_combo_box_text_append(mode, "flat", insight_tr("Flat signal list"));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(mode), 0);
+    gtk_box_pack_start(GTK_BOX(box), GTK_WIDGET(mode), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), layout, TRUE, TRUE, 0);
+    gtk_stack_add_named(GTK_STACK(layout), tabs, "flat");
+    run->signal_instances = gtk_tree_store_new(
+        7, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     GtkWidget *hierarchy = gtk_tree_view_new_with_model(GTK_TREE_MODEL(run->signal_instances));
     run->signal_instance_view = GTK_TREE_VIEW(hierarchy);
+    gtk_widget_set_name(hierarchy, "insight-verilog-instance-tree");
+    gtk_tree_view_set_show_expanders(GTK_TREE_VIEW(hierarchy), TRUE);
+    gtk_tree_view_set_enable_tree_lines(GTK_TREE_VIEW(hierarchy), TRUE);
+    g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(hierarchy)), "changed",
+                      G_CALLBACK(signal_tree_selected), run);
+    g_signal_connect(hierarchy, "row-activated", G_CALLBACK(signal_tree_activated), run);
+    g_signal_connect(hierarchy, "button-press-event", G_CALLBACK(signal_tree_popup), run);
     const gchar *headings[] = {"Name", "Value", "Changed"};
     for (guint i = 0; i < G_N_ELEMENTS(headings); i++)
     {
         GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
-            insight_tr(headings[i]), gtk_cell_renderer_text_new(), "text", i, NULL);
+            insight_tr(headings[i]), gtk_cell_renderer_text_new(), "text", i == 0 ? 5 : i == 2 ? 3 : 1, NULL);
         gtk_tree_view_column_set_resizable(column, TRUE);
         gtk_tree_view_append_column(GTK_TREE_VIEW(hierarchy), column);
     }
@@ -222,9 +312,22 @@ static GtkWidget *simulation_signal_tables(WaveSimulation *run)
     gtk_combo_box_text_append_text(order, insight_tr("Alphabetical order"));
     gtk_combo_box_set_active(GTK_COMBO_BOX(order), 0);
     g_signal_connect(order, "changed", G_CALLBACK(signal_instance_order_changed), run);
-    gtk_box_pack_start(GTK_BOX(instance_page), GTK_WIDGET(order), FALSE, FALSE, 0);
+    GtkWidget *tree_actions = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    gtk_box_pack_start(GTK_BOX(tree_actions), GTK_WIDGET(order), FALSE, FALSE, 0);
+    const gchar *tree_labels[] = {"Expand all", "Collapse all"};
+    for (guint i = 0; i < G_N_ELEMENTS(tree_labels); i++)
+    {
+        GtkWidget *button = gtk_button_new_with_label(insight_tr(tree_labels[i]));
+        g_object_set_data(G_OBJECT(button), "expand", GINT_TO_POINTER(i == 0));
+        g_signal_connect(button, "clicked", G_CALLBACK(signal_tree_expand), hierarchy);
+        gtk_box_pack_start(GTK_BOX(tree_actions), button, FALSE, FALSE, 0);
+    }
+    gtk_box_pack_start(GTK_BOX(instance_page), tree_actions, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(instance_page), instance_scroll, TRUE, TRUE, 0);
-    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), instance_page, gtk_label_new(insight_tr("Instances")));
+    gtk_stack_add_named(GTK_STACK(layout), instance_page, "tree");
+    gtk_widget_show_all(instance_page);
+    gtk_stack_set_visible_child_name(GTK_STACK(layout), "tree");
+    g_signal_connect(mode, "changed", G_CALLBACK(signal_layout_changed), layout);
     const gchar *titles[] = {"Ports", "Nets", "Registers", "Pinned signals"};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {

@@ -37,7 +37,13 @@ static void simulation_request_pause(GtkButton *button, gpointer data)
     if (!directory)
         return;
     gchar *path = g_build_filename(directory, ".geany-vvp-pause", NULL);
-    run->pause_requested = g_file_set_contents(path, "pause\n", -1, NULL);
+    GError *error = NULL;
+    run->pause_requested = g_file_set_contents(path, "pause\n", -1, &error);
+    if (error)
+    {
+        gtk_label_set_text(GTK_LABEL(run->pause_reason), error->message);
+        g_error_free(error);
+    }
     gtk_widget_set_sensitive(GTK_WIDGET(button), !run->pause_requested);
     g_free(path);
     g_free(directory);
@@ -317,7 +323,9 @@ static gboolean simulation_refresh_console(gpointer data)
     gtk_widget_set_sensitive(run->signal_stop_toggle, rule_selected);
     gboolean waiting_for_trigger = running && !run->capture_started && run->port_harness &&
                                    strstr(run->port_harness, "// GEANY-CAPTURE-TRIGGER");
-    const gchar *status = run->signal_manual_stop ? "Paused by user"
+    const gchar *status = run->stop_requested
+                              ? (run->restart_requested ? "Restarting simulation…" : "Stopping simulation…")
+                          : run->signal_manual_stop ? "Paused by user"
                           : run->trace_file && run->breakpoint_stop ? "Source breakpoint hit"
                           : run->trace_file ? "Paused at HDL source"
                           : paused ? "Simulator paused"
@@ -329,7 +337,7 @@ static gboolean simulation_refresh_console(gpointer data)
     if (strcmp(gtk_label_get_text(GTK_LABEL(run->pause_reason)), reason))
         gtk_label_set_text(GTK_LABEL(run->pause_reason), reason);
     g_free(reason);
-    gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending);
+    gtk_widget_set_sensitive(run->live_controls, paused && !run->preview_pending && !run->stop_requested);
     gtk_widget_set_sensitive(run->breakpoint_controls, running);
     gtk_widget_set_sensitive(run->source_step_controls, run->source_step_ready);
     gtk_widget_set_sensitive(run->process_controls, run->processes_ready);

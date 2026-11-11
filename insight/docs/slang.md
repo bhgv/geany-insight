@@ -105,3 +105,12 @@ _external-slang/insight-slang-semantic --symbols -- leaf.sv top.sv
 ## Semantic highlighting
 
 Open a Verilog or SystemVerilog tab. When the installed slang helper finishes background analysis, the editor automatically colors recognized modules, instances, ports, subroutines, parameters and signals in that tab. The lexer still colors keywords, comments and strings. Highlighting uses the same project index, including a restored one, and applies colors only near the visible lines; scrolling reveals more colors without rerunning slang. The parser and token preparation run in a worker; the editor copies open buffers and applies colors in short idle slices. An HDL edit invalidates the old colors and schedules fresh analysis after a short pause. Background coloring does not open Relations or replace its results. Explicit diagnostics and reference searches remain available.
+
+
+## Module instance tree
+
+Use **Relations → Module instances (slang HDL)** with the cursor inside a module.
+The expandable tree shows instance names, module types and definition files.
+Double-click an instance to open the corresponding module declaration.
+
+![HDL instance views](media/verilog-hierarchy.svg)

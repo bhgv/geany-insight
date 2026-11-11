@@ -23,7 +23,7 @@ static void relation_controls(GtkWidget *widget, gpointer data)
     gtk_widget_set_sensitive(wb.usage_buffer, references || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)) == 3 || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)) == 7 || gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)) == 8);
     if (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.relation_follow)))
         insight_workbench_refresh();
-    else if (relation == 12 || *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL, NULL);
+    else if (relation == 12 || relation == 13 || *gtk_entry_get_text(GTK_ENTRY(wb.usage_entry))) usage_start(NULL, NULL);
     else
     {
         gtk_list_store_clear(wb.matches);
@@ -32,6 +32,18 @@ static void relation_controls(GtkWidget *widget, gpointer data)
 }
 /* Disabling tracking freezes the displayed result set. It must not be
  * treated as a query-options change, which clears and starts the query. */
+
+/* EN: Browse instances from the active HDL module. button and data are unused.
+ * RU: Показывает экземпляры текущего модуля HDL. button и data не используются. */
+static void hdl_instance_search(GtkButton *button, gpointer data)
+{
+    (void)button;
+    (void)data;
+    if (gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode)) == 13)
+        usage_start(NULL, NULL);
+    else
+        gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode), 13);
+}
 
 /* EN: Handle a follow-mode change from button.
  * RU: Обрабатывает переключение слежения из button. */

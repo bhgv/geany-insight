@@ -116,9 +116,10 @@ static gboolean signal_table_insert(WaveSimulation *run, guint table, gchar **ro
 
 /* EN: Insert a signal below the scopes in its VPI name.
  * RU: Добавляет сигнал в дерево областей по его имени VPI. */
-static void signal_instance_insert(GtkTreeStore *store, GHashTable *scopes, const gchar *name,
+static void signal_instance_insert(GtkTreeStore *store, GHashTable *scopes, gchar **row,
                                    const gchar *value, gboolean changed)
 {
+    const gchar *name = row[1];
     GtkTreeIter *parent = NULL;
     const gchar *part = name;
     const gchar *dot;
@@ -130,7 +131,7 @@ static void signal_instance_insert(GtkTreeStore *store, GHashTable *scopes, cons
         {
             gchar *label = g_strndup(part, dot - part);
             scope = g_new(GtkTreeIter, 1);
-            gtk_tree_store_insert_with_values(store, scope, parent, -1, 0, label, 3, path, -1);
+            gtk_tree_store_insert_with_values(store, scope, parent, -1, 5, label, 6, path, -1);
             g_hash_table_insert(scopes, g_steal_pointer(&path), scope);
             g_free(label);
         }
@@ -139,8 +140,8 @@ static void signal_instance_insert(GtkTreeStore *store, GHashTable *scopes, cons
         part = dot + 1;
     }
     GtkTreeIter leaf;
-    gtk_tree_store_insert_with_values(store, &leaf, parent, -1, 0, part, 1, value,
-                                      2, changed ? insight_tr("Yes") : "", -1);
+    gtk_tree_store_insert_with_values(store, &leaf, parent, -1, 0, name, 1, value, 2, row[3], 4, row[0],
+                                      3, changed ? insight_tr("Yes") : "", 5, part, -1);
 }
 
 /* EN: Save an expanded scope path from view in the set passed as data.
@@ -151,7 +152,7 @@ static void signal_instance_save_expansion(GtkTreeView *view, GtkTreePath *path,
     GtkTreeIter iter;
     gchar *scope = NULL;
     if (gtk_tree_model_get_iter(model, &iter, path))
-        gtk_tree_model_get(model, &iter, 3, &scope, -1);
+        gtk_tree_model_get(model, &iter, 6, &scope, -1);
     if (scope)
         g_hash_table_add(data, scope);
 }
@@ -214,7 +215,7 @@ static void signal_tables_refresh(WaveSimulation *run)
             guint table = *row[0] == 'P' ? 0 : *row[0] == 'N' ? 1 : 2;
             keep_context |=
                 signal_table_insert(run, table, row, display, changed, selected[table], context_name);
-            signal_instance_insert(run->signal_instances, scopes, row[1], display, changed);
+            signal_instance_insert(run->signal_instances, scopes, row, display, changed);
             if (pinned)
                 keep_context |=
                     signal_table_insert(run, 3, row, display, changed, selected[3], context_name);
@@ -249,6 +250,15 @@ static void signal_tables_refresh(WaveSimulation *run)
             gtk_tree_view_expand_to_path(run->signal_instance_view, path);
             gtk_tree_path_free(path);
         }
+    }
+    if (!run->signal_tree_initialized && g_hash_table_size(scopes))
+    {
+        run->signal_tree_initialized = TRUE;
+        GtkTreePath *root = gtk_tree_path_new_first();
+        gtk_tree_view_expand_row(run->signal_instance_view, root, FALSE);
+        gtk_tree_path_down(root);
+        gtk_tree_view_expand_row(run->signal_instance_view, root, FALSE);
+        gtk_tree_path_free(root);
     }
     g_hash_table_unref(expanded);
     g_hash_table_unref(scopes);

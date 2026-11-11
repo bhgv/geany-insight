@@ -3148,3 +3148,20 @@ Instances	Экземпляры
 Simulator order	Порядок симулятора
 Alphabetical order	Алфавитный порядок
 Running, waiting for capture trigger	Симуляция выполняется, ожидается триггер записи
+Instance tree	Дерево экземпляров
+Flat signal list	Плоский список сигналов
+Stop simulation	Остановить симуляцию
+Restart simulation	Перезапустить симуляцию
+Stopping simulation…	Остановка симуляции…
+Restarting simulation…	Перезапуск симуляции…
+Simulation stopped	Симуляция остановлена
+Module instances (slang HDL)	Экземпляры модулей (slang HDL)
+Module instance tree from the current module	Дерево экземпляров от текущего модуля
+Place the cursor inside a module and press Search.	Поместите курсор в модуль и нажмите «Поиск».
+No elaborated instances for the current module.	Для текущего модуля нет экземпляров в результатах анализа.
+Instance tree limit reached.	Достигнут предел размера дерева экземпляров.
+Double-click an instance to open its module definition.	Двойной щелчок по экземпляру открывает определение модуля.
+Definition file	Файл определения
+Instance	Экземпляр
+Expand all	Развернуть всё
+Collapse all	Свернуть всё

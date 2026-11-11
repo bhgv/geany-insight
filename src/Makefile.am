@@ -243,6 +243,7 @@ libgeany_la_SOURCES += \
 	insight-workbench/files/file-browser-menu.inc \
 	insight-workbench/relations/relation-rows.inc \
 	insight-workbench/hdl/hdl-results.inc \
+	insight-workbench/hdl/hdl-instance-tree.inc \
 	insight-workbench/hdl/hdl-analysis.inc \
 	insight-workbench/relations/semantic-call-tree.inc \
 	insight-workbench/relations/relation-results.inc \
@@ -364,6 +365,7 @@ libgeany_la_SOURCES += \
 	insight-waveforms/capture/simulation-preview.inc \
 	insight-waveforms/runtime/observer-lifecycle.inc \
 	insight-waveforms/debugger/simulation-window.inc \
+	insight-waveforms/debugger/session-launch.inc \
 	insight-project-membership.h \
 	insight-virtual-list.c \
 	insight-virtual-list.h \

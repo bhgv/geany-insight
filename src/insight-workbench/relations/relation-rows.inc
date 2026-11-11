@@ -8,4 +8,6 @@
 
 #include "../hdl/hdl-analysis.inc"
 
+#include "../hdl/hdl-instance-tree.inc"
+
 #include "../hdl/hdl-results.inc"

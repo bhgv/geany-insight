@@ -10,6 +10,12 @@ static void relation_view_update(void)
     if (!wb.relation_tree_toggle || !wb.relation_stack) return;
     if (!g_strcmp0(gtk_stack_get_visible_child_name(GTK_STACK(wb.relation_stack)), "routes")) return;
     gint mode = gtk_combo_box_get_active(GTK_COMBO_BOX(wb.relation_mode));
+    if (mode == 13)
+    {
+        gtk_widget_set_sensitive(wb.relation_tree_toggle, FALSE);
+        gtk_stack_set_visible_child_name(GTK_STACK(wb.relation_stack), "hdl-instances");
+        return;
+    }
     if (wb.usage_view)
     {
         GtkTreeView *view = GTK_TREE_VIEW(wb.usage_view);

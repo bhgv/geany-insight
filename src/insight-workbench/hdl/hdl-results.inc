@@ -146,6 +146,12 @@ static gboolean hdl_results_apply(gpointer data)
         hdl_paint(j);
         gtk_list_store_clear(wb.matches);
     }
+    if (j->hierarchy)
+    {
+        hdl_instance_publish(j);
+        wb.usage_idle = 0;
+        return G_SOURCE_REMOVE;
+    }
     gint64 deadline = g_get_monotonic_time()+3000;
     while (j->applied<j->rows->len)
     {
@@ -200,6 +206,7 @@ static HdlJob *hdl_job_new(const gchar *query, gboolean diagnostics, gboolean co
     j->valid = TRUE;
     j->diagnostics = diagnostics;
     j->colors_only = colors_only;
+    j->hierarchy = !colors_only && wb.usage_mode == 13;
     j->epoch = workbench_epoch;
     j->generation = colors_only ? hdl_color_revision:wb.usage_generation;
     j->scan_generation = wb.scan_generation;
@@ -208,6 +215,7 @@ static HdlJob *hdl_job_new(const gchar *query, gboolean diagnostics, gboolean co
     {
         j->paint_path = g_strdup(active->file_name);
         j->paint_doc = active->id;
+        j->cursor_line = (guint)sci_get_current_line(active->editor->sci) + 1;
     }
     return j;
 }

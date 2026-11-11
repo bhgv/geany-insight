@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="320" viewBox="0 0 900 320">
+  <rect width="900" height="320" rx="12" fill="#f3f6fb"/>
+  <g font-family="sans-serif" fill="#18324e">
+    <text x="22" y="32" font-size="21" font-weight="bold">HDL · instance trees / деревья экземпляров</text>
+    <rect x="20" y="52" width="415" height="246" rx="10" fill="#dfebff"/>
+    <text x="38" y="81" font-size="17">Debugger / Отладчик</text>
+    <text x="38" y="112" font-size="16">dut</text>
+    <text x="72" y="146" font-size="16">cpu0</text>
+    <text x="106" y="180" font-size="16">state = 01</text>
+    <text x="106" y="210" font-size="16">counter = 0011</text>
+    <text x="72" y="244" font-size="16">cpu1</text>
+    <text x="38" y="279" font-size="14">Live values / значения на остановке</text>
+    <rect x="455" y="52" width="425" height="246" rx="10" fill="#e0f1e6"/>
+    <text x="473" y="81" font-size="17">Relations / Связи</text>
+    <text x="473" y="112" font-size="16">top · Top</text>
+    <text x="507" y="146" font-size="16">cpu0 · Cpu</text>
+    <text x="541" y="180" font-size="16">ram · Ram</text>
+    <text x="507" y="214" font-size="16">cpu1 · Cpu</text>
+    <text x="473" y="250" font-size="14">Double-click → definition file</text>
+    <text x="473" y="275" font-size="14">Двойной щелчок → определение модуля</text>
+  </g>
+  <g fill="none" stroke="#58799b" stroke-width="2">
+    <path d="M46 121v118h18 M46 141h18 M80 155v50h18 M80 175h18"/>
+    <path d="M481 121v88h18 M481 141h18 M515 155v20h18"/>
+  </g>
+</svg>

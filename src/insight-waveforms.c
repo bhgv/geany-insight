@@ -73,3 +73,4 @@
 #include "insight-waveforms/capture/simulation-preview.inc"
 #include "insight-waveforms/runtime/observer-lifecycle.inc"
 #include "insight-waveforms/debugger/simulation-window.inc"
+#include "insight-waveforms/debugger/session-launch.inc"

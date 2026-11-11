@@ -45,6 +45,9 @@ typedef struct
     GByteArray *live_output;
     GCond live_output_space;
     GtkWidget *console, *live_controls;
+    GtkWidget *stop_button, *restart_button;
+    GCancellable *cancel;
+    gboolean worker_finished, stop_requested, restart_requested, closing;
     guint refresh_source;
     gchar prompt_tail[2];
     gboolean preview_pending;
@@ -83,6 +86,7 @@ typedef struct
     gboolean signal_history_replace;
     GtkTreeStore *signal_instances;
     GtkTreeView *signal_instance_view;
+    gboolean signal_tree_initialized;
     guint signal_format;
     gboolean signal_tables_ready, signal_collecting, signal_limited, signal_refresh_needed;
     gboolean signal_snapshot_received;
@@ -123,6 +127,7 @@ static void simulation_free(gpointer data)
     if (run->refresh_source)
         g_source_remove(run->refresh_source);
     g_clear_object(&run->live_process);
+    g_clear_object(&run->cancel);
     g_mutex_clear(&run->lock);
     g_cond_clear(&run->live_output_space);
     g_clear_pointer(&run->live_output, g_byte_array_unref);

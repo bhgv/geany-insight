@@ -18,16 +18,16 @@ static void simulation_add_tab(GtkWidget *tabs, GtkWidget *contents, const gchar
 /* EN: Launch Icarus from bin with include_dir and sources, owned by the caller.
  * parent owns setup dialogs, interactive enables debugger controls, navigate and
  * open_location handle HDL navigation, settings_directory and project key saved
- * settings, and configure_ports opens the port setup. show_context previews declarations. Errors appear in the UI.
+ * settings, and configure_ports opens the port setup. previous copies restart settings. show_context previews declarations. Errors appear in the UI.
  * RU: Запускает Icarus из bin для sources с include_dir. parent владеет диалогами,
  * interactive включает отладку, navigate и open_location открывают исходник,
  * settings_directory и project определяют сохранённые настройки, configure_ports
- * открывает настройку портов. show_context показывает контекст объявлений. Ошибки показываются в интерфейсе. */
-void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
+ * открывает настройку портов. previous копирует настройки при перезапуске. show_context показывает контекст объявлений. Ошибки показываются в интерфейсе. */
+static void simulation_start(GtkWindow *parent, const gchar *bin, const gchar *include_dir,
                                 const gchar *const *sources, gboolean interactive,
                                 InsightWaveSource navigate, InsightWaveContext show_context,
                                 InsightWaveLocation open_location, const gchar *settings_directory,
-                                const gchar *project, gboolean configure_ports)
+                                const gchar *project, gboolean configure_ports, const WaveSimulation *previous)
 {
 #ifdef G_OS_WIN32
     const gchar *compiler_name = "iverilog.exe", *runtime_name = "vvp.exe";
@@ -62,7 +62,15 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
     run->navigate = navigate;
     run->show_context = show_context;
     run->open_location = open_location;
-    if (configure_ports)
+    if (previous)
+    {
+        run->port_settings = g_strdup(previous->port_settings);
+        run->port_harness = g_strdup(previous->port_harness);
+        run->port_model_sources = previous->port_model_sources
+                                     ? g_ptr_array_ref(previous->port_model_sources) : NULL;
+        run->port_images = previous->port_images ? g_hash_table_ref(previous->port_images) : NULL;
+    }
+    else if (configure_ports)
     {
         gchar *dut_source[] = {run->sources[0], NULL};
         gchar *key = simulation_settings_path(settings_directory, project, dut_source);
@@ -145,6 +153,14 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         gtk_widget_set_sensitive(run->pause_button, FALSE);
         g_signal_connect(run->pause_button, "clicked", G_CALLBACK(simulation_request_pause), run);
         gtk_box_pack_start(GTK_BOX(running_actions), run->pause_button, FALSE, FALSE, 0);
+        run->stop_button = gtk_button_new_with_label(insight_tr("Stop simulation"));
+        run->restart_button = gtk_button_new_with_label(insight_tr("Restart simulation"));
+        gtk_widget_set_name(run->stop_button, "insight-verilog-stop");
+        gtk_widget_set_name(run->restart_button, "insight-verilog-restart");
+        g_signal_connect(run->stop_button, "clicked", G_CALLBACK(simulation_stop_clicked), run);
+        g_signal_connect(run->restart_button, "clicked", G_CALLBACK(simulation_restart_clicked), run);
+        gtk_box_pack_start(GTK_BOX(running_actions), run->stop_button, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(running_actions), run->restart_button, FALSE, FALSE, 0);
         run->source_button = gtk_button_new_with_label("Open HDL Line");
         gtk_widget_set_sensitive(run->source_button, FALSE);
         g_signal_connect(run->source_button, "clicked", G_CALLBACK(simulation_open_location), run);
@@ -392,18 +408,23 @@ void insight_waveforms_simulate(GtkWindow *parent, const gchar *bin, const gchar
         g_object_set_data(G_OBJECT(run->dialog), "insight-live-simulation", run);
         gtk_widget_set_sensitive(run->live_controls, FALSE);
         debug_commands[INSIGHT_DEBUG_PAUSE] = run->pause_button;
+        debug_commands[INSIGHT_DEBUG_STOP] = run->stop_button;
         insight_debug_register(run->dialog, run->breakpoint_controls, simulation_toggle_editor_point,
                                run, debug_commands);
         run->refresh_source = g_timeout_add(100, simulation_refresh_console, run);
     }
 
     GCancellable *cancel = g_cancellable_new();
-    g_signal_connect_object(run->dialog, "response", G_CALLBACK(simulation_cancel), cancel, 0);
+    run->cancel = g_object_ref(cancel);
+    g_signal_connect(run->dialog, "response", G_CALLBACK(simulation_cancel), run);
     g_signal_connect(run->dialog, "destroy", G_CALLBACK(simulation_dialog_destroy), run);
     g_signal_connect_object(run->dialog, "destroy", G_CALLBACK(g_cancellable_cancel), cancel,
                             G_CONNECT_SWAPPED);
     GTask *task = g_task_new(NULL, cancel, simulation_done, NULL);
     g_task_set_task_data(task, run, simulation_free);
+    if (interactive)
+        g_object_set_data_full(G_OBJECT(run->dialog), "insight-simulation-task",
+                               g_object_ref(task), g_object_unref);
     gtk_widget_show_all(run->dialog);
     g_task_run_in_thread(task, simulation_worker);
     g_object_unref(task);

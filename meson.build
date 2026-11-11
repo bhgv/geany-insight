@@ -1279,3 +1279,5 @@ install_data('insight/docs/media/hdl-synchronous-stop.svg', 'insight/docs/media/
 install_data('insight/docs/media/windows-build-locations.jpg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/media/windows-offline.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+install_data('insight/docs/media/verilog-hierarchy.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

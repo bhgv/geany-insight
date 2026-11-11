@@ -163,6 +163,7 @@ typedef struct
     InsightSlangProject *result;
     guint64 epoch, generation, scan_generation;
     guint applied;
-    gboolean valid, diagnostics, colors_only;
+    gboolean valid, diagnostics, colors_only, hierarchy;
+    guint cursor_line;
 }
 HdlJob;

@@ -154,3 +154,15 @@ The separate `slang-3-backports.patch` preserves the width of large unsized base
 [slang a93aa7c](https://github.com/MikePopoloski/slang/commit/a93aa7cffb70f257b600356421a96d44eadf8dba) · [slang 44a02d6](https://github.com/MikePopoloski/slang/commit/44a02d64e562d011ada3a1b99f79f4f26f75426c)
 
 `slang-3-streaming-ports.patch` permits streaming concatenations in port connections of unelaborated modules. [Upstream fix](https://github.com/MikePopoloski/slang/commit/0f6721311896b03d55441a37c0df9a554f017ba6)
+
+
+## Module instance tree
+
+In Relations choose **Module instances (slang HDL)** with the cursor inside
+the desired module, or use the module-tree button. The tree groups elaborated
+instances below each occurrence of the current module. Rows show the instance,
+module type and definition file. Double-click opens the module declaration.
+Expand/collapse controls navigate the hierarchy, including generated scopes.
+This uses the existing project semantic index and the current buffer snapshots.
+
+![HDL instance views](../media/verilog-hierarchy.svg)

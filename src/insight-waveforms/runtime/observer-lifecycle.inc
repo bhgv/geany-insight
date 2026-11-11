@@ -149,6 +149,55 @@ static void simulation_offer_restart(WaveSimulation *run, GtkWindow *parent,
     }
 }
 
+static void simulation_restart_with_settings(WaveSimulation *previous, GtkWindow *parent);
+
+/* EN: Release the old dialog and start a fresh run with the current session settings.
+ * RU: Закрывает старое окно и запускает новый сеанс с текущими настройками run. */
+static void simulation_restart_now(WaveSimulation *run)
+{
+    GTask *task = g_object_get_data(G_OBJECT(run->dialog), "insight-simulation-task");
+    if (!task)
+        return;
+    g_object_ref(task);
+    GtkWindow *parent = g_weak_ref_get(&run->parent);
+    gtk_widget_destroy(run->dialog);
+    if (parent)
+        simulation_restart_with_settings(run, parent);
+    g_clear_object(&parent);
+    g_object_unref(task);
+}
+
+/* EN: Cancel the current worker from button and retain the stopped window for restart.
+ * RU: Отменяет текущую задачу по button, сохраняя окно остановленного сеанса data. */
+static void simulation_stop_clicked(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    if (run->worker_finished)
+        return;
+    run->stop_requested = TRUE;
+    gtk_widget_set_sensitive(run->stop_button, FALSE);
+    gtk_widget_set_sensitive(run->restart_button, FALSE);
+    gtk_label_set_text(GTK_LABEL(run->pause_reason), insight_tr("Stopping simulation…"));
+    g_cancellable_cancel(run->cancel);
+}
+
+/* EN: Restart session data after cancelling its worker, or immediately if it has finished.
+ * RU: Перезапускает сеанс data после отмены задачи либо сразу после её завершения. */
+static void simulation_restart_clicked(GtkButton *button, gpointer data)
+{
+    (void)button;
+    WaveSimulation *run = data;
+    if (run->worker_finished)
+    {
+        simulation_restart_now(run);
+        return;
+    }
+    run->restart_requested = TRUE;
+    simulation_stop_clicked(NULL, run);
+    gtk_label_set_text(GTK_LABEL(run->pause_reason), insight_tr("Restarting simulation…"));
+}
+
 /* EN: Finish the simulation task in result, display its capture or publish diagnostics.
  * object and data are unused.
  * RU: Завершает задачу из result, открывает осциллограмму или публикует ошибки.
@@ -166,6 +215,32 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
     {
         g_source_remove(run->refresh_source);
         run->refresh_source = 0;
+    }
+    run->worker_finished = TRUE;
+    if (run->restart_requested && !run->closing)
+    {
+        if (capture)
+            capture_free(capture);
+        g_clear_error(&error);
+        g_clear_object(&parent);
+        simulation_restart_now(run);
+        return;
+    }
+    if (run->stop_requested && !run->closing)
+    {
+        if (capture)
+            capture_free(capture);
+        g_clear_error(&error);
+        gtk_widget_set_sensitive(run->live_controls, FALSE);
+        gtk_widget_set_sensitive(run->pause_button, FALSE);
+        gtk_widget_set_sensitive(run->stop_button, FALSE);
+        gtk_widget_set_sensitive(run->restart_button, TRUE);
+        gtk_widget_set_sensitive(run->breakpoint_controls, FALSE);
+        if (run->live_devices)
+            gtk_widget_set_sensitive(run->live_devices, FALSE);
+        gtk_label_set_text(GTK_LABEL(run->pause_reason), insight_tr("Simulation stopped"));
+        g_clear_object(&parent);
+        return;
     }
     gtk_widget_destroy(run->dialog);
     if (parent)
@@ -198,13 +273,20 @@ static void simulation_done(GObject *object, GAsyncResult *result, gpointer data
     g_clear_object(&parent);
 }
 
-/* EN: Hide dialog and cancel the worker held in data. response is unused.
- * RU: Скрывает dialog и отменяет задачу из data. response не используется. */
+/* EN: Close dialog and cancel its session data, including an already stopped session.
+ * RU: Закрывает dialog и отменяет сеанс data, в том числе уже остановленный. */
 static void simulation_cancel(GtkDialog *dialog, gint response, gpointer data)
 {
     (void)response;
-    gtk_widget_hide(GTK_WIDGET(dialog));
-    g_cancellable_cancel(data);
+    WaveSimulation *run = data;
+    run->closing = TRUE;
+    if (run->worker_finished)
+        gtk_widget_destroy(GTK_WIDGET(dialog));
+    else
+    {
+        gtk_widget_hide(GTK_WIDGET(dialog));
+        g_cancellable_cancel(run->cancel);
+    }
 }
 
 /* EN: Stop polling simulation data before GTK destroys dialog and its children.
@@ -213,7 +295,10 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
 {
     (void)dialog;
     WaveSimulation *run = data;
+    run->closing = TRUE;
     g_object_set_data(G_OBJECT(dialog), "insight-live-simulation", NULL);
+    if (run->breakpoint_hit_marker)
+        g_ptr_array_set_size(run->breakpoint_hit_marker, 0);
     if (run->breakpoint_markers)
         g_ptr_array_set_size(run->breakpoint_markers, 0);
     if (run->refresh_source)
@@ -221,4 +306,5 @@ static void simulation_dialog_destroy(GtkWidget *dialog, gpointer data)
         g_source_remove(run->refresh_source);
         run->refresh_source = 0;
     }
+    g_object_set_data(G_OBJECT(dialog), "insight-simulation-task", NULL);
 }

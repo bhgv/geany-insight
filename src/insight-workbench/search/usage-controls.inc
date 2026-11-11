@@ -36,7 +36,7 @@ static void usage_start(GtkWidget *widget, gpointer data)
         if (insight_clang_result_usable(semantic))
             wb.usage_usr = insight_clang_symbol_at(semantic->relations, doc->file_name, (guint)sci_get_current_position(doc->editor->sci), (guint)sci_get_current_line(doc->editor->sci)+1, query);
     }
-    if (mode == 11 || mode == 12)
+    if (mode == 11 || mode == 12 || mode == 13)
     {
         hdl_references(query, mode == 12);
         return;

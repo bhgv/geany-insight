@@ -34,13 +34,18 @@ static void create_usage_browser(void)
     gtk_widget_set_name(wb.relation_mode, "insight-relation-mode");
     const char *modes[] =
     {
-        "References (lexical)", "Definitions / declarations", "Direct members (tags)", "Text search (project)", "Base types (tags)", "Derived types (tags)", "Calls (current function, lexical)", "Call sites (project, lexical)", "References (Clang C/C++)", "Callees (Clang tree)", "Callers (Clang tree)", "References (slang HDL, by name)", "Diagnostics (slang HDL)"
+        "References (lexical)", "Definitions / declarations", "Direct members (tags)", "Text search (project)", "Base types (tags)", "Derived types (tags)", "Calls (current function, lexical)", "Call sites (project, lexical)", "References (Clang C/C++)", "Callees (Clang tree)", "Callers (Clang tree)", "References (slang HDL, by name)", "Diagnostics (slang HDL)", "Module instances (slang HDL)"
     };
     for (guint i = 0;i<G_N_ELEMENTS(modes);i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(wb.relation_mode), modes[i]);
     gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode), 0);
     GtkWidget *search = gtk_button_new_with_label("Search"), *cancel = gtk_button_new_with_label("Stop");
     gtk_box_pack_start(GTK_BOX(controls), search, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(controls), cancel, FALSE, FALSE, 0);
+    GtkWidget *instances = gtk_button_new_from_icon_name("view-list-tree-symbolic", GTK_ICON_SIZE_MENU);
+    gtk_widget_set_name(instances, "insight-hdl-module-tree");
+    gtk_widget_set_tooltip_text(instances, insight_tr("Module instance tree from the current module"));
+    g_signal_connect(instances, "clicked", G_CALLBACK(hdl_instance_search), NULL);
+    gtk_box_pack_start(GTK_BOX(controls), instances, FALSE, FALSE, 0);
     const gchar *report_icons[] =
     {
         "view-list-symbolic", "bookmark-new-symbolic"
@@ -170,6 +175,7 @@ static void create_usage_browser(void)
     gtk_container_add(GTK_CONTAINER(scroll), wb.usage_view);
     wb.relation_stack = gtk_stack_new();
     gtk_stack_add_named(GTK_STACK(wb.relation_stack), scroll, "list");
+    gtk_stack_add_named(GTK_STACK(wb.relation_stack), hdl_instance_widget(), "hdl-instances");
     wb.relation_routes = insight_source_routes_new();
     gtk_stack_add_named(GTK_STACK(wb.relation_stack), wb.relation_routes, "routes");
     g_signal_connect(insight_source_routes_back_button(wb.relation_routes), "clicked", G_CALLBACK(relation_routes_back), NULL);
