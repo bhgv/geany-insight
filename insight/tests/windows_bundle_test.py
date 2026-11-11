@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,18 @@ from unittest.mock import patch
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import windows_bundle as bundle
+
+
+# EN: Remove read-only Git objects in Windows test fixtures, retrying only permission failures.
+# RU: Удаляет защищённые от записи Git-объекты тестов Windows, повторяя только ошибки доступа.
+def remove_fixture(path):
+    def retry(function, filename, error):
+        if not isinstance(error[1], PermissionError):
+            raise error[1]
+        os.chmod(filename, stat.S_IWRITE | stat.S_IREAD)
+        function(filename)
+
+    shutil.rmtree(path, onerror=retry)
 
 
 # EN: Create a committed repository at path and return its revision.
@@ -70,7 +83,7 @@ class OfflineBundle(unittest.TestCase):
         repository(outer)
         target = outer / 'external/dependency'
         bundle.clone(donor, target)
-        shutil.rmtree(donor)
+        remove_fixture(donor)
         moved = self.root / 'moved'
         outer.rename(moved)
         exported = moved / 'external/dependency'
@@ -100,7 +113,7 @@ class OfflineBundle(unittest.TestCase):
                 bundle.validate(source, cache, 'disabled')
             with self.assertRaisesRegex(ValueError, 'llvm-project'):
                 bundle.validate(source, cache, 'internal')
-            shutil.rmtree(source / 'external/slang-deps/dep')
+            remove_fixture(source / 'external/slang-deps/dep')
             with self.assertRaisesRegex(ValueError, 'offline dependency'):
                 bundle.validate(source, cache, 'disabled')
 
@@ -149,7 +162,7 @@ class OfflineBundle(unittest.TestCase):
                 bundle, 'DEPS', {'dep': ('unused', dep_pin)}), patch.object(
                 bundle, 'prepare_slang'), patch.dict(os.environ, {'GIT_ALLOW_PROTOCOL': 'file'}):
             bundle.prepare(output, cache, 'disabled')
-        shutil.rmtree(source)
+        remove_fixture(source)
         restored = self.root / 'restored source'
         restored.mkdir()
         subprocess.check_call(['tar', '-xzf', str(output / 'sources.tar.gz'), '-C', str(restored)])
