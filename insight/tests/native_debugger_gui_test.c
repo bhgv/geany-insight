@@ -232,6 +232,7 @@ static gboolean timeout(gpointer data)
     exit(1);
 }
 
+#include "native_debugger_catchpoints_gui.inc"
 #include "native_debugger_values_gui.inc"
 #include "native_debugger_remote_gui.inc"
 
@@ -264,6 +265,8 @@ static gboolean drive(gpointer data)
 
     if (g_getenv("INSIGHT_GDB_REMOTE_GUI"))
         return native_remote_gui_step(window, tabs);
+    if (phase == 1 && !native_catch_gui_step(window))
+        return G_SOURCE_CONTINUE;
     if (phase >= 16)
         return native_values_gui_step(window, tabs);
     if (phase == 1)

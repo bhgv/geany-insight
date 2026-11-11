@@ -9,8 +9,8 @@ import subprocess
 import sys
 
 
-# EN: Run command from argv and preserve its status; publish a bounded GitHub annotation only on failure.
-# RU: Запускает команду из argv с сохранением статуса; при ошибке публикует ограниченную аннотацию GitHub.
+# EN: Run argv and preserve its status; optionally save the bounded tail to INSIGHT_CI_DIAGNOSTIC_FILE and annotate failures.
+# RU: Запускает argv с сохранением статуса; по запросу пишет ограниченный хвост в INSIGHT_CI_DIAGNOSTIC_FILE и аннотирует ошибки.
 def main(argv):
     if not argv:
         print('Usage: run_ci_diagnostic.py COMMAND [ARGUMENTS...]', file=sys.stderr)

@@ -77,7 +77,9 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             {
                 native_values_reset(session);
                 g_free(session->stop_detail);
-                session->stop_detail = native_stop_detail(line);
+                session->stop_detail = native_catch_stop_detail(session, line);
+                if (!session->stop_detail)
+                    session->stop_detail = native_stop_detail(line);
                 session->watch_next = 0;
                 g_clear_pointer(&session->selected_thread, g_free);
                 g_clear_pointer(&session->selected_frame, g_free);

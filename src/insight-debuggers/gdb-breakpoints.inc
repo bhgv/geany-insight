@@ -95,7 +95,8 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
         hits = g_strdup("0");
     if (!ignore)
         ignore = g_strdup("0");
-    gchar *location = file && line ? g_strdup_printf("%s:%s", file, line) :
+    gchar *exception = native_catch_description(tuple);
+    gchar *location = exception ? exception : file && line ? g_strdup_printf("%s:%s", file, line) :
                                     g_strdup(original ? original : what ? what : number);
     gtk_list_store_insert_with_values(session->point_rows, NULL, -1,
         0, location, 1, number, 2, enabled, 3, condition, 4, hits, 5, ignore,
@@ -364,7 +365,8 @@ static GtkWidget *native_points_widget(NativeDebug *session, GtkWidget *dialog)
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), session->points_view);
     gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
-    session->point_controls = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    session->point_controls = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+    GtkWidget *edits = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     const gchar *labels[] = {"Enable / Disable", "Delete Breakpoint", "Breakpoint condition", "Ignore first hits"};
     const gchar *actions[] = {"toggle", "delete", "condition", "ignore"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
@@ -372,8 +374,10 @@ static GtkWidget *native_points_widget(NativeDebug *session, GtkWidget *dialog)
         GtkWidget *button = gtk_button_new_with_label(insight_tr(labels[i]));
         g_object_set_data(G_OBJECT(button), "point-action", (gpointer)actions[i]);
         g_signal_connect(button, "clicked", G_CALLBACK(native_point_edit), dialog);
-        gtk_box_pack_start(GTK_BOX(session->point_controls), button, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(edits), button, FALSE, FALSE, 0);
     }
+    gtk_box_pack_start(GTK_BOX(session->point_controls), edits, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(session->point_controls), native_catch_widget(session), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(page), session->point_controls, FALSE, FALSE, 0);
     GtkWidget *hint = gtk_label_new(insight_tr(
         "Sub-locations require an enabled parent. Condition, ignored hits and Delete apply to the whole breakpoint."));

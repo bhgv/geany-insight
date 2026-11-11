@@ -109,6 +109,27 @@ active only when the parent is enabled too. Condition, ignored hits and deletion
 apply to the whole parent breakpoint, including all its locations. If several
 locations share a source line, its dot is red whenever any location is active.
 
+## C++ exception catchpoints
+
+In **Breakpoints**, choose **C++ throw**, **C++ catch** or **C++ rethrow**,
+optionally enter a regular expression for the exception type, then click
+**Add Exception Catchpoint** or press Enter in the filter field. Empty matches
+all types. For example, `std::.*` matches standard-library exception types when
+GDB and the target C++ runtime support type filtering.
+
+The common list shows the event and filter. **Enable / Disable**, **Breakpoint
+condition**, **Ignore first hits** and **Delete Breakpoint** also work for these
+catchpoints. An invalid regular expression is reported by GDB without replacing
+existing points. Catchpoints are session-only and are not saved/restored as source
+breakpoint recipes; restoring a source profile leaves current catchpoints intact.
+
+On a hit, the status identifies the catchpoint and its number. GDB may initially
+stop inside the C++ runtime; select your application's frame in **Stack** to see
+its source, locals, watches and tooltips. If the target runtime cannot filter by
+type, remove the filter to catch all exceptions, or use the error in Console to
+check target support. These controls use GDB's C++ exception support, including
+remote gdbserver sessions.
+
 ## Structured values and editing
 
 On a stop, select a variable in **Variables** and choose **Inspect selected

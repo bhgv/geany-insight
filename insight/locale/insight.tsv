@@ -3306,3 +3306,11 @@ SSH could not pause the process. Check signal permissions in Console.	SSH не �
 Remote process paused.	Удалённый процесс на паузе.
 Pause signal sent; waiting for GDB to confirm the stop.	Сигнал паузы отправлен; ожидается подтверждение остановки GDB.
 Could not clear the SSH pause signal. See the GDB console before resuming.	Не удалось снять сигнал паузы SSH. Перед продолжением проверьте консоль GDB.
+C++ throw	C++: выброс исключения
+C++ catch	C++: перехват исключения
+C++ rethrow	C++: повторный выброс
+Choose an exception event and a single-line type filter of at most 1024 characters.	Выберите событие исключения и однострочный фильтр типа длиной не более 1024 символов.
+Exception type regex (optional)	Регулярное выражение типа исключения (необязательно)
+Add Exception Catchpoint	Добавить точку на исключении
+Empty filter: all exception types. Catchpoints appear in this list and last for this debugger session.	Пустой фильтр: все типы исключений. Точки появляются в этом списке и действуют в текущем сеансе отладчика.
+Exception catchpoint	Точка на исключении

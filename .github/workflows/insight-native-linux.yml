@@ -249,6 +249,8 @@ on:
       - insight/tests/hdl_instance_models_test.py
       - insight/tests/native_debugger*.py
       - insight/tests/native_debugger_remote_gui.inc
+      - insight/tests/native_debugger_catchpoints_gui.inc
+      - insight/tests/native_debugger_catchpoints_test.py
       - insight/tests/native_debugger_compile_fixture.c
       - src/insight-debuggers/**
       - meson.build
@@ -288,6 +290,7 @@ jobs:
           python3 insight/tests/hdl_instance_models_test.py
           python3 insight/tests/native_debugger_models_test.py
           python3 insight/tests/native_debugger_controls_test.py
+          python3 insight/tests/native_debugger_catchpoints_test.py
           python3 insight/tests/native_debugger_values_test.py
           python3 insight/tests/native_debugger_memory_test.py
           python3 insight/tests/native_debugger_remote_test.py

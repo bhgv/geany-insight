@@ -328,6 +328,8 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-backtraces.inc \
 	insight-debuggers/gdb-source-markers.inc \
 	insight-debuggers/gdb-lifecycle.inc \
+	insight-debuggers/gdb-catchpoints-model.inc \
+	insight-debuggers/gdb-catchpoints-ui.inc \
 	insight-debuggers/gdb-breakpoints.inc \
 	insight-debuggers/gdb-actions.inc \
 	insight-debuggers/gdb-values-model.inc \

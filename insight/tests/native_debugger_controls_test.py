@@ -196,6 +196,7 @@ def controls_source(main):
     declarations = declarations[:position] + EXTRA + declarations[position:]
     helpers = [function('src/insight-debuggers/gdb-context.inc', n) for n in
                ('native_debug_field', 'native_next_tuple', 'native_context_id')]
+    helpers += [function('src/insight-debuggers/gdb-catchpoints-model.inc', 'native_catch_description')]
     helpers += [function('src/insight-debuggers/gdb-lifecycle.inc', n) for n in
                 ('native_launch_arguments', 'native_launch_next')]
     helpers += [function('src/insight-debuggers/gdb-breakpoints.inc', n) for n in
