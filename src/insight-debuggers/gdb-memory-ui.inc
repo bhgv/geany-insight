@@ -12,6 +12,7 @@ static void native_memory_sync(NativeDebug *session)
     session->memory_needed = session->stopped &&
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(session->memory_auto)) &&
         *gtk_entry_get_text(GTK_ENTRY(session->memory_expression));
+    g_object_set_data(G_OBJECT(session->memory_text), "native-memory-raw", NULL);
     g_clear_pointer(&session->memory_address, g_free);
     gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), "", -1);
     gtk_label_set_text(GTK_LABEL(session->memory_status),
@@ -50,7 +51,10 @@ static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
     gchar *text = native_memory_format(record, session->memory_count);
     gchar *message = text ? NULL : native_debug_field(record, "msg");
     gchar *valid = message ? g_utf8_make_valid(message, -1) : NULL;
-    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), text ? text : "", -1);
+    g_object_set_data_full(G_OBJECT(session->memory_text), "native-memory-raw", g_strdup(text), g_free);
+    gchar *named = native_name_addresses(session, text);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), named, -1);
+    g_free(named);
     gtk_label_set_text(GTK_LABEL(session->memory_status), text ?
         insight_tr("Memory at the current stop; byte order is unchanged.") : valid ? valid :
         insight_tr("Memory unavailable or incomplete. Try a smaller block or another address."));

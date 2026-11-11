@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="530" viewBox="0 0 920 530" role="img" aria-labelledby="title desc">
+<title id="title">Symbolic disassembly / Имена в дизассемблере</title>
+<desc id="desc">Illustrative address, typed-field and function-scoped names across x86, ARM and RISC-V. Пример глобальных адресов, полей типов и имён внутри функции.</desc>
+<rect width="920" height="530" rx="14" fill="#edf3f9"/>
+<g font-family="sans-serif" fill="#17334d">
+<text x="24" y="36" font-size="22">One name, all references / Одно имя для всех обращений</text>
+<rect x="24" y="56" width="872" height="112" rx="8" fill="#fff" stroke="#6685a3"/>
+<text x="42" y="83" font-size="17">Global / Глобально: &amp;object → packet · type / тип: struct Packet</text>
+<text x="42" y="115" font-size="17">0x4000 → packet · 0x4008 → packet.count · 0x4009 → packet.count+0x1</text>
+<text x="42" y="146" font-size="16">Disassembly · Memory · Locals · Watches · Graph · Tooltips</text>
+<rect x="24" y="187" width="872" height="193" rx="8" fill="#fff" stroke="#6685a3"/>
+<text x="42" y="216" font-size="18">worker() only / Только worker(): frame offset −16 → input</text>
+<g font-family="monospace" font-size="16">
+<text x="42" y="249">x86/x64   [ebp-16] / [rbp-0x10]     ; input</text>
+<text x="42" y="280">ARM       [r11, #-16] / [r7, #-16]  ; input</text>
+<text x="42" y="311">ARM64     [x29, #-16]              ; input</text>
+<text x="42" y="342">RISC-V    -16(s0)                 ; input</text>
+</g>
+<text x="42" y="366" font-size="14">Actual register values + GDB layout / Настоящие регистры + раскладка GDB</text>
+<rect x="24" y="398" width="872" height="108" rx="8" fill="#fff" stroke="#6685a3"/>
+<text x="42" y="426" font-size="17">mov eax,0x2a  ; const 0x2a</text>
+<text x="42" y="456" font-size="16">Read → resolve names → annotate / Прочитать → разрешить имена → подписать</text>
+<text x="42" y="484" font-size="15">Save debugger profile: rules persist, runtime addresses are reevaluated.</text>
+</g>
+</svg>

@@ -2,6 +2,20 @@
 /* EN: Present native expression trees and request members only when users expand them.
  * RU: Показывает деревья выражений и запрашивает члены только при раскрытии пользователем. */
 
+/* EN: Render model's raw value through shared address names for session data; keep editable raw data unchanged.
+ * RU: Выводит исходное значение model через единые имена session data, не меняя редактируемые данные. */
+static void native_value_named_cell(GtkTreeViewColumn *column, GtkCellRenderer *cell,
+    GtkTreeModel *model, GtkTreeIter *row, gpointer data)
+{
+    (void)column;
+    gchar *raw = NULL;
+    gtk_tree_model_get(model, row, 2, &raw, -1);
+    gchar *named = native_name_addresses(data, raw);
+    g_object_set(cell, "text", named, NULL);
+    g_free(named);
+    g_free(raw);
+}
+
 /* EN: Schedule inspection of session's expression after invalidating the previous frame snapshot.
  * RU: Запрашивает выражение session после сброса предыдущего снимка кадра. */
 static void native_values_inspect(NativeDebug *session, const gchar *expression)
@@ -188,8 +202,11 @@ static GtkWidget *native_values_widget(NativeDebug *session)
     const gchar *titles[] = {"Expression / member", "Type", "Value"};
     for (guint i = 0; i < G_N_ELEMENTS(titles); i++)
     {
+        GtkCellRenderer *cell = gtk_cell_renderer_text_new();
         GtkTreeViewColumn *column = gtk_tree_view_column_new_with_attributes(
-            insight_tr(titles[i]), gtk_cell_renderer_text_new(), "text", i, NULL);
+            insight_tr(titles[i]), cell, "text", i, NULL);
+        if (i == 2)
+            gtk_tree_view_column_set_cell_data_func(column, cell, native_value_named_cell, session, NULL);
         gtk_tree_view_column_set_resizable(column, TRUE);
         gtk_tree_view_append_column(GTK_TREE_VIEW(session->value_tree), column);
     }

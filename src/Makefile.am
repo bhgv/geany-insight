@@ -339,6 +339,14 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-memory-ui.inc \
 	insight-debuggers/gdb-disassembly-model.inc \
 	insight-debuggers/gdb-disassembly-ui.inc \
+	insight-debuggers/disassembly/annotations.inc \
+	insight-debuggers/disassembly/names-ui.inc \
+	insight-debuggers/disassembly/pipeline.inc \
+	insight-debuggers/disassembly/resolve.inc \
+	insight-debuggers/disassembly/rules.inc \
+	insight-debuggers/disassembly/state.inc \
+	insight-debuggers/disassembly/symbols.inc \
+	insight-debuggers/disassembly/views.inc \
 	insight-debuggers/gdb-data-actions.inc \
 	insight-debuggers/gdb-window.inc \
 	insight-python-debug.c \

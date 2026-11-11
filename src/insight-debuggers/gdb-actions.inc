@@ -55,11 +55,19 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
     if (!session->closed && line)
     {
         g_strchomp(line);
+        native_assembly_console(session, line);
         gboolean quiet = FALSE;
         native_profile_debug_reply(session, line);
         native_debug_point_reply(session, line);
         if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
         {
+            if (session->assembly)
+            {
+                g_ptr_array_set_size(session->assembly->ranges, 0);
+                g_hash_table_remove_all(session->assembly->registers);
+                gtk_label_set_text(GTK_LABEL(session->assembly->status),
+                    insight_tr("Previous instruction snapshot. Pause and read again to resolve names in the new context."));
+            }
             session->running = TRUE;
             session->stopped = FALSE;
             native_values_reset(session);
@@ -97,8 +105,9 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             native_target_clear(session);
         if (*line == '^')
         {
-            native_assembly_reply(session, line);
-            quiet = native_remote_reply(session, line);
+            quiet = native_assembly_reply(session, line);
+            if (!quiet)
+                quiet = native_remote_reply(session, line);
             if (!quiet)
                 quiet = native_memory_reply(session, line);
             if (!quiet)

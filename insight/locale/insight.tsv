@@ -3329,3 +3329,29 @@ Reading machine instructions…	Чтение машинных инструкци
 Instruction snapshot: 128 bytes from the requested address. Refresh after stepping or changing frames.	Снимок инструкций: 128 байтов с указанного адреса. Обновите после шага или смены кадра.
 No readable machine instructions at this address.	По этому адресу нет читаемых машинных инструкций.
 Pause the program, then read instructions. This is a snapshot, not a live view.	Приостановите программу и прочитайте инструкции. Это снимок, без автоматического обновления.
+Names, frame offsets and data types	Имена, смещения кадра и типы данных
+Address name…	Имя адреса…
+Frame name…	Имя в кадре…
+Typed data…	Тип данных…
+Edit name…	Изменить имя…
+Delete name	Удалить имя
+Save names in debugger profile	Сохранить имена в профиле отладчика
+Address	Адрес
+Frame offset	Смещение кадра
+Typed data	Типизированные данные
+Name or type binding	Имя или привязка типа
+Signed frame offset (e.g. -0x20)	Знаковое смещение в кадре (например, -0x20)
+Address expression (e.g. &object)	Выражение адреса (например, &object)
+Display name	Отображаемое имя
+Base register (fp, sp, rbp, x29, r11, r7, s0)	Регистр базы (fp, sp, rbp, x29, r11, r7, s0)
+C/C++ type (for typed data)	Тип C/C++ (для типизированных данных)
+Function scope (required for frame names)	Область функции (обязательна для имён кадра)
+Names refresh matching addresses automatically. Frame names belong to one function. Typed fields come from GDB. Save debugger profile to keep rules.	Имена совпадающих адресов обновляются автоматически. Имена кадра относятся к одной функции. Поля типа получает GDB. Для сохранения правил сохраните профиль отладчика.
+Enter a name and valid address/offset; frame names need a function and typed data needs a type.	Введите имя и верный адрес/смещение; для кадра нужна функция, для типизированных данных — тип.
+Address / offset	Адрес / смещение
+Type / register	Тип / регистр
+Function scope	Область функции
+Invalid assembly names (maximum 256 rules).	Неверные имена дизассемблера (не более 256 правил).
+Previous instruction snapshot. Pause and read again to resolve names in the new context.	Предыдущий снимок инструкций. Приостановите и прочитайте заново для разрешения имён в новом контексте.
+Intel on x86/x64; native syntax on ARM/RISC-V. Names annotate original addresses. Up to 128 data locations, 64 symbols, 3 field levels. Refresh after stepping or changing frames.	Intel на x86/x64; родной синтаксис на ARM/RISC-V. Имена дополняют исходные адреса. До 128 адресов данных, 64 символов и 3 уровней полей. Обновите после шага или смены кадра.
+Instruction snapshot ready. Unresolved name/type queries: %u. %s	Снимок инструкций готов. Неразрешённых запросов имён/типов: %u. %s

@@ -344,3 +344,49 @@ or restarting. Invalid/unreadable addresses show GDB's error without resuming.
 **Next instruction** steps over a call. Both act on GDB's selected thread and
 require a paused target; ordinary breakpoints still apply. These controls also
 work through a connected gdbserver. They do not require source lines.
+
+### Symbols, constants and user names
+
+On x86/x64 the page selects **Intel syntax**. ARM, ARM64 and RISC-V 32/64 use
+GDB's native syntax for that target; the selected GDB must support the target's
+architecture. The same naming rules work with local GDB and remote gdbserver.
+Numeric addresses and original instructions remain visible alongside annotations.
+GDB resolves actual symbols; unmatched immediate operands are marked `const`.
+An assembly operand alone cannot prove whether an integer is a pointer.
+
+Open **Names, frame offsets and data types**:
+
+- **Address name…**: enter an address expression such as `&object` and a display
+  name such as `packet`. Selecting a numeric address in the instruction text fills
+  the address field. Use a symbol expression instead of a process-specific absolute
+  address when the program uses ASLR.
+- **Frame name…**: enter a signed displacement such as `-0x20`, a name, a base
+  register (`fp`, `sp`, `rbp`, `ebp`, `x29`, `r11`, `r7`, `s0`) and the exact GDB
+  function name. This rule applies only inside that function, including matching
+  references through equivalent register values at this stop.
+- **Typed data…**: enter `&object`, `packet` and a real C/C++ type such as
+  `struct Packet`. GDB supplies sizes and member offsets, including nested
+  aggregates; addresses inside a field display `packet.field+offset`.
+- **Edit name…** and **Delete name** change the selected rule. Adding the same
+  rule identity again replaces its name. Manual names take priority over automatic
+  names; a more specific field takes priority over its enclosing structure.
+
+Applying, renaming or deleting a rule refreshes the names automatically while
+paused. **Read instructions** resolves them again on demand. GDB also supplies addressable
+parameters and locals in the selected frame; optimized-out/register-only values
+are left unnamed. Frame references are recognized in x86 Intel, ARM/ARM64 bracket
+forms and RISC-V `offset(base)` forms. Indexed expressions are left unchanged.
+For a different function, select its frame first to resolve that function's locals.
+
+Global names also annotate pointers in locals, value trees, watches, watch graphs, source
+hover tooltips and memory addresses. Raw values and program bytes do not change.
+Names are cleared on execution and resolved again on the next read. **Save names
+in debugger profile** preserves manual rules in the existing per-project/executable
+profile; temporary addresses and automatically discovered names are not persisted.
+
+Discovery is bounded to 128 data locations, 64 numeric symbol lookups, 64 members
+per aggregate and three nested aggregate levels. It never follows member pointers.
+Missing types, inaccessible addresses and bit-fields that have no address are
+reported as unresolved queries. No missing debug information is invented.
+
+![Illustrative naming and architecture forms](../media/native-disassembly-names.svg)

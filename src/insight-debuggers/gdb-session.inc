@@ -44,9 +44,8 @@ typedef struct {
     GDataInputStream *output;
     GCancellable *cancel;
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
-    GtkTextView *console, *watches, *assembly_text;
-    GtkWidget *assembly_expression, *assembly_status;
-    gboolean assembly_pending;
+    GtkTextView *console, *watches;
+    NativeAssembly *assembly;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
     GPtrArray *expressions, *locals, *saved_points, *profile_disabled_pending;
     guint profile_insert_next, profile_insert_count, profile_insert_index;
@@ -99,6 +98,12 @@ typedef struct {
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
+static void native_assembly_prepare(NativeDebug *session, gchar *request);
+static void native_assembly_console(NativeDebug *session, const gchar *line);
+static void native_assembly_free(NativeAssembly *assembly);
+static gboolean native_assembly_next(NativeDebug *session);
+static void native_profile_save(NativeDebug *session);
+static gchar *native_name_addresses(NativeDebug *session, const gchar *text);
 static gboolean native_assembly_reply(NativeDebug *session, const gchar *record);
 
 static void native_profile_points_snapshot(NativeDebug *session, const gchar *record);
@@ -142,7 +147,8 @@ static gboolean native_context_id(const gchar *value);
 static void native_debug_update(NativeDebug *session)
 {
     native_memory_sync(session);
-    gboolean idle = session->ready && !session->pending && !session->writing;
+    gboolean idle = session->ready && !session->pending && !session->writing &&
+        (!session->assembly || !session->assembly->active);
     const gchar *state = insight_tr(!session->ready ? "Starting or disconnected" :
         session->running ? "Running" : session->stopped ? "Paused" : "Ready");
     gchar *status = session->stopped && session->stop_detail ?
@@ -222,6 +228,7 @@ static void native_debug_free(gpointer data)
     g_free(session->stop_detail);
     g_free(session->data_command);
     g_free(session->memory_address);
+    native_assembly_free(session->assembly);
     g_ptr_array_unref(session->paused_controls);
     g_object_unref(session->value_rows);
     g_free(session->value_root);
@@ -291,6 +298,8 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
     if (session->remote && session->remote->release_pending)
         return;
     if (session->remote && session->remote->busy && session->remote->timer)
+        return;
+    if (native_assembly_next(session))
         return;
     gchar *launch = native_launch_next(session);
     if (launch)
@@ -439,7 +448,8 @@ static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
         "-data-evaluate-expression", "-exec-continue", "-exec-step",
         "-exec-next", "-exec-finish", "-interpreter-exec", "-exec-until",
         "-var-create", "-var-list-children", "-var-assign", "-break-watch",
-        "-data-read-memory-bytes"
+        "-data-read-memory-bytes", "-data-disassemble", "-stack-info-frame",
+        "-exec-step-instruction", "-exec-next-instruction"
     };
     gboolean matches = FALSE;
     for (guint i = 0; i < G_N_ELEMENTS(scoped); i++)

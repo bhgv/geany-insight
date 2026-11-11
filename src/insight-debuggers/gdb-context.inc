@@ -353,9 +353,11 @@ static void native_debug_locals(NativeDebug *session, const gchar *record)
                 NativeWatch *local = g_new0(NativeWatch, 1);
                 local->expression = g_utf8_make_valid(name, -1);
                 local->value = g_utf8_make_valid(value ? value : insight_tr("Unavailable"), -1);
+                gchar *named = native_name_addresses(session, local->value);
                 gtk_list_store_insert_with_values(session->local_rows, NULL, -1,
-                    0, local->expression, 1, local->value,
+                    0, local->expression, 1, named,
                     2, insight_tr(!g_strcmp0(argument, "1") ? "Argument" : "Local variable"), -1);
+                g_free(named);
                 g_ptr_array_add(session->locals, local);
             }
             g_free(argument);
@@ -382,7 +384,12 @@ gchar *insight_debug_value_tooltip(const gchar *filename, const gchar *name)
     {
         NativeWatch *local = session->locals->pdata[i];
         if (!strcmp(name, local->expression))
-            return g_strdup_printf("%s = %s", local->expression, local->value);
+        {
+            gchar *named = native_name_addresses(session, local->value);
+            gchar *tooltip = g_strdup_printf("%s = %s", local->expression, named);
+            g_free(named);
+            return tooltip;
+        }
     }
     return NULL;
 }

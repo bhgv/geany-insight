@@ -52,7 +52,9 @@ static void native_watch_refresh(NativeDebug *session, gboolean compare)
         guint id = graph->node_count++;
         InsightLuaWatchNode *node = &graph->nodes[id];
         native_watch_text(node->label, sizeof node->label, watch->expression);
-        native_watch_text(node->value, sizeof node->value, watch->value ? watch->value : insight_tr("Awaiting stop"));
+        gchar *named = native_name_addresses(session, watch->value ? watch->value : insight_tr("Awaiting stop"));
+        native_watch_text(node->value, sizeof node->value, named);
+        g_free(named);
         native_watch_path(node->path, sizeof node->path, "gdb", watch->expression);
         InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
         edge->from = 0;
@@ -67,7 +69,9 @@ static void native_watch_refresh(NativeDebug *session, gboolean compare)
         guint id = graph->node_count++;
         InsightLuaWatchNode *node = &graph->nodes[id];
         native_watch_text(node->label, sizeof node->label, local->expression);
-        native_watch_text(node->value, sizeof node->value, local->value);
+        gchar *named = native_name_addresses(session, local->value);
+        native_watch_text(node->value, sizeof node->value, named);
+        g_free(named);
         native_watch_path(node->path, sizeof node->path, "gdb:local", local->expression);
         InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
         edge->from = 0;
@@ -86,7 +90,9 @@ static void native_watch_refresh(NativeDebug *session, gboolean compare)
     for (guint i = 1; i < graph->node_count; i++)
         if (g_str_has_prefix(graph->nodes[i].path, "observer:"))
             g_string_append_printf(text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
-    gchar *valid = g_utf8_make_valid(text->str, -1);
+    gchar *named = native_name_addresses(session, text->str);
+    gchar *valid = g_utf8_make_valid(named, -1);
+    g_free(named);
     debug_set_text(GTK_WIDGET(session->watches), valid);
     g_free(valid);
     g_string_free(text, TRUE);

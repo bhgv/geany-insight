@@ -35,7 +35,7 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
     }
     GKeyFile *profile = g_key_file_new();
     gboolean valid = g_key_file_load_from_file(profile, remote->profile_path, G_KEY_FILE_NONE, &error) &&
-        native_profile_validate(profile, &error);
+        native_profile_validate(profile, &error) && native_name_profile_validate(profile, &error);
     if (valid)
     {
         for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
@@ -51,6 +51,7 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
         gtk_combo_box_set_active(GTK_COMBO_BOX(remote->mode),
             g_key_file_get_integer(profile, "debugger", "mode", NULL));
         gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Debugger profile restored. Connect or Run explicitly."));
+        native_name_profile_load(session, profile);
         native_profile_debug_load(session, profile);
     }
     else
@@ -73,8 +74,9 @@ static void native_profile_save(NativeDebug *session)
         g_key_file_set_string(profile, "debugger", native_profile_names[i],
             gtk_entry_get_text(GTK_ENTRY(native_profile_entry(session, i))));
     native_profile_debug_store(session, profile);
+    native_name_profile_store(session, profile);
     GError *error = NULL;
-    gboolean valid = native_profile_validate(profile, &error);
+    gboolean valid = native_profile_validate(profile, &error) && native_name_profile_validate(profile, &error);
     gchar *directory = g_path_get_dirname(remote->profile_path);
     if (valid && g_mkdir_with_parents(directory, 0700))
     {

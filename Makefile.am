@@ -852,3 +852,9 @@ EXTRA_DIST += insight/tests/native_debugger_profile_catchpoints_test.py
 
 EXTRA_DIST += insight/tests/native_debugger_disassembly_test.py \
  insight/tests/native_debugger_disassembly_gui.inc
+
+EXTRA_DIST += insight/tests/native_debugger_names_fixture.py \
+ insight/tests/native_debugger_names_test.py \
+ insight/tests/native_debugger_assembly_pipeline_test.py
+
+dist_insightdocmedia_DATA += insight/docs/media/native-disassembly-names.svg
