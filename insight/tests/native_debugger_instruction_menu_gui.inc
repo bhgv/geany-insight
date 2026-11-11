@@ -99,7 +99,10 @@ static gboolean instruction_menu_gui_step(GtkWidget *window, GtkWidget *tabs)
         const gchar *end = address + 2;
         while (g_ascii_isxdigit(*end))
             end++;
-        gchar *expected = g_strndup(address, end - address);
+        gchar *digits = g_strndup(address, end - address);
+        guint64 numeric = g_ascii_strtoull(digits, NULL, 16);
+        gchar *expected = g_strdup_printf("0x%" G_GINT64_MODIFIER "x", numeric);
+        g_free(digits);
         if (instruction_menu_choose(window, "Copy instruction address", TRUE))
         {
             gchar *copied = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
