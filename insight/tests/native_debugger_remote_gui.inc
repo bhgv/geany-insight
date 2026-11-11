@@ -25,6 +25,12 @@ static gboolean remote_test_status(GtkWidget *window, const gchar *text)
 static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;
+    static guint previous_phase = G_MAXUINT;
+    if (previous_phase != phase)
+    {
+        g_print("C/C++ remote GTK: mode=%s phase=%u\n", extended ? "extended" : "remote", phase);
+        previous_phase = phase;
+    }
     if (phase == 1)
     {
         GtkWidget *mode = find(window, "insight-gdb-connection-mode");

@@ -200,8 +200,10 @@ sent to the remote target. Configure the remote directory when starting gdbserve
 Click **Connect gdbserver via SSH**. An owned SSH process forwards a temporary
 loopback-only local port. A constant POSIX readiness command confirms the SSH
 channel before GDB connects; it never probes/consumes the gdbserver connection.
-Keys and SSH agent/config work normally. If `geany-insight-askpass` is available
-in PATH, its GUI handles password/passphrase/host-key prompts; otherwise SSH uses
+Keys and SSH agent/config work normally. The packaged SSH clients and askpass
+helper are preferred, with PATH and Windows OpenSSH fallback. The tunnel has its
+own SSH connection, independently of configured ControlMaster/RemoteCommand.
+When `geany-insight-askpass` is available, its GUI handles password/passphrase/host-key prompts; otherwise SSH uses
 batch mode and reports failures in Console. Host-key verification remains enabled.
 The remote account needs a POSIX shell and permission for local TCP forwarding.
 **Detach and close SSH** cancels an in-progress connection. SSH setup has a

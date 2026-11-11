@@ -58,6 +58,8 @@ int main(void)
         found += !strcmp(args[i], "127.0.0.1:4567:[::1]:2345");
         found += !strcmp(args[i], "/key with spaces");
         found += !strcmp(args[i], "/config with spaces");
+        found += !strcmp(args[i], "-oControlPath=none");
+        found += !strcmp(args[i], "-oRemoteCommand=none");
         if (!strcmp(args[i], "--"))
         {
             assert(!strcmp(args[i + 1], "build-host"));
@@ -65,7 +67,7 @@ int main(void)
             assert(!args[i + 3]);
         }
     }
-    assert(found == 4);
+    assert(found == 6);
     g_strfreev(args);
     args = native_remote_argv("ssh", "host", "", 22, "", "", "127.0.0.1", 2345, 4567, TRUE);
     for (unsigned i = 0; args[i]; i++)

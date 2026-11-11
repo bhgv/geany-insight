@@ -66,7 +66,8 @@ def main():
             client_config.write_text(
                 f'Host *\n UserKnownHostsFile {root / "known_hosts"}\n'
                 ' StrictHostKeyChecking yes\n PreferredAuthentications publickey\n'
-                ' PasswordAuthentication no\n BatchMode yes\n LogLevel ERROR\n')
+                ' PasswordAuthentication no\n BatchMode yes\n LogLevel ERROR\n'
+                f' ControlMaster auto\n ControlPath {root / "mux"}\n RemoteCommand false\n')
             source_root = root / 'local source'
             source_root.mkdir()
             source = source_root / 'remote-main.c'
@@ -116,13 +117,14 @@ def main():
                                INSIGHT_GDB_LOCAL_SOURCE=str(source_root))
                     try:
                         subprocess.run([str(Path(sys.argv[1]).resolve()), str(executable),
-                                        str(source), str(root / f'profile-{mode}')], env=env, check=True, timeout=120)
+                                        str(source), str(root / f'profile-{mode}')], env=env, check=True, timeout=150)
                     finally:
                         for label, log in [('SSH', ssh_log), ('gdbserver', server_log)]:
                             log.flush()
                             log.seek(0)
                             print(f'{label} fixture diagnostics:\n{log.read()}', file=sys.stderr)
                     stop(children.pop())
+            assert not (root / 'mux').exists(), 'Debugger must not reuse or leave an SSH control master'
             return 0
         finally:
             for child in reversed(children):

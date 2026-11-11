@@ -15,6 +15,7 @@
 #include "insight-workbench.h"
 #include "insight/core/runtime.h"
 #include "insight/desktop/glib_compat.h"
+#include "insight/desktop/remote_io.h"
 #include <string.h>
 #define insight_tr(s) (s)
 typedef struct {

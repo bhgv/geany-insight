@@ -152,13 +152,19 @@ static gboolean native_remote_port(NativeDebug *session, GError **error)
     return valid;
 }
 
-/* EN: Start validated SSH settings in session using PATH clients and optional GUI askpass; report spawn errors.
- * RU: Запускает проверенные настройки SSH session через PATH и необязательный GUI askpass; сообщает ошибки запуска. */
+/* EN: Start validated SSH settings in session with bundled/PATH clients and optional GUI askpass; report spawn errors.
+ * RU: Запускает проверенные настройки SSH session через комплект/PATH и необязательный GUI askpass; сообщает ошибки запуска. */
 static gboolean native_remote_spawn(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
-    gchar *ssh = g_find_program_in_path("ssh");
-    gchar *helper = g_find_program_in_path("geany-insight-askpass");
+    gchar *share = app->datadir ? g_path_get_dirname(app->datadir) : NULL;
+    gchar *prefix = share ? g_path_get_dirname(share) : NULL;
+    gchar *bin = prefix ? g_build_filename(prefix, "bin", NULL) : NULL;
+    gchar *ssh = insight_remote_program("ssh", bin);
+    gchar *helper = insight_remote_program("geany-insight-askpass", bin);
+    g_free(bin);
+    g_free(prefix);
+    g_free(share);
     GError *error = NULL;
     if (!ssh)
         g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, insight_tr("OpenSSH was not found in PATH."));

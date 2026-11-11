@@ -21,7 +21,8 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
         return NULL;
     GPtrArray *args = g_ptr_array_new_with_free_func(g_free);
     const gchar *options[] = {ssh, "-T", "-oExitOnForwardFailure=yes", "-oConnectTimeout=15",
-        "-oServerAliveInterval=10", "-oServerAliveCountMax=3", "-oClearAllForwardings=no"};
+        "-oServerAliveInterval=10", "-oServerAliveCountMax=3", "-oClearAllForwardings=no",
+        "-oControlMaster=no", "-oControlPath=none", "-oRemoteCommand=none"};
     for (guint i = 0; i < G_N_ELEMENTS(options); i++)
         g_ptr_array_add(args, g_strdup(options[i]));
     if (!askpass)

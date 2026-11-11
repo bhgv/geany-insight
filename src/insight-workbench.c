@@ -99,6 +99,7 @@
 #include "../insight/desktop/master_sync.h"
 #include "msgwindow.h"
 #include "insight-remote.h"
+#include "../insight/desktop/remote_io.h"
 #include "../insight/desktop/workspace_watch.h"
 #include "../insight/desktop/source_mask.h"
 #include "../insight/desktop/relation_query.h"
