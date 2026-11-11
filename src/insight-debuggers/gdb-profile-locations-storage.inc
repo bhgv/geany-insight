@@ -106,7 +106,10 @@ static void native_profile_locations_load(NativeDebug *session, GKeyFile *profil
  * RU: Отслеживает команду вставки command в session перед отправкой без зависимости от повторяемых номеров GDB. */
 static void native_profile_command_sent(NativeDebug *session, const gchar *command)
 {
-    if (session->profile_restoring && g_str_has_prefix(command, "-break-insert ") &&
+    gboolean insertion = g_str_has_prefix(command, "-break-insert ") ||
+        g_str_has_prefix(command, "-catch-throw") || g_str_has_prefix(command, "-catch-catch") ||
+        g_str_has_prefix(command, "-catch-rethrow");
+    if (session->profile_restoring && insertion &&
         session->profile_insert_next < session->profile_insert_count)
     {
         session->profile_insert_index = session->profile_insert_next++;
@@ -124,6 +127,9 @@ static void native_profile_location_parent_reply(NativeDebug *session, const gch
     gchar *number = g_str_has_prefix(record, "^done,bkpt=") ? native_debug_field(record, "number") : NULL;
     if (native_context_id(number))
     {
+        if (session->profile_restore_data)
+            native_profile_catch_settings(session->profile_restore_data, session->profile_insert_index,
+                                          number, &session->launch_commands);
         for (guint i = 0; i < session->profile_disabled_pending->len; i++)
         {
             NativeLocationOverride *override = session->profile_disabled_pending->pdata[i];

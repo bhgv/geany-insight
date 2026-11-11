@@ -59,7 +59,8 @@ static gboolean native_profile_locations_validate(GKeyFile *profile, gint points
     {
         gchar *parent = g_strdup_printf("breakpoint-%d", i);
         gint count = g_key_file_get_integer(profile, parent, "disabled-count", &failure);
-        valid = !failure && count >= 0 && count <= 1024 && total + count <= 1024;
+        valid = !failure && count >= 0 && count <= 1024 && total + count <= 1024 &&
+            (!count || native_profile_point_kind(profile, (guint)i) == 0);
         if (valid)
             total += (guint)count;
         for (gint j = 0; valid && j < count; j++)

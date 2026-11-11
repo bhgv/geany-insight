@@ -33,7 +33,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     session->paused_controls = g_ptr_array_new();
     session->point_markers = g_ptr_array_new_with_free_func(native_marker_free);
     session->stop_markers = g_ptr_array_new_with_free_func(native_marker_free);
-    session->saved_source_points = g_ptr_array_new_with_free_func(native_saved_point_free);
+    session->saved_points = g_ptr_array_new_with_free_func(native_saved_point_free);
     session->profile_disabled_pending = g_ptr_array_new_with_free_func(native_location_override_free);
     session->points_needed = TRUE;
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set confirm off"));

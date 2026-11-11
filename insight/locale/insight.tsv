@@ -3314,3 +3314,8 @@ Exception type regex (optional)	Регулярное выражение типа
 Add Exception Catchpoint	Добавить точку на исключении
 Empty filter: all exception types. Catchpoints appear in this list and last for this debugger session.	Пустой фильтр: все типы исключений. Точки появляются в этом списке и действуют в текущем сеансе отладчика.
 Exception catchpoint	Точка на исключении
+Empty filter: all exception types. Use Save debugger profile to keep exception catchpoints between sessions.	Пустой фильтр: все типы исключений. Для сохранения точек между сеансами нажмите «Сохранить профиль отладчика».
+Restoring saved breakpoints…	Восстановление сохранённых точек останова…
+Some breakpoints could not be restored. See the GDB console.	Некоторые точки останова не удалось восстановить. Подробности в консоли GDB.
+Could not release the remote pause signal.	Не удалось снять сигнал удалённой паузы.
+SSH could not change the pause signal. Check signal permissions in Console.	Не удалось изменить сигнал паузы через SSH. Проверьте права отправки сигналов в консоли.

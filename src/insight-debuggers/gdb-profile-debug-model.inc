@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* EN: Validate saved source breakpoints/watches and construct bounded MI restoration commands.
+/* EN: Validate saved source/exception breakpoints and watches and construct bounded MI restoration commands.
  * RU: Проверяет сохранённые точки/наблюдения и создаёт ограниченные команды восстановления MI. */
 
 static gboolean native_profile_locations_validate(GKeyFile *profile, gint points, GError **error);
@@ -12,8 +12,8 @@ static gboolean native_profile_text_valid(const gchar *value, glong limit)
         g_utf8_strlen(value, -1) <= limit && !strpbrk(value, "\r\n");
 }
 
-/* EN: Validate profile's version-two source-point/watch section; return FALSE with error before applying it.
- * RU: Проверяет секцию точек/наблюдений версии два в profile; ошибка даёт FALSE и error до применения. */
+/* EN: Validate profile's supported point/watch section; return FALSE with error before applying it.
+ * RU: Проверяет поддерживаемую секцию точек/наблюдений в profile; ошибка даёт FALSE и error до применения. */
 static gboolean native_profile_debug_validate(GKeyFile *profile, GError **error)
 {
     GError *failure = NULL;
@@ -31,10 +31,11 @@ static gboolean native_profile_debug_validate(GKeyFile *profile, GError **error)
     for (gint i = 0; valid && i < points; i++)
     {
         gchar *group = g_strdup_printf("breakpoint-%d", i);
-        gchar *location = g_key_file_get_string(profile, group, "location", NULL);
+        guint kind = native_profile_point_kind(profile, (guint)i);
+        gchar *location = g_key_file_get_string(profile, group, kind ? "filter" : "location", NULL);
         gchar *condition = g_key_file_get_string(profile, group, "condition", NULL);
-        valid = native_profile_text_valid(location, 4096) && *location && *location != '*' &&
-                native_profile_text_valid(condition, 8192);
+        valid = kind < 4 && native_profile_text_valid(location, kind ? 1024 : 4096) &&
+                (kind || (*location && *location != '*')) && native_profile_text_valid(condition, 8192);
         gint ignore = g_key_file_get_integer(profile, group, "ignore", &failure);
         if (!failure)
             g_key_file_get_boolean(profile, group, "enabled", &failure);
@@ -52,11 +53,20 @@ static gboolean native_profile_debug_validate(GKeyFile *profile, GError **error)
     return valid;
 }
 
-/* EN: Return an owned MI command for validated profile point index, preserving condition, enabled state and ignore count.
- * RU: Возвращает команду MI проверенной точки index из profile с условием, состоянием и счётчиком пропусков. */
+/* EN: Return an owned creation command for validated point index in profile; catchpoint settings follow its confirmed ID.
+ * RU: Возвращает команду создания проверенной точки index из profile; настройки исключения следуют за подтверждением ID. */
 static gchar *native_profile_point_command(GKeyFile *profile, guint index)
 {
     gchar *group = g_strdup_printf("breakpoint-%u", index);
+    guint kind = native_profile_point_kind(profile, index);
+    if (kind)
+    {
+        gchar *filter = g_key_file_get_string(profile, group, "filter", NULL);
+        gchar *command = native_catch_command(kind - 1, filter);
+        g_free(filter);
+        g_free(group);
+        return command;
+    }
     gchar *location = g_key_file_get_string(profile, group, "location", NULL);
     gchar *condition = g_key_file_get_string(profile, group, "condition", NULL);
     gboolean enabled = g_key_file_get_boolean(profile, group, "enabled", NULL);

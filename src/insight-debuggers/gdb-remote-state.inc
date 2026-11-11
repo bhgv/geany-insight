@@ -17,7 +17,7 @@ typedef struct
     GDataInputStream *output, *errors;
     GCancellable *cancel;
     guint timer, local_port, attached_pid;
-    gboolean interrupt_pending, pause_requested, clear_stop_signal;
+    gboolean interrupt_pending, pause_requested, clear_stop_signal, release_pending;
     gboolean busy, connected, extended, detach_needed, disconnect_needed;
     NativeRemoteRequest pending;
     gchar *source_mapping, *original_sysroot, *profile_path;

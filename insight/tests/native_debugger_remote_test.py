@@ -54,11 +54,18 @@ extern int g_strcmp0(const char *, const char *);
 typedef enum {NATIVE_REMOTE_CLEAR_STOP, NATIVE_REMOTE_DETACH, NATIVE_REMOTE_DISCONNECT} NativeRemoteRequest;
 typedef struct {
     guint attached_pid;
-    gboolean pause_requested, interrupt_pending, clear_stop_signal, busy, detach_needed, disconnect_needed;
+    gboolean pause_requested, interrupt_pending, clear_stop_signal, busy, detach_needed, disconnect_needed, release_pending;
     NativeRemoteRequest pending;
     void *status;
 } NativeRemote;
 typedef struct {NativeRemote *remote;} NativeDebug;
+/* EN: Record the release request in the headless fixture without opening an SSH connection.
+ * RU: Учитывает запрос снятия остановки в невизуальной фикстуре без открытия SSH-соединения. */
+static void native_attach_release(NativeDebug *session)
+{
+    session->remote->release_pending = TRUE;
+}
+
 /* EN: Ignore label and text in the headless state fixture; the production helper still takes its real branch.
  * RU: Игнорирует label и text в невизуальной фикстуре; производственная функция выполняет настоящую ветвь. */
 static void gtk_label_set_text(void *label, const char *text)
@@ -80,6 +87,8 @@ int main(void)
     native_attach_stopped(&session, "*stopped,signal-name=\"SIGSTOP\"");
     assert(!remote.pause_requested && remote.clear_stop_signal);
     remote.detach_needed = TRUE;
+    assert(!native_remote_next(&session));
+    remote.release_pending = FALSE;
     char *queued = native_remote_next(&session);
     assert(!strcmp(queued, "-interpreter-exec console \"queue-signal 0\""));
     g_free(queued);
@@ -88,10 +97,10 @@ int main(void)
     g_free(queued);
     native_attach_stopped(&session, "*stopped,signal-name=\"SIGSTOP\"");
     assert(!remote.clear_stop_signal);
-    assert(!native_attach_signal_line(0, "127.0.0.1"));
-    assert(!native_attach_signal_line(123, "other-host"));
-    assert(!native_attach_signal_line(123, NULL));
-    char *signal_line = native_attach_signal_line(123, "::1");
+    assert(!native_attach_signal_line(0, "127.0.0.1", FALSE));
+    assert(!native_attach_signal_line(123, "other-host", FALSE));
+    assert(!native_attach_signal_line(123, NULL, FALSE));
+    char *signal_line = native_attach_signal_line(123, "::1", FALSE);
     assert(signal_line && !strcmp(signal_line, "pause:123\n"));
     g_free(signal_line);
     const char *invalid_pids[] = {NULL, "", "0", "-1", "+1", "1;quit", "1\n", " 1", "2147483648", "99999999999999999999"};
@@ -123,7 +132,7 @@ int main(void)
         if (!strcmp(args[i], "--"))
         {
             assert(!strcmp(args[i + 1], "build-host"));
-            assert(strstr(args[i + 2], "GEANY-GDB-SSH-READY") && strstr(args[i + 2], "kill -STOP"));
+            assert(strstr(args[i + 2], "GEANY-GDB-SSH-READY") && strstr(args[i + 2], "signal=STOP") && strstr(args[i + 2], "signal=CONT"));
             assert(!strstr(args[i + 2], "eval"));
             assert(!args[i + 3]);
         }
@@ -235,7 +244,7 @@ int main(void)
                 payload = f"pause:0\npause:0000000000\npause:99999999999999999999\npause:-1\npause:{child.pid}; touch {marker}\npause:{child.pid}\n"
                 result = subprocess.run(['sh', '-c', script], input=payload, text=True,
                                         capture_output=True, check=True, timeout=5)
-                self.assertEqual(result.stdout.splitlines(), ['GEANY-GDB-SSH-READY', 'GEANY-GDB-SSH-STOPPED'])
+                self.assertEqual(result.stdout.splitlines(), ['GEANY-GDB-SSH-READY', 'GEANY-GDB-SSH-STOP-OK'])
                 self.assertFalse(marker.exists())
                 for _ in range(100):
                     state = next(line for line in Path(f'/proc/{child.pid}/status').read_text().splitlines()
@@ -244,6 +253,16 @@ int main(void)
                         break
                     time.sleep(0.01)
                 self.assertIn('T', state)
+                result = subprocess.run(['sh', '-c', script], input=f"resume:{child.pid}\n", text=True,
+                                        capture_output=True, check=True, timeout=5)
+                self.assertEqual(result.stdout.splitlines(), ['GEANY-GDB-SSH-READY', 'GEANY-GDB-SSH-RESUME-OK'])
+                for _ in range(100):
+                    state = next(line for line in Path(f'/proc/{child.pid}/status').read_text().splitlines()
+                                 if line.startswith('State:')).split()[1]
+                    if state not in ('T', 't'):
+                        break
+                    time.sleep(0.01)
+                self.assertNotIn(state, ('T', 't'))
             finally:
                 os.kill(child.pid, signal.SIGCONT)
                 child.terminate()

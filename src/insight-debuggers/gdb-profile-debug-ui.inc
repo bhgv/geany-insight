@@ -7,6 +7,7 @@
 static void native_saved_point_free(gpointer data)
 {
     NativeSavedPoint *point = data;
+    g_free(point->filter);
     g_free(point->number);
     g_ptr_array_unref(point->disabled_locations);
     g_free(point->location);
@@ -14,33 +15,47 @@ static void native_saved_point_free(gpointer data)
     g_free(point);
 }
 
-/* EN: Capture session's persistent parent source points from successful record; omit runtime/temporary/address points.
- * RU: Сохраняет постоянные родительские точки session из успешного record; пропускает временные и адресные точки. */
+/* EN: Capture session's persistent parent source/exception points from successful record; omit data/temporary/address points.
+ * RU: Сохраняет постоянные родительские точки исходников/исключений session из успешного record; пропускает точки данных, временные и адресные точки. */
 static void native_profile_points_snapshot(NativeDebug *session, const gchar *record)
 {
     const gchar *body = strstr(record, "body=[");
     if (!g_str_has_prefix(record, "^done") || !body)
         return;
-    g_ptr_array_set_size(session->saved_source_points, 0);
+    g_ptr_array_set_size(session->saved_points, 0);
     const gchar *cursor = body + strlen("body=["), *start, *end;
     NativeSavedPoint *current = NULL;
-    while (session->saved_source_points->len < 257 && (end = native_next_tuple(&cursor, &start)))
+    guint scanned_points = 0;
+    while (scanned_points++ < 4096 && session->saved_points->len < 257 && (end = native_next_tuple(&cursor, &start)))
     {
         gchar *tuple = g_strndup(start, end - start);
         gchar *number = native_debug_field(tuple, "number");
         gchar *kind = native_debug_field(tuple, "type");
         gchar *disposition = native_debug_field(tuple, "disp");
         gchar *location = native_debug_field(tuple, "original-location");
+        gchar *event = native_debug_field(tuple, "catch-type");
+        guint catch_kind = !g_strcmp0(event, "throw") ? 1 : !g_strcmp0(event, "catch") ? 2 :
+                           !g_strcmp0(event, "rethrow") ? 3 : 0;
+        g_free(event);
+        gboolean source = !g_strcmp0(kind, "breakpoint") && location && *location && *location != '*';
+        gboolean exception = !g_strcmp0(kind, "catchpoint") && catch_kind;
         if (native_context_id(number))
             current = NULL;
-        if (native_context_id(number) && !g_strcmp0(kind, "breakpoint") &&
-            !g_strcmp0(disposition, "keep") && location && *location && *location != '*')
+        if (native_context_id(number) && !g_strcmp0(disposition, "keep") && (source || exception))
         {
             NativeSavedPoint *point = g_new0(NativeSavedPoint, 1);
             point->number = g_strdup(number);
+            point->catch_kind = exception ? catch_kind : 0;
+            if (exception)
+            {
+                point->filter = native_debug_field(tuple, "regexp");
+                if (!point->filter)
+                    point->filter = g_strdup("");
+            }
             point->disabled_locations = g_ptr_array_new_with_free_func(native_saved_location_free);
             current = point;
-            point->location = g_steal_pointer(&location);
+            if (source)
+                point->location = g_steal_pointer(&location);
             point->condition = native_debug_field(tuple, "cond");
             if (!point->condition)
                 point->condition = g_strdup("");
@@ -50,7 +65,7 @@ static void native_profile_points_snapshot(NativeDebug *session, const gchar *re
             guint64 count = 0;
             if (ignore && g_ascii_string_to_unsigned(ignore, 10, 0, G_MAXINT, &count, NULL))
                 point->ignore = (guint)count;
-            g_ptr_array_add(session->saved_source_points, point);
+            g_ptr_array_add(session->saved_points, point);
             g_free(ignore);
             g_free(enabled);
         }
@@ -78,6 +93,7 @@ static void native_profile_points_snapshot(NativeDebug *session, const gchar *re
     if (session->profile_restoring && g_queue_is_empty(&session->launch_commands))
     {
         session->profile_restoring = FALSE;
+        g_clear_pointer(&session->profile_restore_data, g_key_file_unref);
         if (unresolved && !session->profile_restore_failed)
         {
             gchar *message = g_strdup_printf(insight_tr("Profile restored; %u C++ locations await matching symbols."), unresolved);
@@ -95,7 +111,7 @@ static void native_profile_points_snapshot(NativeDebug *session, const gchar *re
 static void native_profile_debug_store(NativeDebug *session, GKeyFile *profile)
 {
     g_key_file_set_integer(profile, "debugger", "watch-count", session->expressions->len);
-    g_key_file_set_integer(profile, "debugger", "point-count", session->saved_source_points->len);
+    g_key_file_set_integer(profile, "debugger", "point-count", session->saved_points->len);
     for (guint i = 0; i < session->expressions->len; i++)
     {
         NativeWatch *watch = session->expressions->pdata[i];
@@ -103,11 +119,14 @@ static void native_profile_debug_store(NativeDebug *session, GKeyFile *profile)
         g_key_file_set_string(profile, "watches", key, watch->expression);
         g_free(key);
     }
-    for (guint i = 0; i < session->saved_source_points->len; i++)
+    for (guint i = 0; i < session->saved_points->len; i++)
     {
-        NativeSavedPoint *point = session->saved_source_points->pdata[i];
+        NativeSavedPoint *point = session->saved_points->pdata[i];
         gchar *group = g_strdup_printf("breakpoint-%u", i);
-        g_key_file_set_string(profile, group, "location", point->location);
+        const gchar *kinds[] = {"source", "throw", "catch", "rethrow"};
+        g_key_file_set_string(profile, group, "kind", kinds[point->catch_kind]);
+        g_key_file_set_string(profile, group, point->catch_kind ? "filter" : "location",
+                              point->catch_kind ? point->filter : point->location);
         g_key_file_set_string(profile, group, "condition", point->condition);
         g_key_file_set_boolean(profile, group, "enabled", point->enabled);
         g_key_file_set_integer(profile, group, "ignore", point->ignore);
@@ -116,24 +135,21 @@ static void native_profile_debug_store(NativeDebug *session, GKeyFile *profile)
     }
 }
 
-/* EN: Restore validated profile into session without running the target; replace source points and watches.
- * RU: Восстанавливает проверенный профиль в session без запуска; заменяет точки исходников и наблюдения. */
+/* EN: Restore validated profile into session without running the target; replace supported point recipes and watches.
+ * RU: Восстанавливает проверенный профиль в session без запуска; заменяет поддерживаемые точки и наблюдения. */
 static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
 {
     if (g_key_file_get_integer(profile, "debugger", "version", NULL) < 2)
         return;
-    GtkTreeModel *model = GTK_TREE_MODEL(session->point_rows);
-    GtkTreeIter row;
-    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
-         valid = gtk_tree_model_iter_next(model, &row))
+    gboolean exceptions = g_key_file_get_integer(profile, "debugger", "version", NULL) >= 4;
+    for (guint i = 0; i < session->saved_points->len; i++)
     {
-        gchar *number = NULL, *kind = NULL;
-        gtk_tree_model_get(model, &row, 1, &number, 8, &kind, -1);
-        if (native_context_id(number) && !g_strcmp0(kind, "breakpoint"))
-            g_queue_push_tail(&session->launch_commands, g_strdup_printf("-break-delete %s", number));
-        g_free(kind);
-        g_free(number);
+        NativeSavedPoint *point = session->saved_points->pdata[i];
+        if (native_context_id(point->number) && (!point->catch_kind || exceptions))
+            g_queue_push_tail(&session->launch_commands, g_strdup_printf("-break-delete %s", point->number));
     }
+    g_clear_pointer(&session->profile_restore_data, g_key_file_unref);
+    session->profile_restore_data = g_key_file_ref(profile);
     gint count = g_key_file_get_integer(profile, "debugger", "point-count", NULL);
     native_profile_locations_load(session, profile, (guint)count);
     for (gint i = 0; i < count; i++)
@@ -152,7 +168,7 @@ static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
     session->points_needed = session->profile_restoring = TRUE;
     session->profile_restore_failed = FALSE;
     native_watch_refresh(session, FALSE);
-    gtk_label_set_text(GTK_LABEL(session->remote->status), insight_tr("Restoring saved source breakpoints…"));
+    gtk_label_set_text(GTK_LABEL(session->remote->status), insight_tr("Restoring saved breakpoints…"));
     native_debug_resume(session->window, session);
 }
 
@@ -165,7 +181,8 @@ static void native_profile_debug_reply(NativeDebug *session, const gchar *record
     {
         session->profile_restore_failed = TRUE;
         session->profile_restoring = FALSE;
+        g_clear_pointer(&session->profile_restore_data, g_key_file_unref);
         gtk_label_set_text(GTK_LABEL(session->remote->status),
-            insight_tr("Some source breakpoints could not be restored. See the GDB console."));
+            insight_tr("Some breakpoints could not be restored. See the GDB console."));
     }
 }

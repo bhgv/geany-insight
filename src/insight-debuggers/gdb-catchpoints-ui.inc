@@ -58,7 +58,7 @@ static GtkWidget *native_catch_widget(NativeDebug *session)
     gtk_box_pack_start(GTK_BOX(row), add, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), row, FALSE, FALSE, 0);
     GtkWidget *hint = gtk_label_new(insight_tr(
-        "Empty filter: all exception types. Catchpoints appear in this list and last for this debugger session."));
+        "Empty filter: all exception types. Use Save debugger profile to keep exception catchpoints between sessions."));
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_label_set_max_width_chars(GTK_LABEL(hint), 90);
     gtk_widget_set_halign(hint, GTK_ALIGN_START);

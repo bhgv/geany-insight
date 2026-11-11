@@ -135,8 +135,10 @@ GDB and the target C++ runtime support type filtering.
 The common list shows the event and filter. **Enable / Disable**, **Breakpoint
 condition**, **Ignore first hits** and **Delete Breakpoint** also work for these
 catchpoints. An invalid regular expression is reported by GDB without replacing
-existing points. Catchpoints are session-only and are not saved/restored as source
-breakpoint recipes; restoring a source profile leaves current catchpoints intact.
+existing points. **Save debugger profile** preserves the event, type filter,
+condition, enabled state and remaining ignored-hit count. Version four profiles
+restore source and exception points together; older profiles leave current
+exception catchpoints intact.
 
 On a hit, the status identifies the catchpoint and its number. GDB may initially
 stop inside the C++ runtime; select your application's frame in **Stack** to see
@@ -274,7 +276,8 @@ When gdbserver is on the SSH server's loopback address (`127.0.0.1`, `::1`, or
 `localhost`), Pause targets the attached PID through the existing SSH channel.
 This also works when the process is not a process-group leader. The SSH account
 needs permission to signal that process. GDB must confirm the stop before controls
-are enabled; only this pause's pending SIGSTOP is cleared before continuing or
+are enabled. The editor sends SIGCONT through the owned SSH channel while GDB
+still holds the process stopped, then clears only this pause's pending SIGSTOP before continuing or
 detaching, without changing global signal policies. For gdbserver on a different
 forwarded host, Pause uses GDB's normal interrupt command.
 
@@ -316,14 +319,15 @@ current form. All required fields are checked before any setting is applied.
 ### Source breakpoints and watches in a profile
 
 **Save debugger profile** also records up to 256 persistent source/function
-breakpoints and 32 watch expressions. Source points keep their condition,
+and C++ exception breakpoints in total, plus 32 watch expressions. Source points keep their condition,
 enabled/disabled state and the remaining ignored-hit count reported by GDB.
 On reopening the same project/executable, GDB recreates those source points and
 the editor refreshes their margin markers and breakpoint list. Watch expressions
 appear as **Awaiting stop** and evaluate in the selected frame at the next stop.
 Runtime values and hit totals start afresh.
 
-Restore replaces current source points and watch expressions with the saved set.
+Restore replaces current persistent source and C++ exception points and watch
+expressions with the saved set.
 It does not run or connect the target. Pending source points use GDB's normal
 resolution when their code becomes available. A rejected GDB command stops the
 remaining restoration and shows an error; the saved file stays intact.
@@ -337,6 +341,6 @@ can match them uniquely. Changing these settings manually after restoration take
 precedence. Save retains unresolved selectors for parents that still exist.
 
 Data watchpoints and temporary/absolute-address breakpoints remain session-only.
-Versions one and two are readable; Save upgrades to version three. The existing
+Versions one through three are readable; Save upgrades to version four. The existing
 256 KiB profile limit also includes C++ location metadata. Missing source coordinates
 on a disabled location prevent Save with an explanation, preserving the old file.

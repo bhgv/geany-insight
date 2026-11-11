@@ -38,6 +38,7 @@ typedef struct {unsigned domain; int code; char *message;} GError;
 extern unsigned g_io_error_quark(void);
 extern void g_error_free(GError *);
 extern void g_free(void *);
+extern int g_strcmp0(const char *, const char *);
 extern char *g_strdup_printf(const char *, ...);
 extern char *g_compute_checksum_for_string(int, const char *, gssize);
 extern char *g_strconcat(const char *, ...);
@@ -76,7 +77,7 @@ int main(void)
     for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
         g_key_file_set_string(profile, "debugger", native_profile_names[i], "");
     assert(native_profile_validate(profile, &error) && !error);
-    g_key_file_set_integer(profile, "debugger", "version", 4);
+    g_key_file_set_integer(profile, "debugger", "version", 5);
     assert(!native_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_set_integer(profile, "debugger", "version", 1);
@@ -115,6 +116,23 @@ int main(void)
     g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1025);
     assert(!native_profile_validate(profile, &error));
     g_clear_error(&error);
+    g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1);
+    g_key_file_set_integer(profile, "debugger", "version", 4);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_string(profile, "breakpoint-0", "kind", "source");
+    assert(native_profile_validate(profile, &error));
+    g_key_file_set_string(profile, "breakpoint-0", "kind", "throw");
+    g_key_file_set_string(profile, "breakpoint-0", "filter", "std::.*");
+    g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 0);
+    assert(native_profile_validate(profile, &error));
+    char *catch_command = native_profile_point_command(profile, 0);
+    assert(!strcmp(catch_command, "-catch-throw -r \"std::.*\""));
+    g_free(catch_command);
+    g_key_file_set_string(profile, "breakpoint-0", "kind", "unknown");
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_integer(profile, "debugger", "version", 3);
     g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1);
     char *point_command = native_profile_point_command(profile, 0);
     puts(point_command);
@@ -162,8 +180,12 @@ class NativeProfile(unittest.TestCase):
             self.skipTest('Needs cc and GLib/GIO runtime libraries.')
         model = Path(__file__).resolve().parents[2] / 'src/insight-debuggers/gdb-profile-model.inc'
         names = model.read_text().split('static const gchar *native_profile_names[] = {', 1)[1].split('};', 1)[0]
-        debug_helpers = function('src/insight-debuggers/gdb-profile-debug-model.inc', 'native_profile_text_valid') + '\n' + function('src/insight-debuggers/gdb-profile-locations-model.inc', 'native_profile_locations_validate') + '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-debug-model.inc', name)
-                                  for name in ('native_profile_debug_validate', 'native_profile_point_command'))
+        debug_helpers = function('src/insight-debuggers/gdb-profile-catch-model.inc', 'native_profile_point_kind')
+        debug_helpers += '\n' + function('src/insight-debuggers/gdb-catchpoints-model.inc', 'native_catch_command')
+        debug_helpers += '\n' + function('src/insight-debuggers/gdb-profile-debug-model.inc', 'native_profile_text_valid')
+        debug_helpers += '\n' + function('src/insight-debuggers/gdb-profile-locations-model.inc', 'native_profile_locations_validate')
+        debug_helpers += '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-debug-model.inc', name)
+                                                for name in ('native_profile_debug_validate', 'native_profile_point_command'))
         helpers = debug_helpers + '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-model.inc', name)
                             for name in ('native_profile_validate', 'native_profile_path'))
         with tempfile.TemporaryDirectory(dir=model.parents[2]) as directory:

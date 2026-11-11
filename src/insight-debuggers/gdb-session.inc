@@ -13,7 +13,8 @@ typedef struct {
 
 typedef struct
 {
-    gchar *location, *condition, *number;
+    gchar *location, *condition, *number, *filter;
+    guint catch_kind;
     GPtrArray *disabled_locations;
     gboolean enabled;
     guint ignore;
@@ -45,8 +46,9 @@ typedef struct {
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
-    GPtrArray *expressions, *locals, *saved_source_points, *profile_disabled_pending;
+    GPtrArray *expressions, *locals, *saved_points, *profile_disabled_pending;
     guint profile_insert_next, profile_insert_count, profile_insert_index;
+    GKeyFile *profile_restore_data;
     gboolean profile_insert_pending;
     gboolean profile_restoring, profile_restore_failed;
     GtkListStore *local_rows, *point_rows, *stack_rows;
@@ -224,7 +226,8 @@ static void native_debug_free(gpointer data)
     if (session->value_pending_row)
         gtk_tree_row_reference_free(session->value_pending_row);
     insight_queue_clear_full(&session->value_cleanup, g_free);
-    g_ptr_array_unref(session->saved_source_points);
+    g_clear_pointer(&session->profile_restore_data, g_key_file_unref);
+    g_ptr_array_unref(session->saved_points);
     g_ptr_array_unref(session->profile_disabled_pending);
     g_ptr_array_unref(session->expressions);
     g_ptr_array_unref(session->locals);
@@ -281,6 +284,8 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         g_free(remote);
         return;
     }
+    if (session->remote && session->remote->release_pending)
+        return;
     if (session->remote && session->remote->busy && session->remote->timer)
         return;
     gchar *launch = native_launch_next(session);

@@ -46,6 +46,32 @@ static gboolean profile_cpp_location(GtkWidget *window, const gchar *function, c
     return FALSE;
 }
 
+/* EN: Select window's persisted throw catchpoint when column equals expected; return FALSE until confirmed.
+ * RU: Выбирает сохранённую точку throw окна window, если column равен expected; до подтверждения возвращает FALSE. */
+static gboolean profile_exception_row(GtkWidget *window, gint column, const gchar *expected)
+{
+    GtkWidget *view = find(window, "insight-gdb-breakpoints");
+    if (!view)
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+         valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *caption = NULL, *actual = NULL;
+        gtk_tree_model_get(model, &row, 0, &caption, column, &actual, -1);
+        gboolean matches = !g_strcmp0(caption, "C++ throw [std::.*]") && !g_strcmp0(actual, expected);
+        g_free(actual);
+        g_free(caption);
+        if (matches)
+        {
+            gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), &row);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 /* EN: Select and activate window's main stack frame after PID attach; return FALSE until frames are available.
  * RU: Выбирает и открывает кадр main в window после подключения по PID; до загрузки стека возвращает FALSE. */
 static gboolean remote_attach_main_frame(GtkWidget *window)
@@ -113,6 +139,9 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
                     ==, g_getenv("INSIGHT_GDB_SSH_HOST"));
                 g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-remote-executable"))),
                     ==, g_getenv("INSIGHT_GDB_REMOTE_EXECUTABLE"));
+                g_assert(profile_exception_row(window, 2, "n"));
+                g_assert(profile_exception_row(window, 3, "1"));
+                g_assert(profile_exception_row(window, 5, "3"));
                 g_assert(profile_cpp_location(window, "profile_twice<int>", "n"));
                 g_assert(profile_cpp_location(window, "profile_twice<double>", "y"));
                 g_assert(point_column(window, 2, "n"));
@@ -174,14 +203,37 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
              click(window, "Enable / Disable"))
         phase = 31;
     else if (phase == 31 && profile_cpp_location(window, "profile_twice<int>", "n") &&
-             profile_cpp_location(window, "profile_twice<double>", "y") && click(window, "Save debugger profile"))
+             profile_cpp_location(window, "profile_twice<double>", "y"))
+    {
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-exception-filter")), "std::.*");
+        if (click(window, "Add Exception Catchpoint"))
+            phase = 32;
+    }
+    else if (phase == 32 && profile_exception_row(window, 2, "y") &&
+             gtk_widget_is_sensitive(find(window, "Breakpoint condition")))
+    {
+        phase = 33;
+        g_timeout_add(100, profile_point_rule, "Breakpoint condition");
+        click(window, "Breakpoint condition");
+    }
+    else if (phase == 33 && profile_exception_row(window, 3, "1") && click(window, "Enable / Disable"))
+        phase = 34;
+    else if (phase == 34 && profile_exception_row(window, 2, "n") &&
+             gtk_widget_is_sensitive(find(window, "Ignore first hits")))
+    {
+        phase = 35;
+        g_timeout_add(100, profile_point_rule, "Ignore first hits");
+        click(window, "Ignore first hits");
+    }
+    else if (phase == 35 && profile_exception_row(window, 5, "3") && click(window, "Save debugger profile"))
     {
         g_assert(remote_test_status(window, "Debugger profile saved"));
         profile_reopened = TRUE;
         gtk_widget_destroy(window);
         phase = 0;
     }
-    else if (phase == 24 && profile_cpp_location(window, "profile_twice<int>", "n") &&
+    else if (phase == 24 && profile_exception_row(window, 2, "n") &&
+             profile_exception_row(window, 3, "1") && profile_exception_row(window, 5, "3") && profile_cpp_location(window, "profile_twice<int>", "n") &&
              profile_cpp_location(window, "profile_twice<double>", "y") && point_column(window, 2, "n") && point_column(window, 5, "3") &&
              click(window, "Enable / Disable"))
         phase = 25;
@@ -281,7 +333,11 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         return timeout(NULL);
     else if (phase == 43 && click(window, "Pause"))
         phase = 44;
-    else if (phase == 44 && click(window, "Detach and close SSH"))
+    else if (phase == 44 && click(window, "Continue"))
+        phase = 47;
+    else if (phase == 47 && click(window, "Pause"))
+        phase = 48;
+    else if (phase == 48 && click(window, "Detach and close SSH"))
         phase = 45;
     else if (phase == 45 && remote_test_status(window, "Remote disconnected"))
     {

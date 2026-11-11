@@ -53,16 +53,17 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
     g_free(address);
     g_ptr_array_add(args, g_strdup("--"));
     g_ptr_array_add(args, g_strdup(host));
-    /* EN: Confirm forwarding without probing GDB, then accept only bounded pause:PID requests.
-     * RU: Подтверждает туннель без проверки порта GDB, затем принимает только ограниченные запросы pause:PID. */
+    /* EN: Confirm forwarding without probing GDB, then accept only bounded pause:PID/resume:PID requests.
+     * RU: Подтверждает туннель без проверки порта GDB, затем принимает только ограниченные запросы pause:PID/resume:PID. */
     g_ptr_array_add(args, g_strdup(
         "printf 'GEANY-GDB-SSH-READY\\n'; "
         "while IFS= read -r request; do "
-        "case \"$request\" in pause:*) pid=${request#pause:};; *) continue;; esac; "
+        "case \"$request\" in pause:*) pid=${request#pause:}; signal=STOP; reply=STOP;; "
+        "resume:*) pid=${request#resume:}; signal=CONT; reply=RESUME;; *) continue;; esac; "
         "case \"$pid\" in ''|0|*[!0-9]*) continue;; esac; "
         "[ ${#pid} -le 10 ] && [ \"$pid\" -ge 1 ] && [ \"$pid\" -le 2147483647 ] || continue; "
-        "if kill -STOP \"$pid\"; then printf 'GEANY-GDB-SSH-STOPPED\\n'; "
-        "else printf 'GEANY-GDB-SSH-STOP-FAILED\\n'; fi; done"));
+        "if kill -\"$signal\" \"$pid\"; then printf 'GEANY-GDB-SSH-%s-OK\\n' \"$reply\"; "
+        "else printf 'GEANY-GDB-SSH-%s-FAILED\\n' \"$reply\"; fi; done"));
     g_ptr_array_add(args, NULL);
     return (gchar **)g_ptr_array_free(args, FALSE);
 }

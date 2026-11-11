@@ -16,7 +16,7 @@ static void native_remote_update(NativeDebug *session)
     NativeRemote *remote = session->remote;
     if (!remote)
         return;
-    gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy && !remote->interrupt_pending;
+    gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy && !remote->interrupt_pending && !remote->release_pending;
     native_attach_update(session, idle);
     gtk_widget_set_sensitive(remote->mode, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->form, idle && !remote->ssh && !session->running && !session->stopped);
@@ -28,7 +28,7 @@ static void native_remote_update(NativeDebug *session)
         !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->disconnect, remote->ssh &&
         ((remote->busy && !remote->connected) || (idle && !session->stop_requested)));
-    if (remote->busy || remote->interrupt_pending)
+    if (remote->busy || remote->interrupt_pending || remote->release_pending)
     {
         for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
             gtk_widget_set_sensitive(session->buttons[i], FALSE);
@@ -49,6 +49,8 @@ static gchar *native_remote_next(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
     if (!remote)
+        return NULL;
+    if (remote->release_pending)
         return NULL;
     if (remote->clear_stop_signal)
     {

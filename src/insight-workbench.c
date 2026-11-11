@@ -318,6 +318,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/gdb-attach-ui.inc"
 #include "insight-debuggers/gdb-attach-interrupt.inc"
 #include "insight-debuggers/gdb-remote-connection.inc"
+#include "insight-debuggers/gdb-profile-catch-model.inc"
 #include "insight-debuggers/gdb-profile-debug-model.inc"
 #include "insight-debuggers/gdb-profile-locations-model.inc"
 #include "insight-debuggers/gdb-profile-locations-snapshot.inc"

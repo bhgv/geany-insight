@@ -48,16 +48,25 @@ extern void g_ptr_array_add(GPtrArray *, void *);
 extern void g_ptr_array_unref(GPtrArray *);
 extern void g_ptr_array_set_size(GPtrArray *, guint);
 extern void g_queue_push_tail(GQueue *, void *);
+extern void g_queue_push_head(GQueue *, void *);
 extern void *g_queue_pop_head(GQueue *);
 extern int g_ascii_string_to_unsigned(const char *, guint, guint64, guint64, guint64 *, GError **);
 '''
 
 SESSION = r'''
 typedef struct {
-    char *location, *condition, *number;
+    char *location, *condition, *number, *filter;
+    guint catch_kind, ignore;
+    gboolean enabled;
     GPtrArray *disabled_locations;
 } NativeSavedPoint;
+typedef struct {char *expression, *value;} NativeWatch;
+typedef struct {void *status;} NativeRemote;
 typedef struct {
+    NativeRemote *remote;
+    GPtrArray *saved_points, *expressions;
+    gboolean profile_restore_failed;
+    GKeyFile *profile_restore_data;
     GPtrArray *profile_disabled_pending;
     GQueue launch_commands;
     guint profile_insert_next, profile_insert_count, profile_insert_index;
@@ -130,6 +139,7 @@ class NativeProfileLocations(unittest.TestCase):
                             for name in ('native_debug_field', 'native_next_tuple', 'native_context_id'))
         helpers += '\n' + function('src/insight-debuggers/gdb-breakpoints.inc', 'native_point_number')
         helpers += '\n' + function('src/insight-debuggers/gdb-profile-debug-model.inc', 'native_profile_text_valid')
+        helpers += '\n' + (ROOT / 'src/insight-debuggers/gdb-profile-catch-model.inc').read_text()
         state = (ROOT / 'src/insight-debuggers/gdb-profile-location-state.inc').read_text()
         for name in ('model', 'snapshot', 'storage'):
             helpers += '\n' + (ROOT / f'src/insight-debuggers/gdb-profile-locations-{name}.inc').read_text()

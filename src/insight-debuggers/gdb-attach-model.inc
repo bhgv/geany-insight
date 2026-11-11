@@ -14,12 +14,12 @@ static gchar *native_attach_command(const gchar *pid)
     return g_strdup_printf("-target-attach %u", (guint)number);
 }
 
-/* EN: Return a decimal request for pid only when server_host is SSH-local loopback; NULL means use GDB instead.
- * RU: Возвращает десятичный запрос pid только для loopback server_host на SSH-машине; NULL означает использовать GDB. */
-static gchar *native_attach_signal_line(guint pid, const gchar *server_host)
+/* EN: Return a pause/release request for pid on SSH-local server_host; release selects SIGCONT, NULL uses GDB instead.
+ * RU: Возвращает паузу/снятие паузы pid для loopback server_host; release выбирает SIGCONT, NULL означает использовать GDB. */
+static gchar *native_attach_signal_line(guint pid, const gchar *server_host, gboolean release)
 {
     if (!pid || pid > G_MAXINT || !server_host ||
         (strcmp(server_host, "127.0.0.1") && strcmp(server_host, "::1") && strcmp(server_host, "localhost")))
         return NULL;
-    return g_strdup_printf("pause:%u\n", pid);
+    return g_strdup_printf("%s:%u\n", release ? "resume" : "pause", pid);
 }
