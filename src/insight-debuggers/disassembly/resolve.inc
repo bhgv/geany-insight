@@ -196,6 +196,37 @@ static void native_assembly_register_values(NativeAssembly *assembly, const gcha
     }
 }
 
+/* EN: Queue only in-scope manual rules for assembly after GDB confirms the selected function.
+ * RU: Ставит только действующие ручные правила assembly после подтверждения выбранной функции GDB. */
+static void native_assembly_user_rules(NativeAssembly *assembly)
+{
+    for (guint i = 0; i < assembly->rules->len; i++)
+    {
+        NativeNameRule *rule = assembly->rules->pdata[i];
+        if (*rule->scope && g_strcmp0(rule->scope, assembly->function))
+            continue;
+        if (rule->kind == 1)
+        {
+            NativeNamedRange *range = g_new0(NativeNamedRange, 1);
+            range->frame = range->manual = TRUE;
+            range->name = g_strdup(rule->name);
+            range->scope = g_strdup(rule->scope);
+            range->base = g_strdup(rule->type);
+            native_name_offset(rule->anchor, &range->offset);
+            g_ptr_array_add(assembly->ranges, range);
+        }
+        else
+        {
+            gchar *expression = g_strdup_printf("*((%s*)(%s))", rule->kind == 2 ? rule->type : "char", rule->anchor);
+            native_assembly_range_request(assembly, expression, rule->name, rule->scope, TRUE);
+            if (rule->kind == 2)
+                native_assembly_queue(assembly, native_assembly_expression("-var-create - *", expression),
+                    6, NULL, rule->name, rule->scope, NULL, 0, TRUE);
+            g_free(expression);
+        }
+    }
+}
+
 /* EN: Apply one confirmed MI record to assembly's work; errors skip only unavailable optional metadata.
  * RU: Применяет подтверждённый ответ MI record к work в assembly; ошибки пропускают только недоступные метаданные. */
 static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWork *work, const gchar *record)
@@ -213,17 +244,13 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
     {
         g_free(assembly->function);
         assembly->function = native_debug_field(record, "func");
+        native_assembly_user_rules(assembly);
     }
     else if (work->action == 2 && numeric)
     {
         guint64 *stored = g_new(guint64, 1);
         *stored = number;
         g_hash_table_replace(assembly->registers, g_strdup(work->expression), stored);
-        if (!strcmp(work->expression, "fp"))
-        {
-            assembly->frame_pointer = number;
-            assembly->frame_valid = TRUE;
-        }
     }
     else if (work->action == 3)
     {

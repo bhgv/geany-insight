@@ -141,7 +141,7 @@ static void native_name_edit(GtkButton *button, gpointer data)
         gtk_grid_attach(GTK_GRID(grid), entries[i], 1, i, 1, 1);
     }
     gtk_widget_set_sensitive(entries[2], kind != 0);
-    gtk_widget_set_sensitive(entries[3], kind == 1);
+    gtk_widget_set_sensitive(entries[3], kind != 0);
     GtkTextIter start, end;
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(assembly->text));
     if (!old && kind != 1 && gtk_text_buffer_get_selection_bounds(buffer, &start, &end))
@@ -149,7 +149,11 @@ static void native_name_edit(GtkButton *button, gpointer data)
         gchar *chosen = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
         guint64 address = 0;
         if (native_assembly_number(chosen, &address))
-            gtk_entry_set_text(GTK_ENTRY(entries[0]), chosen);
+        {
+            gchar *numeric = g_strdup_printf("0x%" G_GINT64_MODIFIER "x", address);
+            gtk_entry_set_text(GTK_ENTRY(entries[0]), numeric);
+            g_free(numeric);
+        }
         g_free(chosen);
     }
     GtkWidget *hint = gtk_label_new(insight_tr("Names refresh matching addresses automatically. Frame names belong to one function. Typed fields come from GDB. Save debugger profile to keep rules."));
@@ -165,7 +169,7 @@ static void native_name_edit(GtkButton *button, gpointer data)
         rule->anchor = g_strdup(gtk_entry_get_text(GTK_ENTRY(entries[0])));
         rule->name = g_strdup(gtk_entry_get_text(GTK_ENTRY(entries[1])));
         rule->type = g_strdup(gtk_entry_get_text(GTK_ENTRY(entries[2])));
-        rule->scope = g_strdup(kind == 1 ? gtk_entry_get_text(GTK_ENTRY(entries[3])) : "");
+        rule->scope = g_strdup(kind != 0 ? gtk_entry_get_text(GTK_ENTRY(entries[3])) : "");
         if (native_name_rule_valid(rule))
         {
             if (old)

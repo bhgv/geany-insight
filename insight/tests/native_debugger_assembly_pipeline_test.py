@@ -15,7 +15,7 @@ import unittest
 from native_debugger_names_fixture import model_source
 
 SESSION = r'''
-typedef struct {NativeAssembly *assembly; gboolean stopped; void *window;} NativeDebug;
+typedef struct {NativeAssembly *assembly; gboolean stopped; void *window; char *selected_thread, *selected_frame;} NativeDebug;
 '''
 STUBS = r'''
 extern int g_queue_is_empty(GQueue *);

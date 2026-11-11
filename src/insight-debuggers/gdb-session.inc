@@ -99,6 +99,7 @@ typedef struct {
 } NativeDebug;
 
 static void native_assembly_prepare(NativeDebug *session, gchar *request, const gchar *expression);
+static void native_assembly_context(NativeDebug *session);
 static void native_assembly_console(NativeDebug *session, const gchar *line);
 static void native_assembly_free(NativeAssembly *assembly);
 static gboolean native_assembly_next(NativeDebug *session);
@@ -148,6 +149,7 @@ static gboolean native_context_id(const gchar *value);
 static void native_debug_update(NativeDebug *session)
 {
     native_memory_sync(session);
+    native_assembly_context(session);
     gboolean idle = session->ready && !session->pending && !session->writing &&
         (!session->assembly || !session->assembly->active);
     const gchar *state = insight_tr(!session->ready ? "Starting or disconnected" :

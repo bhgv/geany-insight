@@ -382,7 +382,9 @@ Open **Names, frame offsets and data types**:
   references through equivalent register values at this stop.
 - **Typed data…**: enter `&object`, `packet` and a real C/C++ type such as
   `struct Packet`. GDB supplies sizes and member offsets, including nested
-  aggregates; addresses inside a field display `packet.field+offset`.
+  aggregates; addresses inside a field display `packet.field+offset`. To bind a
+  stack structure, use `(char*)$fp-0x20` (or another base register) and set its
+  function scope. Out-of-scope bindings are skipped rather than applied to another frame.
 - **Edit name…** and **Delete name** change the selected rule. Adding the same
   rule identity again replaces its name. Manual names take priority over automatic
   names; a more specific field takes priority over its enclosing structure.
@@ -400,7 +402,8 @@ For a different function, select its frame first to resolve that function's loca
 
 Global names also annotate pointers in locals, value trees, watches, watch graphs, source
 hover tooltips and memory addresses. Raw values and program bytes do not change.
-Names are cleared on execution and resolved again on the next read. **Save names
+Names are cleared on execution and resolved again on the next read. Switching
+threads/frames drops local resolutions while retaining global names in the same process. **Save names
 in debugger profile** preserves manual rules in the existing per-project/executable
 profile; temporary addresses and automatically discovered names are not persisted.
 

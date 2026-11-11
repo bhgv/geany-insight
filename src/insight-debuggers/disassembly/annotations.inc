@@ -208,7 +208,7 @@ static gchar *native_name_addresses(NativeDebug *session, const gchar *text)
             gchar *token = g_strndup(p, end - p);
             guint64 address = 0;
             const NativeNamedRange *range = native_assembly_number(token, &address) ?
-                native_name_lookup(assembly, address, NULL, TRUE) : NULL;
+                native_name_lookup(assembly, address, assembly->function, FALSE) : NULL;
             g_string_append(output, token);
             if (range)
             {

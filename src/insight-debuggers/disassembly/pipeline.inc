@@ -22,6 +22,8 @@ static void native_assembly_free(NativeAssembly *assembly)
     g_free(assembly->request);
     g_free(assembly->last_error);
     g_free(assembly->request_expression);
+    g_free(assembly->context_thread);
+    g_free(assembly->context_frame);
     g_free(assembly);
 }
 
@@ -31,11 +33,15 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
 {
     NativeAssembly *assembly = session->assembly;
     assembly->active = TRUE;
+    g_free(assembly->context_thread);
+    g_free(assembly->context_frame);
+    assembly->context_thread = g_strdup(session->selected_thread);
+    assembly->context_frame = g_strdup(session->selected_frame);
     assembly->request = request;
     assembly->span = 128;
     g_free(assembly->request_expression);
     assembly->request_expression = g_strdup(expression);
-    assembly->frame_valid = FALSE;
+    assembly->temporary_valid = FALSE;
     assembly->collected = assembly->unresolved = 0;
     g_clear_pointer(&assembly->last_error, g_free);
     g_ptr_array_set_size(assembly->ranges, 0);
@@ -55,29 +61,7 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
         g_free(expression);
     }
     native_assembly_queue(assembly, g_strdup("-stack-list-variables --no-values"), 3, NULL, NULL, NULL, NULL, 0, FALSE);
-    for (guint i = 0; i < assembly->rules->len; i++)
-    {
-        NativeNameRule *rule = assembly->rules->pdata[i];
-        if (rule->kind == 1)
-        {
-            NativeNamedRange *range = g_new0(NativeNamedRange, 1);
-            range->frame = range->manual = TRUE;
-            range->name = g_strdup(rule->name);
-            range->scope = g_strdup(rule->scope);
-            range->base = g_strdup(rule->type);
-            native_name_offset(rule->anchor, &range->offset);
-            g_ptr_array_add(assembly->ranges, range);
-        }
-        else
-        {
-            gchar *expression = g_strdup_printf("*((%s*)(%s))", rule->kind == 2 ? rule->type : "char", rule->anchor);
-            native_assembly_range_request(assembly, expression, rule->name, "", TRUE);
-            if (rule->kind == 2)
-                native_assembly_queue(assembly, native_assembly_expression("-var-create - *", expression),
-                    6, NULL, rule->name, "", NULL, 0, TRUE);
-            g_free(expression);
-        }
-    }
+
 }
 
 /* EN: Send the next owned work item for session; TRUE keeps the normal request scheduler behind this bounded pipeline.

@@ -30,8 +30,9 @@ typedef struct
     GQueue work;
     NativeAssemblyWork *pending;
     gchar *record, *function, *request, *last_error, *request_expression;
-    guint64 frame_pointer, temporary_address;
-    gboolean frame_valid, active;
+    gchar *context_thread, *context_frame;
+    guint64 temporary_address;
+    gboolean active;
     GPtrArray *objects, *register_names;
     GHashTable *registers;
     guint collected, unresolved, span;

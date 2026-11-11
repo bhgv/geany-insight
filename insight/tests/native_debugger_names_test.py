@@ -122,12 +122,37 @@ int main(int argc, char **argv)
     rule->scope = g_strdup("worker");
     assert(native_name_rule_valid(rule));
     native_name_rule_replace(&assembly, rule);
+    NativeNameRule *typed = g_new0(NativeNameRule, 1);
+    typed->kind = 2;
+    typed->anchor = g_strdup("(char*)$fp-0x20");
+    typed->name = g_strdup("stack_packet");
+    typed->type = g_strdup("struct Packet");
+    typed->scope = g_strdup("worker");
+    assert(native_name_rule_valid(typed));
+    native_name_rule_replace(&assembly, typed);
+    assembly.function = g_strdup("other_function");
+    native_assembly_user_rules(&assembly);
+    assert(!assembly.work.length);
+    g_free(assembly.function);
+    assembly.function = g_strdup("worker");
+    native_assembly_user_rules(&assembly);
+    assert(assembly.work.length == 3);
+    for (NativeAssemblyWork *item; (item = g_queue_pop_head(&assembly.work));)
+    {
+        assert(!strcmp(item->scope, "worker"));
+        native_assembly_work_free(item);
+    }
+    g_free(assembly.function);
+    assembly.function = NULL;
     GKeyFile *profile = g_key_file_new();
     native_name_profile_store(&session, profile);
     GError *error = NULL;
     assert(native_name_profile_validate(profile, &error));
     NativeNameRule *loaded = native_name_rule_read(profile, 0);
     assert(loaded && !strcmp(loaded->name, "argument"));
+    native_name_rule_free(loaded);
+    loaded = native_name_rule_read(profile, 1);
+    assert(loaded && loaded->kind == 2 && !strcmp(loaded->scope, "worker"));
     native_name_rule_free(loaded);
     g_key_file_set_string(profile, "assembly-name-0", "scope", "");
     assert(!native_name_profile_validate(profile, &error));

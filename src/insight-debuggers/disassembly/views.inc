@@ -32,6 +32,35 @@ static void native_name_refresh_views(NativeDebug *session)
     }
 }
 
+/* EN: Drop function-local resolutions when session changes thread/frame; global names remain usable in this process.
+ * RU: Сбрасывает локальные разрешения при смене потока/кадра session; глобальные имена остаются действующими в процессе. */
+static void native_assembly_context(NativeDebug *session)
+{
+    NativeAssembly *assembly = session->assembly;
+    if (!assembly || assembly->active ||
+        (!assembly->function && !assembly->ranges->len) ||
+        (!g_strcmp0(assembly->context_thread, session->selected_thread) &&
+         !g_strcmp0(assembly->context_frame, session->selected_frame)))
+        return;
+    for (guint i = 0; i < assembly->ranges->len;)
+    {
+        NativeNamedRange *range = assembly->ranges->pdata[i];
+        if (range->frame || (range->scope && *range->scope))
+            g_ptr_array_remove_index(assembly->ranges, i);
+        else
+            i++;
+    }
+    g_hash_table_remove_all(assembly->registers);
+    g_clear_pointer(&assembly->function, g_free);
+    g_free(assembly->context_thread);
+    g_free(assembly->context_frame);
+    assembly->context_thread = g_strdup(session->selected_thread);
+    assembly->context_frame = g_strdup(session->selected_frame);
+    gtk_label_set_text(GTK_LABEL(assembly->status),
+        insight_tr("Previous instruction snapshot. Pause and read again to resolve names in the new context."));
+    native_name_refresh_views(session);
+}
+
 /* EN: Display the completed disassembly of session and refresh other address views, keeping final errors visible.
  * RU: Показывает готовый дизассемблер session и обновляет адреса в других представлениях, сохраняя видимость ошибок. */
 static void native_assembly_finish(NativeDebug *session)
