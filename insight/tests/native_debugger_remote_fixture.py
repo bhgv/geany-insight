@@ -90,9 +90,9 @@ def main():
                 for mode in (2, 1):
                     attach_process = None
                     if mode == 2:
-                        # EN: An independently started inferior permits a real PID attach under Linux Yama.
-                        # RU: Независимо запущенный процесс позволяет проверить подключение по PID при Linux Yama.
-                        attach_process = subprocess.Popen([str(executable)])
+                        # EN: Isolate the inferior process group for gdbserver SIGINT; permit PID attach under Linux Yama.
+                        # RU: Изолирует группу процесса для SIGINT gdbserver; разрешает подключение при Linux Yama.
+                        attach_process = subprocess.Popen([str(executable)], start_new_session=True)
                         children.append(attach_process)
                         for _ in range(100):
                             if pid_file.exists() and str(attach_process.pid) in pid_file.read_text().splitlines():
