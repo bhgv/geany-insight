@@ -4,7 +4,7 @@
 
 typedef enum {
     NATIVE_RUN, NATIVE_CONTINUE, NATIVE_INTO, NATIVE_OVER, NATIVE_OUT,
-    NATIVE_PAUSE, NATIVE_STACK, NATIVE_LOCALS, NATIVE_ACTION_COUNT
+    NATIVE_PAUSE, NATIVE_STACK, NATIVE_LOCALS, NATIVE_STOP, NATIVE_RESTART, NATIVE_ACTION_COUNT
 } NativeDebugAction;
 
 typedef struct {
@@ -27,6 +27,10 @@ typedef struct {
     GPtrArray *expressions, *locals;
     GtkListStore *local_rows, *point_rows, *stack_rows;
     GtkWidget *threads, *stack;
+    GtkWidget *launch_args, *launch_directory, *launch_status, *point_controls, *points_view;
+    GQueue launch_commands;
+    gboolean stop_requested, kill_pending, points_needed, points_pending, console_pending;
+    GPtrArray *point_markers, *stop_markers;
     NativeContextRequest context_pending;
     GtkTreeStore *all_stack_rows;
     GtkWidget *all_stacks_page, *all_stacks_view, *all_stacks_status;
@@ -49,10 +53,13 @@ typedef struct {
     gboolean resume;
     GHashTable *editor_points;
     gchar *editor_point_pending;
-    gboolean editor_point_removing;
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
+static void native_target_clear(NativeDebug *session);
+static gchar *native_launch_next(NativeDebug *session);
+static void native_source_stopped(NativeDebug *session);
+static void native_debug_send(GtkWidget *dialog, const gchar *command);
 static void native_all_stacks_reply(NativeDebug *session, const gchar *record);
 static gboolean native_context_id(const gchar *value);
 
@@ -67,7 +74,13 @@ static void native_debug_update(NativeDebug *session)
     for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
         gtk_widget_set_sensitive(session->buttons[i], idle &&
             (i == NATIVE_PAUSE ? session->running :
-             i == NATIVE_RUN ? !session->running : session->stopped && !session->running));
+             i == NATIVE_STOP ? session->running || session->stopped :
+             i == NATIVE_RESTART ? TRUE :
+             i == NATIVE_RUN ? !session->running && !session->stopped :
+                              session->stopped && !session->running));
+    gtk_widget_set_sensitive(session->launch_args, idle && !session->running);
+    gtk_widget_set_sensitive(session->launch_directory, idle && !session->running);
+    gtk_widget_set_sensitive(session->point_controls, idle && !session->running);
     gtk_widget_set_sensitive(session->threads, idle && session->stopped);
     gtk_widget_set_sensitive(session->stack, idle && session->stopped);
     if (session->all_stacks_view)
@@ -188,6 +201,9 @@ static void native_debug_free(gpointer data)
     g_ptr_array_unref(session->locals);
     g_object_unref(session->local_rows);
     g_object_unref(session->point_rows);
+    insight_queue_clear_full(&session->launch_commands, g_free);
+    g_ptr_array_unref(session->point_markers);
+    g_ptr_array_unref(session->stop_markers);
     g_object_unref(session->stack_rows);
     g_object_unref(session->all_stack_rows);
     g_ptr_array_unref(session->thread_ids);
@@ -214,6 +230,8 @@ static void native_debug_close(GtkWidget *dialog, gpointer data)
     NativeDebug *session = data;
     (void)dialog;
     session->closed = TRUE;
+    g_ptr_array_set_size(session->stop_markers, 0);
+    g_ptr_array_set_size(session->point_markers, 0);
     g_cancellable_cancel(session->cancel);
     g_subprocess_force_exit(session->process);
 }
@@ -224,7 +242,23 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command);
  * RU: Отправляет следующую команду session из dialog, когда GDB свободен. */
 static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
 {
-    if (session->pending || session->writing || !session->ready || !session->stopped)
+    if (session->pending || session->writing || !session->ready || session->running)
+        return;
+    gchar *launch = native_launch_next(session);
+    if (launch)
+    {
+        native_debug_send(dialog, launch);
+        g_free(launch);
+        return;
+    }
+    if (session->points_needed)
+    {
+        session->points_needed = FALSE;
+        session->points_pending = TRUE;
+        native_debug_send(dialog, "-break-list");
+        return;
+    }
+    if (!session->stopped)
         return;
     if (session->resume)
     {

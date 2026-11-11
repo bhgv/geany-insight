@@ -32,7 +32,8 @@ on:
       - 'src/insight-waveforms/**'
       - 'src/insight-workbench.c'
       - 'src/insight-debuggers/**'
-      - 'insight/tests/native_debugger_models_test.py'
+      - 'insight/tests/native_debugger*.py'
+      - 'insight/tests/native_debugger_compile_fixture.c'
       - 'insight/desktop/slang_completion.c'
       - 'external/slang-compat/**'
       - 'insight/tests/verilog_debugger_gui_test.c'
@@ -65,7 +66,10 @@ jobs:
             meson ninja-build pkg-config python3-docutils xauth xvfb zlib1g-dev
       - name: Check native debugger thread models and GDB context
         if: runner.os == 'Linux'
-        run: python3 insight/tests/native_debugger_models_test.py
+        run: |
+          python3 insight/tests/native_debugger_models_test.py
+          python3 insight/tests/native_debugger_controls_test.py
+          python3 insight/tests/native_debugger_compile_test.py
       - name: Build and install on Linux
         id: linux_build
         if: runner.os == 'Linux'

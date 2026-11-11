@@ -3172,3 +3172,21 @@ Open this page while paused to collect all thread stacks.	Откройте эт�
 Stacks at the current stop (up to 64 threads, 64 frames each).	Стеки на текущей остановке (до 64 потоков, по 64 кадра).
 Previous stop; pause to refresh thread stacks.	Предыдущая остановка; приостановите выполнение для обновления стеков.
 Collecting thread stacks…	Получение стеков потоков…
+Launch settings	Настройки запуска
+Program arguments	Аргументы программы
+Arguments; quote values containing spaces	Аргументы; значения с пробелами заключайте в кавычки
+Settings apply on Run or Restart. Breakpoints and watches are kept.	Настройки применяются при запуске или перезапуске. Точки и наблюдения сохраняются.
+Choose an existing absolute working directory.	Укажите существующий рабочий каталог с абсолютным путём.
+Launch settings accepted.	Настройки запуска приняты.
+Breakpoint condition	Условие точки останова
+Ignore first hits	Пропуск первых попаданий
+C/C++ expression; leave empty for an unconditional breakpoint.	Выражение C/C++; оставьте поле пустым для безусловной точки.
+Number of hits to skip before stopping (zero stops on the next hit).	Сколько попаданий пропустить перед остановкой (ноль — остановиться при следующем попадании).
+Enter a nonnegative whole number.	Введите целое неотрицательное число.
+Enable / Disable	Включить / выключить
+Delete Breakpoint	Удалить точку останова
+Source breakpoint updated.	Точка останова обновлена.
+Hit count	Число попаданий
+Restart	Перезапустить
+Executable	Исполняемый файл
+C/C++ breakpoints	Точки останова C/C++

@@ -238,6 +238,9 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         g_free(path);
         g_free(line);
     }
+    if ((request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_STACK) &&
+        session->stop_file && !session->stop_requested)
+        native_source_stopped(session);
     if (request == NATIVE_CONTEXT_SELECT_FRAME)
         g_clear_pointer(&session->requested_frame, g_free);
     if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_SELECT_THREAD)

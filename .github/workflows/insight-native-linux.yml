@@ -247,7 +247,8 @@ on:
       - insight/tests/editor_build_driver_test.py
       - insight/tests/c_operator_tokens_test.py
       - insight/tests/hdl_instance_models_test.py
-      - insight/tests/native_debugger_models_test.py
+      - insight/tests/native_debugger*.py
+      - insight/tests/native_debugger_compile_fixture.c
       - src/insight-debuggers/**
       - meson.build
       - tests/meson.build
@@ -285,6 +286,8 @@ jobs:
           python3 insight/tests/c_operator_tokens_test.py
           python3 insight/tests/hdl_instance_models_test.py
           python3 insight/tests/native_debugger_models_test.py
+          python3 insight/tests/native_debugger_controls_test.py
+          python3 insight/tests/native_debugger_compile_test.py
           if meson setup _missing-internal -Dclang-bootstrap=false -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
             echo 'Default configuration silently used system Clang'
             exit 1

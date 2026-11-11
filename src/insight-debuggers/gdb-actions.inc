@@ -2,85 +2,6 @@
 /* EN: GDB events, breakpoints and user actions.
  * RU: События GDB, точки останова и действия пользователя. */
 
-/* EN: Toggle filename:line using GDB's breakpoint identifier once insertion succeeds.
- * RU: Переключает точку filename:line по идентификатору, который GDB вернул после вставки. */
-static void native_debug_toggle(const gchar *filename, guint line, gpointer data)
-{
-    GtkWidget *dialog = data;
-    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
-    if (session->pending || session->writing || session->editor_point_pending)
-        return;
-
-    gchar *location = g_strdup_printf("%s:%u", filename, line);
-    const gchar *number = g_hash_table_lookup(session->editor_points, location);
-    session->editor_point_removing = number != NULL;
-    session->editor_point_pending = location;
-    gchar *escaped = g_strescape(location, NULL);
-    gchar *command = number ? g_strdup_printf("-break-delete %s", number)
-                            : g_strdup_printf("-break-insert -- \"%s\"", escaped);
-    native_debug_send(dialog, command);
-    g_free(command);
-    g_free(escaped);
-}
-
-/* EN: Fill the native breakpoint list with locations confirmed by GDB in session.
- * RU: Заполняет список точек координатами, которые GDB подтвердил для session. */
-static void native_debug_refresh_points(NativeDebug *session)
-{
-    gtk_list_store_clear(session->point_rows);
-    GList *keys = g_list_sort(g_hash_table_get_keys(session->editor_points),
-                              (GCompareFunc)g_strcmp0);
-    for (GList *it = keys; it; it = it->next)
-        gtk_list_store_insert_with_values(session->point_rows, NULL, -1,
-            0, it->data, 1, g_hash_table_lookup(session->editor_points, it->data), -1);
-    g_list_free(keys);
-}
-
-/* EN: Apply a GDB MI reply to the pending editor breakpoint in session.
- * RU: Применяет ответ GDB MI к ожидающей точке редактора в session. */
-static void native_debug_point_reply(NativeDebug *session, const gchar *record)
-{
-    if (g_str_has_prefix(record, "=breakpoint-deleted,"))
-    {
-        gchar *number = native_debug_field(record, "id");
-        GHashTableIter iter;
-        gpointer value;
-        g_hash_table_iter_init(&iter, session->editor_points);
-        while (number && g_hash_table_iter_next(&iter, NULL, &value))
-            if (!strcmp(number, value))
-                g_hash_table_iter_remove(&iter);
-        g_free(number);
-        native_debug_refresh_points(session);
-    }
-    if (!session->editor_point_pending || *record != '^')
-        return;
-
-    gchar *location = g_steal_pointer(&session->editor_point_pending);
-    gboolean success = g_str_has_prefix(record, "^done");
-    if (success && session->editor_point_removing)
-        g_hash_table_remove(session->editor_points, location);
-    else if (success)
-    {
-        gchar *number = native_debug_field(record, "number");
-        success = number && *number && strspn(number, "0123456789") == strlen(number);
-        if (success)
-            g_hash_table_replace(session->editor_points, g_strdup(location), number);
-        else
-            g_free(number);
-    }
-
-    if (success)
-        native_debug_refresh_points(session);
-    gchar *detail = success ? NULL : native_debug_field(record, "msg");
-    const gchar *message = !success ? "Could not change the source breakpoint."
-                          : session->editor_point_removing ? "Source breakpoint removed."
-                                                          : "Source breakpoint added.";
-    ui_set_statusbar(FALSE, "%s %s%s%s", insight_tr(message), location,
-                     detail ? " — " : "", detail ? detail : "");
-    g_free(detail);
-    g_free(location);
-}
-
 /* EN: Read stop coordinates from record and notify observers of session.
  * RU: Читает позицию остановки из record и уведомляет наблюдателей session. */
 static void native_debug_observe(NativeDebug *session, const gchar *record)
@@ -92,7 +13,9 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
     session->stop_line = line && g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL) ?
         (guint)number : 0;
     g_free(line);
-    if (!insight_lua_debug_observer_active(session->observer) ||
+    if (!session->stop_requested)
+        native_source_stopped(session);
+    if (session->stop_requested || !insight_lua_debug_observer_active(session->observer) ||
         !g_str_has_prefix(record, "*stopped,reason=\"breakpoint-hit\""))
         return;
 
@@ -138,6 +61,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             session->running = TRUE;
             session->stopped = FALSE;
             session->all_stacks_needed = FALSE;
+            g_ptr_array_set_size(session->stop_markers, 0);
             g_clear_pointer(&session->requested_frame, g_free);
             session->frame_select_needed = FALSE;
         }
@@ -154,14 +78,37 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 session->frame_select_needed = FALSE;
                 session->locals_needed = TRUE;
                 session->threads_needed = session->stack_needed = TRUE;
+                session->points_needed = TRUE;
                 native_debug_observe(session, line);
             }
         }
+        if (g_str_has_prefix(line, "=thread-group-exited,") ||
+            g_str_has_prefix(line, "*stopped,reason=\"exited"))
+            native_target_clear(session);
         if (*line == '^')
         {
+            native_lifecycle_reply(session, line);
+            if (g_str_has_prefix(line, "^error"))
+            {
+                gchar *message = native_debug_field(line, "msg");
+                if (message)
+                    ui_set_statusbar(TRUE, "%s", message);
+                g_free(message);
+            }
             session->pending = FALSE;
             session->ready = !g_str_has_prefix(line, "^exit");
             session->inspecting = FALSE;
+            if (session->console_pending)
+            {
+                session->console_pending = FALSE;
+                if (session->stopped)
+                {
+                    g_clear_pointer(&session->selected_thread, g_free);
+                    g_clear_pointer(&session->selected_frame, g_free);
+                    session->threads_needed = session->stack_needed = session->locals_needed = TRUE;
+                    session->watch_next = 0;
+                }
+            }
             if (session->context_pending != NATIVE_CONTEXT_NONE)
                 native_context_reply(session, line);
             if (session->locals_pending)
@@ -233,6 +180,17 @@ static void native_debug_clicked(GtkButton *button, gpointer data)
     guint action = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "native-debug-action"));
     GtkWidget *dialog = data;
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    if (action == NATIVE_STOP || action == NATIVE_RESTART)
+    {
+        native_lifecycle_request(dialog, action == NATIVE_RESTART);
+        return;
+    }
+    if (action == NATIVE_RUN)
+    {
+        if (native_launch_prepare(dialog))
+            native_debug_resume(dialog, session);
+        return;
+    }
     if (action == NATIVE_STACK || action == NATIVE_LOCALS)
     {
         session->inspecting = TRUE;
@@ -251,6 +209,9 @@ static void native_debug_command(GtkEntry *entry, gpointer data)
         return;
     gchar *escaped = g_strescape(text, NULL);
     gchar *command = g_strdup_printf("-interpreter-exec console \"%s\"", escaped);
+    NativeDebug *session = g_object_get_data(G_OBJECT(data), "native-debug");
+    session->points_needed = TRUE;
+    session->console_pending = TRUE;
     native_debug_send(GTK_WIDGET(data), command);
     gtk_entry_set_text(entry, "");
     g_free(command);
@@ -268,7 +229,7 @@ static void native_debug_breakpoint(GtkButton *button, gpointer data)
     if (!*location)
         return;
     gchar *escaped = g_strescape(location, NULL);
-    gchar *command = g_strdup_printf("-break-insert -- \"%s\"", escaped);
+    gchar *command = g_strdup_printf("-break-insert -f -- \"%s\"", escaped);
     native_debug_send(dialog, command);
     g_free(command);
     g_free(escaped);

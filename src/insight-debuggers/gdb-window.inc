@@ -29,6 +29,11 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     insight_panel_help_attach(box, "native-debugger.md");
     NativeDebug *session = g_new0(NativeDebug, 1);
+    session->point_markers = g_ptr_array_new_with_free_func(native_marker_free);
+    session->stop_markers = g_ptr_array_new_with_free_func(native_marker_free);
+    session->points_needed = TRUE;
+    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set confirm off"));
+    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell off"));
     session->editor_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     session->process = process;
     session->output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(process));
@@ -36,21 +41,23 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     session->status = gtk_label_new(NULL);
     gtk_box_pack_start(GTK_BOX(box), session->status, FALSE, FALSE, 4);
 
-    GtkWidget *toolbar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+    GtkWidget *toolbar = gtk_flow_box_new();
+    gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(toolbar), GTK_SELECTION_NONE);
+    gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(toolbar), 6);
     gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 4);
     const gchar *labels[] = {"Run", "Continue", "Step Into", "Step Over", "Step Out",
-                             "Pause", "Stack", "Locals"};
+                             "Pause", "Stack", "Locals", "Stop", "Restart"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         GtkWidget *button = gtk_button_new_with_label(insight_tr(labels[i]));
         session->buttons[i] = button;
         g_object_set_data(G_OBJECT(button), "native-debug-action", GUINT_TO_POINTER(i));
         g_signal_connect(button, "clicked", G_CALLBACK(native_debug_clicked), dialog);
-        gtk_box_pack_start(GTK_BOX(toolbar), button, FALSE, FALSE, 0);
+        gtk_container_add(GTK_CONTAINER(toolbar), button);
     }
     session->source = gtk_button_new_with_label(insight_tr("Open Source"));
     g_signal_connect(session->source, "clicked", G_CALLBACK(native_debug_source), session);
-    gtk_box_pack_start(GTK_BOX(toolbar), session->source, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(toolbar), session->source);
     GtkWidget *scripts = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     session->location = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(session->location), 512);
@@ -68,6 +75,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_box_pack_start(GTK_BOX(box), scripts, FALSE, FALSE, 4);
     GtkWidget *tabs = gtk_notebook_new();
     session->tabs = tabs;
+    gtk_notebook_set_scrollable(GTK_NOTEBOOK(tabs), TRUE);
     session->expressions = g_ptr_array_new_with_free_func(native_watch_free);
     session->locals = g_ptr_array_new_with_free_func(native_watch_free);
     session->local_rows = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
@@ -119,16 +127,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     session->observer_log = debug_create_view(log, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), log, gtk_label_new(insight_tr("Observer log")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), local_scroll, gtk_label_new(insight_tr("Variables")));
-    session->point_rows = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_STRING);
-    GtkWidget *points = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->point_rows));
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1,
-        insight_tr("Function or file:line"), gtk_cell_renderer_text_new(), "text", 0, NULL);
-    gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(points), -1,
-        insight_tr("Number"), gtk_cell_renderer_text_new(), "text", 1, NULL);
-    GtkWidget *point_scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_container_add(GTK_CONTAINER(point_scroll), points);
-    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), point_scroll,
-                             gtk_label_new(insight_tr("Source breakpoints")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_points_widget(session, dialog),
+                             gtk_label_new(insight_tr("C/C++ breakpoints")));
     GtkWidget *context = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     session->threads = gtk_combo_box_text_new();
     gtk_box_pack_start(GTK_BOX(context), session->threads, FALSE, FALSE, 0);
@@ -153,6 +153,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
                              gtk_label_new(insight_tr("Threads and stack")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_all_stacks_widget(session, dialog),
                              gtk_label_new(insight_tr("All thread stacks")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_launch_widget(session, target),
+                             gtk_label_new(insight_tr("Launch settings")));
     g_signal_connect(session->threads, "changed", G_CALLBACK(native_select_thread), dialog);
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), "changed",
                      G_CALLBACK(native_select_frame), dialog);
@@ -170,11 +172,14 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
         [INSIGHT_DEBUG_CONTINUE] = session->buttons[NATIVE_CONTINUE],
         [INSIGHT_DEBUG_INTO] = session->buttons[NATIVE_INTO],
         [INSIGHT_DEBUG_OVER] = session->buttons[NATIVE_OVER],
-        [INSIGHT_DEBUG_OUT] = session->buttons[NATIVE_OUT]
+        [INSIGHT_DEBUG_OUT] = session->buttons[NATIVE_OUT],
+        [INSIGHT_DEBUG_STOP] = session->buttons[NATIVE_STOP]
     };
     insight_debug_register(dialog, session->breakpoint, native_debug_toggle, dialog, debug_commands);
     g_signal_connect(dialog, "destroy", G_CALLBACK(native_debug_close), session);
     g_signal_connect_swapped(dialog, "response", G_CALLBACK(gtk_widget_destroy), dialog);
+    g_signal_connect_object(geany_object, "document-open", G_CALLBACK(native_source_document), dialog, G_CONNECT_AFTER);
+    g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(native_source_document), dialog, G_CONNECT_AFTER);
     g_signal_connect(tabs, "switch-page", G_CALLBACK(native_all_stacks_page), dialog);
     gtk_widget_show_all(dialog);
 

@@ -1,10 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* EN: Exercise the native GDB window, variables, watches and thread stack tree.
  * RU: Проверяет окно GDB, переменные, наблюдения и дерево стеков потоков. */
+#include <gtk/gtk.h>
 #include "geany.h"
+#include "Scintilla.h"
+#include "ScintillaWidget.h"
+#include "../desktop/glib_compat.h"
 #include "main.h"
 #include "document.h"
 #include "editor.h"
+#include "sciwrappers.h"
 #include <glib/gstdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,6 +105,58 @@ static gboolean click(GtkWidget *window, const gchar *label)
     return TRUE;
 }
 
+/* EN: Check the first breakpoint's column in window and select its row for editing.
+ * RU: Проверяет column первой точки окна window и выбирает строку для редактирования. */
+static gboolean point_column(GtkWidget *window, gint column, const gchar *expected)
+{
+    GtkWidget *tree = find(window, "insight-gdb-breakpoints");
+    if (!GTK_IS_TREE_VIEW(tree))
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+    GtkTreeIter row;
+    if (!gtk_tree_model_get_iter_first(model, &row))
+        return FALSE;
+    gchar *value = NULL;
+    gtk_tree_model_get(model, &row, column, &value, -1);
+    gboolean matches = !g_strcmp0(value, expected);
+    g_free(value);
+    gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), &row);
+    return matches;
+}
+
+/* EN: Fill the modal breakpoint rule named by data, or wait until it opens.
+ * RU: Заполняет модальное правило точки с названием data либо ждёт открытия диалога. */
+static gboolean point_rule(gpointer data)
+{
+    const gchar *title = data;
+    GtkWidget *window = window_named(title);
+    if (!window)
+        return G_SOURCE_CONTINUE;
+    GtkWidget *entry = find(window, "insight-gdb-breakpoint-rule");
+    if (!entry)
+        return G_SOURCE_CONTINUE;
+    gtk_entry_set_text(GTK_ENTRY(entry), !strcmp(title, "Breakpoint condition") ? "1" : "0");
+    gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
+/* EN: Verify visible native breakpoint and stopped-line markers in the current source.
+ * RU: Проверяет метку точки и подсветку остановки в текущем исходнике. */
+static gboolean source_markers(void)
+{
+    GeanyDocument *document = document_get_current();
+    if (!DOC_VALID(document))
+        return FALSE;
+    gboolean point = FALSE, stop = FALSE;
+    for (gint line = 0; line < sci_get_line_count(document->editor->sci); line++)
+    {
+        guint marks = SSM(document->editor->sci, SCI_MARKERGET, line, 0);
+        point |= (marks & (1u << 18)) != 0;
+        stop |= (marks & (1u << 19)) != 0;
+    }
+    return point && stop;
+}
+
 static gboolean choose(gpointer data)
 {
     const gchar *filename = data;
@@ -193,8 +250,12 @@ static gboolean drive(gpointer data)
     else if (phase == 6 && gtk_notebook_get_current_page(GTK_NOTEBOOK(tabs)) == 3 &&
              find(gtk_notebook_get_nth_page(GTK_NOTEBOOK(tabs), 3), "marker = 41"))
     {
-        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs),
-                                     gtk_notebook_get_n_pages(GTK_NOTEBOOK(tabs)) - 1);
+        GtkWidget *page = find(window, "insight-gdb-all-thread-stacks");
+        while (page && gtk_widget_get_parent(page) != tabs)
+            page = gtk_widget_get_parent(page);
+        if (!page)
+            return G_SOURCE_CONTINUE;
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
         phase++;
     }
     else if (phase == 7)
@@ -218,10 +279,44 @@ static gboolean drive(gpointer data)
         gtk_tree_path_free(path);
         phase++;
     }
-    else if (phase == 8 && has_local(window, "marker", "41") &&
-             gtk_widget_is_sensitive(find(window, "insight-gdb-all-thread-stacks")))
+    else if (phase == 8 && has_local(window, "marker", "41") && source_markers() &&
+             point_column(window, 2, "y") && click(window, "Enable / Disable"))
+        phase++;
+    else if (phase == 9 && point_column(window, 2, "n") && click(window, "Enable / Disable"))
+        phase++;
+    else if (phase == 10 && point_column(window, 2, "y"))
     {
-        g_print("C/C++ GTK: GDB breakpoint, observer, watches, locals and thread stack navigation passed.\n");
+        GtkWidget *button = find(window, "Breakpoint condition");
+        if (!button || !gtk_widget_is_sensitive(button))
+            return G_SOURCE_CONTINUE;
+        phase++;
+        g_timeout_add(100, point_rule, "Breakpoint condition");
+        gtk_button_clicked(GTK_BUTTON(button));
+    }
+    else if (phase == 11 && point_column(window, 3, "1"))
+    {
+        GtkWidget *button = find(window, "Ignore first hits");
+        if (!button || !gtk_widget_is_sensitive(button))
+            return G_SOURCE_CONTINUE;
+        phase++;
+        g_timeout_add(100, point_rule, "Ignore first hits");
+        gtk_button_clicked(GTK_BUTTON(button));
+    }
+    else if (phase == 12 && point_column(window, 3, "1") && click(window, "Stop"))
+        phase++;
+    else if (phase == 13)
+    {
+        GtkWidget *run = find(window, "Run");
+        if (run && gtk_widget_is_sensitive(run) && !has_local(window, "marker", "41") &&
+            click(window, "Restart"))
+            phase++;
+    }
+    else if (phase == 14 && point_column(window, 3, "1") && click(window, "Step Over"))
+        phase++;
+    else if (phase == 15 && has_local(window, "marker", "41") &&
+             source_markers() && point_column(window, 3, "1"))
+    {
+        g_print("C/C++ GTK: GDB frames, markers, breakpoint edits, stop and restart passed.\n");
         passed = TRUE;
         gtk_widget_destroy(window);
         gtk_main_quit();
@@ -230,6 +325,8 @@ static gboolean drive(gpointer data)
     return G_SOURCE_CONTINUE;
 }
 
+/* EN: Run the editor GUI scenario using target, observer and profile arguments from argv.
+ * RU: Запускает сценарий редактора с программой, наблюдателем и профилем из argv. */
 int main(int argc, char **argv)
 {
     if (argc != 4)
@@ -237,9 +334,9 @@ int main(int argc, char **argv)
         g_printerr("Usage: test_insight_native_debugger_gui EXECUTABLE OBSERVER PROFILE\n");
         return 2;
     }
-    target = g_canonicalize_filename(argv[1], NULL);
-    observer = g_canonicalize_filename(argv[2], NULL);
-    gchar *profile = g_canonicalize_filename(argv[3], NULL);
+    target = insight_canonicalize_filename(argv[1], NULL);
+    observer = insight_canonicalize_filename(argv[2], NULL);
+    gchar *profile = insight_canonicalize_filename(argv[3], NULL);
     if (g_mkdir_with_parents(profile, 0700))
         return 1;
     gchar *editor_args[] = {argv[0], "--new-instance", "--no-session", "--no-plugins",

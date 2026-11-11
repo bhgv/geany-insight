@@ -363,11 +363,11 @@ static void simulation_edit_breakpoint(GtkButton *button, gpointer data)
 static void simulation_toggle_editor_point(const gchar *filename, guint line, gpointer data)
 {
     WaveSimulation *run = data;
-    gchar *selected = g_canonicalize_filename(filename, NULL);
+    gchar *selected = insight_canonicalize_filename(filename, NULL);
     const gchar *source = selected;
     for (guint i = 0; run->sources[i]; i++)
     {
-        gchar *candidate = g_canonicalize_filename(run->sources[i], NULL);
+        gchar *candidate = insight_canonicalize_filename(run->sources[i], NULL);
 #ifdef G_OS_WIN32
         gboolean matches = !g_ascii_strcasecmp(candidate, selected);
 #else
