@@ -38,8 +38,51 @@ static gboolean native_assembly_gui_text(GtkWidget *window, const gchar *expecte
     return valid;
 }
 
-/* EN: Advance phases 70..78 through names, profiles, errors and instruction following in window, then resume value tests in tabs.
- * RU: Продвигает фазы 70..78 имён, профилей, ошибок и слежения window, затем возвращает тесты значений в tabs. */
+/* EN: Check that window's production register table reports an actual changed value after the controlled arithmetic step.
+ * RU: Проверяет, что настоящая таблица регистров window отмечает изменение после контролируемого арифметического шага. */
+static gboolean native_assembly_gui_register_changed(GtkWidget *window)
+{
+    GtkWidget *view = find(window, "insight-gdb-registers");
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+        valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *changed = NULL;
+        gtk_tree_model_get(model, &row, 4, &changed, -1);
+        gboolean found = changed && *changed;
+        g_free(changed);
+        if (found)
+            return TRUE;
+    }
+    return FALSE;
+}
+
+/* EN: Select register name in window's actual model for testing watch and memory actions.
+ * RU: Выбирает регистр name в настоящей модели window для проверки наблюдений и памяти. */
+static gboolean native_assembly_gui_select_register(GtkWidget *window, const gchar *name)
+{
+    GtkWidget *view = find(window, "insight-gdb-registers");
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+        valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *value = NULL;
+        gtk_tree_model_get(model, &row, 0, &value, -1);
+        gboolean found = !g_strcmp0(value, name);
+        g_free(value);
+        if (found)
+        {
+            gtk_tree_selection_select_iter(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), &row);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* EN: Advance phases 70..80 through names, profiles, instruction following and register actions in window, then resume value tests in tabs.
+ * RU: Продвигает фазы 70..80 имён, профилей, слежения и регистров window, затем возвращает тесты значений в tabs. */
 static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     static gchar *previous_instruction;
@@ -114,14 +157,27 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
             if (click(window, "Next instruction"))
                 phase = 78;
         }
-        else if (moved)
+        else if (moved && native_assembly_gui_register_changed(window))
         {
             g_clear_pointer(&previous_instruction, g_free);
             gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-follow-instructions")), FALSE);
-            g_print("C/C++ GTK: automatic local fields, manual names, profiles, instruction steps and PC following passed.\n");
-            phase = 16;
+            if (native_assembly_gui_select_register(window, "rbp") && click(window, "Watch selected register"))
+                phase = 79;
         }
         g_free(current);
+    }
+    else if (phase == 79 && find(window, "$rbp =") && click(window, "View register address in memory"))
+        phase = 80;
+    else if (phase == 80)
+    {
+        GtkWidget *memory = find(window, "insight-gdb-memory-bytes");
+        GtkWidget *address = find(window, "insight-gdb-memory-address");
+        if (memory && address && !g_strcmp0(gtk_entry_get_text(GTK_ENTRY(address)), "$rbp") &&
+            gtk_text_buffer_get_char_count(gtk_text_view_get_buffer(GTK_TEXT_VIEW(memory))))
+        {
+            g_print("C/C++ GTK: automatic fields, names, profiles, PC following and register watch/memory passed.\n");
+            phase = 16;
+        }
     }
     return G_SOURCE_CONTINUE;
 }

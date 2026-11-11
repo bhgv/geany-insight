@@ -12,6 +12,11 @@ static void native_target_clear(NativeDebug *session)
         session->remote->interrupt_pending = FALSE;
         session->remote->pause_requested = session->remote->clear_stop_signal = session->remote->release_pending = session->remote->own_continue_pending = FALSE;
     }
+    if (session->assembly && session->assembly->previous_registers)
+    {
+        g_hash_table_remove_all(session->assembly->previous_registers);
+        gtk_list_store_clear(session->assembly->register_rows);
+    }
     session->running = session->stopped = session->resume = FALSE;
     session->stop_requested = FALSE;
     native_values_reset(session);

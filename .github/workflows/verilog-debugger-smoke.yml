@@ -78,6 +78,7 @@ jobs:
           python3 insight/tests/native_debugger_memory_test.py
           python3 insight/tests/native_debugger_disassembly_test.py
           python3 insight/tests/native_debugger_names_test.py
+          python3 insight/tests/native_debugger_registers_test.py
           python3 insight/tests/native_debugger_assembly_pipeline_test.py
           python3 insight/tests/native_debugger_remote_test.py
           python3 insight/tests/native_debugger_profile_test.py

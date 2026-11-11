@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* EN: Show bounded machine instructions and provide paused-only instruction steps.
- * RU: Показывает ограниченный фрагмент машинного кода и пошаговое выполнение инструкций на паузе. */
+/* EN: Show bounded instructions, register snapshots and paused-only machine steps.
+ * RU: Показывает ограниченный машинный код, снимки регистров и машинные шаги на паузе. */
 
 /* EN: Execute button's refresh/step action for session data only while stopped and idle.
  * RU: Выполняет обновление/шаг кнопки button для session data только на паузе без ожидающих команд. */
@@ -86,6 +86,10 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), view);
     gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
+    GtkWidget *registers = gtk_expander_new(insight_tr("Registers at the last instruction read"));
+    gtk_widget_set_name(registers, "insight-gdb-registers-panel");
+    gtk_container_add(GTK_CONTAINER(registers), native_assembly_register_widget(session));
+    gtk_box_pack_start(GTK_BOX(page), registers, FALSE, FALSE, 0);
     GtkWidget *names = gtk_expander_new(insight_tr("Names, frame offsets and data types"));
     gtk_widget_set_name(names, "insight-gdb-name-rules");
     gtk_container_add(GTK_CONTAINER(names), native_name_widget(session));

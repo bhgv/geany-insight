@@ -25,7 +25,8 @@ typedef struct
 typedef struct
 {
     GtkWidget *expression, *status, *text, *rules_view, *page, *follow;
-    GtkListStore *rule_rows;
+    GtkListStore *rule_rows, *register_rows;
+    GtkWidget *register_view;
     GPtrArray *rules, *ranges;
     GQueue work;
     NativeAssemblyWork *pending;
@@ -34,7 +35,8 @@ typedef struct
     guint64 temporary_address;
     gboolean active, visible, follow_needed, follow_enabled;
     GPtrArray *objects, *register_names;
-    GHashTable *registers;
+    GHashTable *registers, *previous_registers;
+    gchar *register_thread, *register_frame;
     guint collected, unresolved, span;
     gboolean temporary_valid;
 } NativeAssembly;

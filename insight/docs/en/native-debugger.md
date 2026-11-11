@@ -414,3 +414,16 @@ the address entry to `$pc`. Disable the checkbox to keep a manual snapshot.
 
 The follow-mode choice is saved with debugger profiles. Older profiles without
 this option preserve the current checkbox setting.
+
+### Register snapshots
+
+Expand **Registers at the last instruction read**. The table uses GDB's register
+names and definition order for the target, showing general-purpose registers in
+hex and unsigned decimal, with resolved address/field names. Click **Register**
+to sort by name. Values changed since the previous read are highlighted in orange;
+comparison restarts when selecting a different thread/frame or restarting a target.
+
+Select a row and use **Watch selected register** to add `$register` to watches,
+or **View register address in memory** to inspect the address it contains. Reads
+and actions use the selected GDB frame. This is the same snapshot as the
+instruction listing: enable follow mode or read again to refresh it.

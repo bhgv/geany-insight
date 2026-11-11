@@ -7,7 +7,7 @@
 <rect x="24" y="56" width="872" height="112" rx="8" fill="#fff" stroke="#6685a3"/>
 <text x="42" y="83" font-size="17">Global / Глобально: &amp;object → packet · type / тип: struct Packet</text>
 <text x="42" y="115" font-size="17">0x4000 → packet · 0x4008 → packet.count · 0x4009 → packet.count+0x1</text>
-<text x="42" y="146" font-size="16">Disassembly · Memory · Locals · Watches · Graph · Tooltips</text>
+<text x="42" y="146" font-size="16">Disassembly / Код · Registers / Регистры · Memory / Память · Locals / Переменные</text>
 <rect x="24" y="187" width="872" height="193" rx="8" fill="#fff" stroke="#6685a3"/>
 <text x="42" y="216" font-size="18">worker() only / Только worker(): frame offset −16 → input</text>
 <g font-family="monospace" font-size="16">
@@ -20,6 +20,6 @@
 <rect x="24" y="398" width="872" height="108" rx="8" fill="#fff" stroke="#6685a3"/>
 <text x="42" y="426" font-size="17">mov eax,0x2a  ; const 0x2a</text>
 <text x="42" y="456" font-size="16">Stop / Остановка → $pc → symbols / имена → fields / поля</text>
-<text x="42" y="484" font-size="15">Save debugger profile: rules persist, runtime addresses are reevaluated.</text>
+<text x="42" y="484" font-size="15">Save profile / Профиль: rules persist / правила; addresses reevaluated / адреса заново</text>
 </g>
 </svg>

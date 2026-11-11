@@ -318,6 +318,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/disassembly/resolve.inc"
 #include "insight-debuggers/disassembly/annotations.inc"
 #include "insight-debuggers/disassembly/symbols.inc"
+#include "insight-debuggers/disassembly/registers-ui.inc"
 #include "insight-debuggers/disassembly/views.inc"
 #include "insight-debuggers/disassembly/names-ui.inc"
 #include "insight-debuggers/disassembly/pipeline.inc"

@@ -17,6 +17,10 @@ static void native_assembly_free(NativeAssembly *assembly)
     if (assembly->register_names)
         g_ptr_array_unref(assembly->register_names);
     g_hash_table_unref(assembly->registers);
+    if (assembly->previous_registers)
+        g_hash_table_unref(assembly->previous_registers);
+    g_free(assembly->register_thread);
+    g_free(assembly->register_frame);
     g_free(assembly->record);
     g_free(assembly->function);
     g_free(assembly->request);

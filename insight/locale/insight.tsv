@@ -3358,3 +3358,10 @@ Instruction snapshot ready. Unresolved name/type queries: %u. %s	Снимок и
 Follow the selected frame at each stop	Следовать за выбранным кадром при каждой остановке
 Following the selected frame's program counter…	Слежение за счётчиком команд выбранного кадра…
 While this page is visible, refresh $pc and names after stops and frame changes. Manual address reads remain available.	Пока страница видна, обновлять $pc и имена после остановок и смены кадра. Ручное чтение адресов остаётся доступным.
+Hex	Hex
+Unsigned value	Беззнаковое значение
+Resolved name / field	Разрешённое имя / поле
+Registers at the last instruction read	Регистры на момент последнего чтения инструкций
+Watch selected register	Наблюдать выбранный регистр
+View register address in memory	Открыть адрес регистра в памяти
+Registers from the last instruction read. Changed values are highlighted within the same thread/frame. Click Register to sort by name.	Регистры последнего чтения инструкций. Изменения выделяются в пределах одного потока/кадра. Нажмите «Регистр» для сортировки по имени.

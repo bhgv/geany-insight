@@ -81,6 +81,7 @@ static void native_assembly_finish(NativeDebug *session)
         g_free(message);
     }
     native_name_refresh_views(session);
+    native_assembly_register_rows(session);
     g_free(error);
     g_free(text);
 }
