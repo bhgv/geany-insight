@@ -63,6 +63,8 @@ static gchar *native_launch_arguments(const gchar *text, GError **error)
 static gboolean native_launch_prepare(GtkWidget *dialog)
 {
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
+    if (native_remote_selected(session))
+        return native_remote_launch(session);
     GError *error = NULL;
     gchar *arguments = native_launch_arguments(
         gtk_entry_get_text(GTK_ENTRY(session->launch_args)), &error);

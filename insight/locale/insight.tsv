@@ -3237,3 +3237,39 @@ Read a valid address before navigating; address overflow is not allowed.	Пер�
 Use &variable for storage, a pointer for its target. Expressions may execute code in the program.	Используйте &variable для хранения переменной, указатель — для его цели. Выражения могут выполнять код программы.
 Pause and read up to 4096 bytes from an address expression.	На паузе прочитайте до 4096 байтов по выражению адреса.
 Memory	Память
+Remote / SSH	Удалённая отладка / SSH
+Local program	Локальная программа
+SSH: existing gdbserver	SSH: работающий gdbserver
+SSH: extended-remote (--multi)	SSH: extended-remote (--multi)
+SSH host / config alias	SSH-хост / псевдоним конфигурации
+SSH login (empty: SSH config)	SSH-логин (пусто: из конфигурации)
+SSH port	Порт SSH
+SSH identity file (optional)	Файл ключа SSH (необязательно)
+SSH config file (optional)	Конфигурация SSH (необязательно)
+gdbserver host as seen by SSH server	Адрес gdbserver с SSH-сервера
+gdbserver port	Порт gdbserver
+Remote executable (--multi Run)	Удалённая программа (Run с --multi)
+Source root recorded in remote build	Корень исходников в удалённой сборке
+Matching local source root	Соответствующий локальный корень
+Local sysroot or target:	Локальный sysroot или target:
+Local executable / debug symbols	Локальная программа / символы отладки
+Connect gdbserver via SSH	Подключить gdbserver через SSH
+Detach and close SSH	Отсоединиться и закрыть SSH
+Start gdbserver on the remote machine first. SSH uses keys/agent or the installed askpass helper.	Сначала запустите gdbserver на удалённой машине. SSH использует ключи/агент или установленный помощник askpass.
+SSH gdbserver connected. Run starts the remote executable.	gdbserver подключён через SSH. Run запускает удалённую программу.
+SSH gdbserver connected. Continue resumes the remote program.	gdbserver подключён через SSH. Продолжить возобновляет удалённую программу.
+Detach failed.	Не удалось отсоединиться.
+Remote connection failed.	Ошибка удалённого подключения.
+Remote disconnected; SSH tunnel closed.	Удалённая отладка отключена; SSH-туннель закрыт.
+Connect in extended-remote mode and specify the remote executable before Run or Restart.	Перед Run или Restart подключитесь в режиме extended-remote и задайте удалённую программу.
+SSH tunnel ended. See the debugger console for authentication or forwarding errors.	SSH-туннель завершён. Ошибки входа или перенаправления приведены в консоли отладчика.
+SSH tunnel ended.	SSH-туннель завершён.
+SSH tunnel ready; connecting GDB…	SSH-туннель готов; подключается GDB…
+SSH connection timed out.	Истекло время ожидания подключения SSH.
+OpenSSH was not found in PATH.	OpenSSH не найден в PATH.
+Invalid SSH endpoint.	Недопустимый адрес SSH.
+Connecting SSH… Use Disconnect to cancel.	Подключение SSH… Для отмены нажмите отсоединение.
+SSH connection cancelled.	Подключение SSH отменено.
+Enter valid SSH/server hosts, existing optional key/config files, and both source roots or neither.	Задайте допустимые адреса SSH/сервера, существующие файлы ключа/конфигурации и оба корня исходников либо ни одного.
+GDB executable (gdb, gdb-multiarch or cross GDB)	Исполняемый файл GDB (gdb, gdb-multiarch или кросс-GDB)
+GDB was not found. Choose an installed GDB executable.	GDB не найден. Выберите установленный исполняемый файл GDB.

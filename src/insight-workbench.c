@@ -294,6 +294,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/scripts/observer-editor.inc"
 #include "insight-debuggers/scripts/window.inc"
 
+#include "insight-debuggers/gdb-remote-state.inc"
 #include "insight-debuggers/gdb-session.inc"
 #include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
@@ -307,6 +308,10 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/gdb-data-actions.inc"
 #include "insight-debuggers/gdb-memory-model.inc"
 #include "insight-debuggers/gdb-memory-ui.inc"
+#include "insight-debuggers/gdb-remote-model.inc"
+#include "insight-debuggers/gdb-remote-process.inc"
+#include "insight-debuggers/gdb-remote-connection.inc"
+#include "insight-debuggers/gdb-remote-ui.inc"
 #include "insight-debuggers/gdb-window.inc"
 
 static GtkWidget *tool_submenu(const gchar *label)

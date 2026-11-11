@@ -93,7 +93,9 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             native_target_clear(session);
         if (*line == '^')
         {
-            quiet = native_memory_reply(session, line);
+            quiet = native_remote_reply(session, line);
+            if (!quiet)
+                quiet = native_memory_reply(session, line);
             if (!quiet)
                 quiet = native_values_reply(session, line);
             if (!quiet)

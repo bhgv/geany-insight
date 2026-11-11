@@ -30,6 +30,7 @@ typedef enum
 } NativeValueRequest;
 
 typedef struct {
+    NativeRemote *remote;
     GSubprocess *process;
     GDataInputStream *output;
     GCancellable *cancel;
@@ -83,6 +84,15 @@ typedef struct {
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
+static void native_remote_drop(NativeDebug *session);
+static void native_remote_update(NativeDebug *session);
+static void native_remote_restore(NativeDebug *session);
+static gboolean native_remote_selected(NativeDebug *session);
+static gboolean native_remote_launch(NativeDebug *session);
+static gchar *native_remote_next(NativeDebug *session);
+static gboolean native_remote_reply(NativeDebug *session, const gchar *record);
+static gchar *native_launch_arguments(const gchar *text, GError **error);
+static void native_debug_resume(GtkWidget *dialog, NativeDebug *session);
 static void native_memory_sync(NativeDebug *session);
 static gchar *native_memory_next(NativeDebug *session);
 static gboolean native_memory_reply(NativeDebug *session, const gchar *record);
@@ -147,6 +157,7 @@ static void native_debug_update(NativeDebug *session)
     gtk_widget_set_sensitive(session->source, session->stopped && session->stop_file && session->stop_line);
     gtk_widget_set_sensitive(session->load_lua, !session->running);
     gtk_widget_set_sensitive(session->unload_lua, !session->running && session->observer != NULL);
+    native_remote_update(session);
 }
 
 /* EN: Append line to the console of session.
@@ -174,6 +185,13 @@ static void native_debug_log(NativeDebug *session, const gchar *line)
 static void native_debug_free(gpointer data)
 {
     NativeDebug *session = data;
+    if (session->remote)
+    {
+        native_remote_drop(session);
+        g_free(session->remote->source_mapping);
+        g_free(session->remote->original_sysroot);
+        g_free(session->remote);
+    }
     insight_lua_debug_free(session->observer);
     g_hash_table_unref(session->editor_points);
     g_free(session->editor_point_pending);
@@ -221,6 +239,7 @@ static void native_debug_close(GtkWidget *dialog, gpointer data)
     NativeDebug *session = data;
     (void)dialog;
     session->closed = TRUE;
+    native_remote_drop(session);
     g_ptr_array_set_size(session->stop_markers, 0);
     g_ptr_array_set_size(session->point_markers, 0);
     g_cancellable_cancel(session->cancel);
@@ -234,6 +253,15 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command);
 static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
 {
     if (session->pending || session->writing || !session->ready || session->running)
+        return;
+    gchar *remote = native_remote_next(session);
+    if (remote)
+    {
+        native_debug_send(dialog, remote);
+        g_free(remote);
+        return;
+    }
+    if (session->remote && session->remote->busy && session->remote->timer)
         return;
     gchar *launch = native_launch_next(session);
     if (launch)
@@ -408,6 +436,10 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command)
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
     if (session->closed || session->pending || session->writing)
         return;
+    if (session->remote && !strcmp(command, "-gdb-show sysroot"))
+        session->remote->pending = NATIVE_REMOTE_SYSROOT;
+    if (session->remote && g_str_has_prefix(command, "-target-select "))
+        session->remote->pending = NATIVE_REMOTE_CONNECT;
     gchar *scoped = native_debug_scoped(session, command);
     gchar *line = g_strconcat(scoped, "\n", NULL);
     g_free(scoped);

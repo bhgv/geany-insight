@@ -37,6 +37,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set confirm off"));
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell off"));
     g_queue_push_tail(&session->launch_commands, g_strdup("-enable-pretty-printing"));
+    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-show sysroot"));
     session->editor_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     session->process = process;
     session->output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(process));
@@ -173,6 +174,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
                              gtk_label_new(insight_tr("Inspect values")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_memory_widget(session),
                              gtk_label_new(insight_tr("Memory")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_remote_widget(session, target),
+                             gtk_label_new(insight_tr("Remote / SSH")));
     g_signal_connect(session->threads, "changed", G_CALLBACK(native_select_thread), dialog);
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), "changed",
                      G_CALLBACK(native_select_frame), dialog);
@@ -206,10 +209,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     native_debug_send(dialog, "-gdb-set mi-async on");
 }
 
-/* EN: Open a modal executable picker from item and launch GDB on acceptance.
- * data is unused. Report a missing GDB in the status bar.
- * RU: Открывает модальный выбор исполняемого файла по item и запускает GDB
- * при подтверждении. data не используется. Отсутствие GDB показывает в статусе. */
+/* EN: Pick local symbols and a GDB client from item; data is unused. Report a missing client without spawning.
+ * RU: Выбирает локальные символы и клиент GDB по item; data не используется. Ошибка клиента показывается без запуска. */
 static void debug_native_executable(GtkMenuItem *item, gpointer data)
 {
     (void)item;
@@ -221,13 +222,19 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
 #endif
     gchar *gdb = g_find_program_in_path(gdb_name);
     if (!gdb)
-    {
-        ui_set_statusbar(TRUE, "%s", insight_tr("GDB was not found in PATH."));
-        return;
-    }
+        gdb = g_strdup(gdb_name);
     GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Debug C/C++ Executable"),
         GTK_WINDOW(main_widgets.window), GTK_FILE_CHOOSER_ACTION_OPEN,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Debug", GTK_RESPONSE_ACCEPT, NULL);
+    GtkWidget *options = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget *label = gtk_label_new(insight_tr("GDB executable (gdb, gdb-multiarch or cross GDB)"));
+    GtkWidget *gdb_entry = gtk_entry_new();
+    gtk_widget_set_name(gdb_entry, "insight-gdb-client-executable");
+    gtk_entry_set_text(GTK_ENTRY(gdb_entry), gdb);
+    gtk_box_pack_start(GTK_BOX(options), label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(options), gdb_entry, TRUE, TRUE, 0);
+    gtk_widget_show_all(options);
+    gtk_file_chooser_set_extra_widget(GTK_FILE_CHOOSER(chooser), options);
     gtk_window_set_modal(GTK_WINDOW(chooser), TRUE);
     gchar *root = app->project ? project_get_base_path() : NULL;
     if (root)
@@ -235,9 +242,13 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
     g_free(root);
     gchar *target = gtk_dialog_run(GTK_DIALOG(chooser)) == GTK_RESPONSE_ACCEPT ?
         gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(chooser)) : NULL;
+    gchar *client = target ? g_find_program_in_path(gtk_entry_get_text(GTK_ENTRY(gdb_entry))) : NULL;
     gtk_widget_destroy(chooser);
-    if (target)
-        native_debug_show(gdb, target);
+    if (target && client)
+        native_debug_show(client, target);
+    else if (target)
+        ui_set_statusbar(TRUE, "%s", insight_tr("GDB was not found. Choose an installed GDB executable."));
+    g_free(client);
     g_free(target);
     g_free(gdb);
 }

@@ -187,3 +187,55 @@ in the selected frame at each new stop or frame change. Otherwise, read manually
 Expression evaluation follows GDB semantics and can execute target code if you
 enter function calls. An inaccessible address or incomplete block clears the
 snapshot and shows an error; choose a smaller block or another address.
+
+## Remote gdbserver over SSH
+
+At executable selection, choose a **local copy with debug symbols** matching the
+remote program. The extra **GDB executable** field accepts `gdb`, `gdb-multiarch`
+or a cross GDB installed for the target architecture. Files are not uploaded.
+
+On the remote POSIX host, start either:
+
+```sh
+# One program, already created by gdbserver:
+gdbserver 127.0.0.1:2345 /srv/app --argument
+# Or a persistent server for Run / Stop / Restart:
+gdbserver --multi 127.0.0.1:2345
+```
+
+Open **Remote / SSH** in the debugger. Choose **SSH: existing gdbserver** for
+the first command or **SSH: extended-remote (--multi)** for the second. Enter
+SSH host/config alias, login, SSH port and optional identity/config files.
+The gdbserver host is resolved **on the SSH server**; normally keep `127.0.0.1`
+and port `2345`. For `--multi`, enter the executable's full **remote** path.
+Arguments come from **Launch settings**; its local working directory is not
+sent to the remote target. Configure the remote directory when starting gdbserver.
+
+Click **Connect gdbserver via SSH**. An owned SSH process forwards a temporary
+loopback-only local port. A constant POSIX readiness command confirms the SSH
+channel before GDB connects; it never probes/consumes the gdbserver connection.
+Keys and SSH agent/config work normally. If `geany-insight-askpass` is available
+in PATH, its GUI handles password/passphrase/host-key prompts; otherwise SSH uses
+batch mode and reports failures in Console. Host-key verification remains enabled.
+The remote account needs a POSIX shell and permission for local TCP forwarding.
+**Detach and close SSH** cancels an in-progress connection. SSH setup has a
+120-second deadline; GDB remote responses use a 15-second timeout.
+
+After connecting to an existing program use **Continue**, not Run. In extended
+mode use **Run**, **Stop**, or **Restart**; Stop kills the inferior while keeping
+the server connection. Both modes use the same source breakpoints, steps, Pause,
+threads, stacks, variables, tooltips, watches, graph and memory view.
+**Detach and close SSH** interrupts a running target, detaches it so it can
+continue, disconnects GDB and closes the owned tunnel. Closing the debugger
+also closes its SSH process; detach explicitly first when the remote process
+must continue. The editor does not terminate the separately started gdbserver.
+
+If the build recorded paths such as `/build/project`, fill **Source root recorded
+in remote build** with that prefix and **Matching local source root** with the
+existing local project directory. GDB applies `set substitute-path` before
+connection, so resolved stops and stack frames open local source files. Both
+roots may be empty. **Local sysroot or target:** accepts a matching local target
+library tree, or `target:` to let GDB read target libraries through gdbserver.
+Disconnect restores the initial sysroot and removes only this form's source
+mapping. A failed connection never falls back to running the local symbol file.
+Switch explicitly to **Local program** after disconnect for local debugging.

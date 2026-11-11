@@ -273,7 +273,7 @@ jobs:
             if test -f "$source"; then sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"; fi
           done
           timeout 90s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Languages=none update -qq || echo "Package index refresh unavailable; using runner package indexes"
-          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libgtk-3-dev libvte-2.91-dev libclang-dev libclang-cpp-dev llvm-dev patchelf cmake meson ninja-build gettext python3-docutils xvfb xauth poppler-utils gdb openssh-server openbox
+          sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libgtk-3-dev libvte-2.91-dev libclang-dev libclang-cpp-dev llvm-dev patchelf cmake meson ninja-build gettext python3-docutils xvfb xauth poppler-utils gdb gdbserver openssh-server openbox
           sudo mkdir -p /run/sshd
       - name: Validate exact and normalized comparison core
         run: SANITIZE=undefined python3 insight/tests/diff_test.py
@@ -289,6 +289,7 @@ jobs:
           python3 insight/tests/native_debugger_controls_test.py
           python3 insight/tests/native_debugger_values_test.py
           python3 insight/tests/native_debugger_memory_test.py
+          python3 insight/tests/native_debugger_remote_test.py
           python3 insight/tests/native_debugger_compile_test.py
           if meson setup _missing-internal -Dclang-bootstrap=false -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
             echo 'Default configuration silently used system Clang'
@@ -320,6 +321,10 @@ jobs:
         run: |
           cc -g -O0 insight/tests/native-debug/main.c -o "$RUNNER_TEMP/native-gdb-program"
           LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-program" insight/tests/native-debug/observer.lua "$RUNNER_TEMP/native-gdb-profile"
+      - name: Exercise GDB through an isolated real SSH gdbserver
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a python3 insight/tests/native_debugger_remote_fixture.py _native/tests/test_insight_native_debugger_gui
       - name: Check HDL completion in the running editor
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |

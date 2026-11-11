@@ -183,6 +183,7 @@ static gboolean timeout(gpointer data)
 }
 
 #include "native_debugger_values_gui.inc"
+#include "native_debugger_remote_gui.inc"
 
 /* EN: Advance the debugger GUI scenario; data is unused. Stop after all checks pass.
  * RU: Продвигает сценарий интерфейса; data не используется. Завершает успешную проверку. */
@@ -211,6 +212,8 @@ static gboolean drive(gpointer data)
     if (!GTK_IS_NOTEBOOK(tabs))
         return G_SOURCE_CONTINUE;
 
+    if (g_getenv("INSIGHT_GDB_REMOTE_GUI"))
+        return native_remote_gui_step(window, tabs);
     if (phase >= 16)
         return native_values_gui_step(window, tabs);
     if (phase == 1)

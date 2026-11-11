@@ -32,6 +32,7 @@ extern GtkWidget *debug_create_watch_tab(ScriptDebugWindow *);
 extern GtkWidget *debug_create_view(GtkWidget *, gboolean);
 extern void diff_source_open(const gchar *, guint);
 void insight_panel_help_attach(GtkWidget *, const gchar *);
+#include "insight-debuggers/gdb-remote-state.inc"
 #include "insight-debuggers/gdb-session.inc"
 #include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
@@ -45,4 +46,8 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/gdb-data-actions.inc"
 #include "insight-debuggers/gdb-memory-model.inc"
 #include "insight-debuggers/gdb-memory-ui.inc"
+#include "insight-debuggers/gdb-remote-model.inc"
+#include "insight-debuggers/gdb-remote-process.inc"
+#include "insight-debuggers/gdb-remote-connection.inc"
+#include "insight-debuggers/gdb-remote-ui.inc"
 #include "insight-debuggers/gdb-window.inc"
