@@ -220,7 +220,7 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (address && g_str_has_prefix(gtk_entry_get_text(GTK_ENTRY(address)), "0x"))
         {
             g_print("C/C++ GTK: instruction button/F2 confirmed points and code address memory passed.\n");
-            phase = 16;
+            phase = 84;
         }
     }
     return G_SOURCE_CONTINUE;

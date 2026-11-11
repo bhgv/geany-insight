@@ -239,7 +239,7 @@ static gchar *native_point_selected(NativeDebug *session, GtkTreeIter *row)
 
 /* EN: Edit the selected breakpoint in dialog data according to button's action, after validation.
  * RU: Редактирует выбранную точку диалога data по действию button после проверки параметров. */
-static void native_point_edit(GtkButton *button, gpointer data)
+static void native_point_edit(GtkWidget *button, gpointer data)
 {
     GtkWidget *dialog = data;
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");

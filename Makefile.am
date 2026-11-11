@@ -860,3 +860,5 @@ EXTRA_DIST += insight/tests/native_debugger_names_fixture.py \
 dist_insightdocmedia_DATA += insight/docs/media/native-disassembly-names.svg
 
 EXTRA_DIST += insight/tests/native_debugger_registers_test.py
+
+EXTRA_DIST += insight/tests/native_debugger_instruction_menu_gui.inc

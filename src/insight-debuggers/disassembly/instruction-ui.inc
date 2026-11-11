@@ -65,18 +65,11 @@ static void native_instruction_refresh(NativeDebug *session)
     g_free(raw);
 }
 
-/* EN: Use session data's instruction cursor for button action: 0 toggle address breakpoint, 1 memory, 2 run until address.
- * RU: Использует строку курсора session data для действия button: 0 точка адреса, 1 память, 2 выполнение до адреса. */
-static void native_instruction_action(GtkWidget *button, gpointer data)
+/* EN: Return the owned instruction address under session's cursor, or NULL for a non-instruction row.
+ * RU: Возвращает адрес инструкции под курсором session, либо NULL для другой строки. Результат освобождает вызывающий. */
+static gchar *native_instruction_cursor(NativeDebug *session)
 {
-    NativeDebug *session = data;
-    NativeAssembly *assembly = session->assembly;
-    if (!session->ready || !session->stopped || session->pending || session->writing || assembly->active ||
-        session->points_needed || session->points_pending || session->stop_requested ||
-        !g_queue_is_empty(&session->launch_commands) ||
-        (session->remote && (session->remote->busy || session->remote->release_pending)))
-        return;
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(assembly->text));
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->assembly->text));
     GtkTextIter start, end;
     gtk_text_buffer_get_iter_at_mark(buffer, &start, gtk_text_buffer_get_insert(buffer));
     gtk_text_iter_set_line_offset(&start, 0);
@@ -85,6 +78,29 @@ static void native_instruction_action(GtkWidget *button, gpointer data)
     gchar *line = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
     gchar *address = native_instruction_address(line);
     g_free(line);
+    return address;
+}
+
+/* EN: Return whether session can safely edit code points or execute a cursor action; no command is sent.
+ * RU: Возвращает возможность редактирования точек кода или действий курсора session; команд не отправляет. */
+static gboolean native_instruction_idle(NativeDebug *session)
+{
+    return !session->closed && session->ready && session->stopped && !session->pending && !session->writing &&
+        !session->assembly->active && !session->points_needed && !session->points_pending &&
+        !session->stop_requested && g_queue_is_empty(&session->launch_commands) &&
+        (!session->remote || (!session->remote->busy && !session->remote->release_pending));
+}
+
+/* EN: Use session data's instruction cursor for button action: 0 toggle address breakpoint, 1 memory, 2 run until address, 3 hardware breakpoint.
+ * RU: Использует строку курсора session data для действия button: 0 точка адреса, 1 память, 2 выполнение до адреса, 3 аппаратная точка. */
+static void native_instruction_action(GtkWidget *button, gpointer data)
+{
+    NativeDebug *session = data;
+    NativeAssembly *assembly = session->assembly;
+    if (!native_instruction_idle(session))
+        return;
+    const gchar *saved = g_object_get_data(G_OBJECT(button), "instruction-address");
+    gchar *address = saved ? g_strdup(saved) : native_instruction_cursor(session);
     if (!address)
     {
         gtk_label_set_text(GTK_LABEL(assembly->status), insight_tr("Place the cursor on an instruction row first."));
@@ -102,6 +118,16 @@ static void native_instruction_action(GtkWidget *button, gpointer data)
             gtk_label_set_text(GTK_LABEL(assembly->status), insight_tr("The selected frame is already at this instruction."));
         else
             command = g_strdup_printf("-exec-until \"*%s\"", address);
+    }
+    else if (action == 3)
+    {
+        if (g_hash_table_contains(assembly->instruction_points, address))
+        {
+            g_free(address);
+            return;
+        }
+        command = g_strdup_printf("-break-insert -h -- \"*%s\"", address);
+        session->points_needed = TRUE;
     }
     else
     {

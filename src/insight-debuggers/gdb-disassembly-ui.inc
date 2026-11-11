@@ -93,6 +93,8 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
     assembly->text = view;
     gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), TRUE);
     g_signal_connect(view, "key-press-event", G_CALLBACK(native_instruction_key), session);
+    g_signal_connect(view, "button-press-event", G_CALLBACK(native_instruction_mouse), session);
+    g_signal_connect(view, "populate-popup", G_CALLBACK(native_instruction_popup), session);
     gtk_widget_set_name(view, "insight-gdb-instructions");
     gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);

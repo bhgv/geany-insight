@@ -3371,3 +3371,7 @@ View instruction address in memory	Открыть адрес инструкци�
 Run to instruction	Выполнить до инструкции
 Place the cursor on an instruction row first.	Сначала установите курсор на строку инструкции.
 The selected frame is already at this instruction.	Выбранный кадр уже находится на этой инструкции.
+
+Add hardware instruction breakpoint	Добавить аппаратную точку на инструкции
+Name this instruction address…	Задать имя адресу инструкции…
+Copy instruction address	Копировать адрес инструкции

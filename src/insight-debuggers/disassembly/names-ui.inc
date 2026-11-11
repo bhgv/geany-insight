@@ -88,9 +88,9 @@ static void native_name_reread(NativeDebug *session)
     }
 }
 
-/* EN: Edit button's rule kind in session data; no target writes occur, and only validated names replace the old rule.
- * RU: Редактирует вид правила button в session data; программа не изменяется, старое правило заменяется только проверенным. */
-static void native_name_edit(GtkButton *button, gpointer data)
+/* EN: Edit the button/menu item's rule kind in button for session data; no target writes occur, and only validated names replace the old rule.
+ * RU: Редактирует вид правила кнопки/пункта меню button в session data; программа не изменяется, старое правило заменяется только проверенным. */
+static void native_name_edit(GtkWidget *button, gpointer data)
 {
     NativeDebug *session = data;
     NativeAssembly *assembly = session->assembly;
@@ -127,7 +127,8 @@ static void native_name_edit(GtkButton *button, gpointer data)
     const gchar *labels[] = {kind == 1 ? "Signed frame offset (e.g. -0x20)" : "Address expression (e.g. &object)",
         "Display name", kind == 1 ? "Base register (fp, sp, rbp, x29, r11, r7, s0)" : "C/C++ type (for typed data)",
         "Function scope (required for frame names)"};
-    const gchar *defaults[] = {old ? old->anchor : kind == 1 ? "-0x10" : gtk_entry_get_text(GTK_ENTRY(assembly->expression)),
+    const gchar *anchor = g_object_get_data(G_OBJECT(button), "name-anchor");
+    const gchar *defaults[] = {old ? old->anchor : kind == 1 ? "-0x10" : anchor ? anchor : gtk_entry_get_text(GTK_ENTRY(assembly->expression)),
         old ? old->name : "", old ? old->type : kind == 1 ? "fp" : "",
         old ? old->scope : kind == 1 && assembly->function ? assembly->function : ""};
     GtkWidget *entries[4];
@@ -150,7 +151,7 @@ static void native_name_edit(GtkButton *button, gpointer data)
     gtk_widget_set_sensitive(entries[3], kind != 0);
     GtkTextIter start, end;
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(assembly->text));
-    if (!old && kind != 1 && gtk_text_buffer_get_selection_bounds(buffer, &start, &end))
+    if (!old && !anchor && kind != 1 && gtk_text_buffer_get_selection_bounds(buffer, &start, &end))
     {
         gchar *chosen = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
         guint64 address = 0;

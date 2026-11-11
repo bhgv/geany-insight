@@ -451,3 +451,27 @@ can stop the operation before reaching the address. Selecting the current PC
 keeps the program paused. These actions require an idle paused session; the
 same commands work with an SSH gdbserver. Numeric address breakpoints belong
 to the current GDB session and are not saved as portable profile locations.
+
+### Instruction mouse menu and hardware points
+
+Right-click an instruction row, or use the keyboard's context-menu key at
+the cursor. The standard text menu includes instruction actions and captures
+the row address when it opens. **Copy instruction address** copies only the
+numeric address; **Name this instruction address…** opens the shared naming
+editor with that address filled in. Naming does not alter the inferior.
+Save the debugger profile to retain rules; a literal address may change after
+restart with ASLR, so prefer a symbol expression for a portable name.
+
+Double-click the leading address or its point/PC marker to toggle an address
+breakpoint. Double-clicking instruction operands keeps normal text selection.
+The menu offers **Add hardware instruction breakpoint** (`hbreak` in GDB).
+Hardware support and the number of available slots depend on the target and
+remote server. GDB errors remain visible; no software fallback is inserted.
+
+For a confirmed address point, **Enable / Disable**, **Breakpoint condition**
+and **Ignore first hits** reuse the common breakpoint editors and list.
+These items edit only the address point, preserving source/function rules at
+the same address. Create an address point first if the items are unavailable.
+Editing and execution actions require an idle paused session; copying a
+snapshot address remains available while running. Menus also work when GDB
+connects to gdbserver through SSH.
