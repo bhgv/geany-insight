@@ -52,7 +52,7 @@ static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
     gchar *message = text ? NULL : native_debug_field(record, "msg");
     gchar *valid = message ? g_utf8_make_valid(message, -1) : NULL;
     g_object_set_data_full(G_OBJECT(session->memory_text), "native-memory-raw", g_strdup(text), g_free);
-    gchar *named = native_name_addresses(session, text);
+    gchar *named = native_name_line_addresses(session, text);
     gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), named, -1);
     g_free(named);
     gtk_label_set_text(GTK_LABEL(session->memory_status), text ?

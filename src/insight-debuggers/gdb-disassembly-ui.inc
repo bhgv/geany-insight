@@ -21,7 +21,7 @@ static void native_assembly_action(GtkWidget *button, gpointer data)
     }
     if (!step)
     {
-        native_assembly_prepare(session, command);
+        native_assembly_prepare(session, command, gtk_entry_get_text(GTK_ENTRY(assembly->expression)));
         gtk_label_set_text(GTK_LABEL(assembly->status), insight_tr("Reading machine instructions…"));
     }
     if (step)
@@ -68,6 +68,7 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
     }
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
     assembly->status = gtk_label_new(insight_tr("Pause the program, then read instructions. This is a snapshot, not a live view."));
+    gtk_widget_set_name(assembly->status, "insight-gdb-instruction-status");
     gtk_label_set_line_wrap(GTK_LABEL(assembly->status), TRUE);
     gtk_box_pack_start(GTK_BOX(page), assembly->status, FALSE, FALSE, 0);
     GtkWidget *view = gtk_text_view_new();

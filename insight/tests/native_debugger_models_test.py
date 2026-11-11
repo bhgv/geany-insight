@@ -112,7 +112,8 @@ int main(int argc, char **argv)
     const char *commands[] = {"-data-evaluate-expression \"worker_value\"",
         "-stack-list-variables --all-values", "-stack-list-frames 0 63",
         "-stack-select-frame 1", "-exec-next", "-data-disassemble -s $pc -e $pc+8 -- 0",
-        "-stack-info-frame", "-exec-step-instruction", "-exec-next-instruction", "-interpreter-exec console \"print worker_value\""};
+        "-stack-info-frame", "-exec-step-instruction", "-exec-next-instruction",
+        "-data-list-register-values x 0 1", "-interpreter-exec console \"print worker_value\""};
     for (unsigned i = 0; i < G_N_ELEMENTS(commands); i++)
     {
         char *scoped = native_debug_scoped(&session, commands[i]);

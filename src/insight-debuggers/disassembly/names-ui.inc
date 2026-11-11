@@ -76,7 +76,7 @@ static void native_name_reread(NativeDebug *session)
         gchar *request = native_assembly_command(gtk_entry_get_text(GTK_ENTRY(session->assembly->expression)));
         if (request)
         {
-            native_assembly_prepare(session, request);
+            native_assembly_prepare(session, request, gtk_entry_get_text(GTK_ENTRY(session->assembly->expression)));
             native_debug_resume(session->window, session);
         }
     }

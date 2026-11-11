@@ -88,8 +88,8 @@ static void native_name_frame_operands(NativeAssembly *assembly, const gchar *in
     const gchar *function, GPtrArray *notes)
 {
     const gchar *patterns[] = {
-        "\\[\\s*(rbp|ebp|rsp|esp|fp|sp|x29|r11|r7|s0)\\s*(?:([+-])\\s*(0x[0-9a-fA-F]+|[0-9]+)|,\\s*#?(-?(?:0x[0-9a-fA-F]+|[0-9]+)))?\\s*\\]",
-        "(-?(?:0x[0-9a-fA-F]+|[0-9]+))\\((s0|fp|sp)\\)"
+        "\\[\\s*([a-z][a-z0-9]*)\\s*(?:([+-])\\s*(0x[0-9a-fA-F]+|[0-9]+)|,\\s*#?(-?(?:0x[0-9a-fA-F]+|[0-9]+)))?\\s*\\]",
+        "(-?(?:0x[0-9a-fA-F]+|[0-9]+))\\(([a-z][a-z0-9]*)\\)"
     };
     for (guint kind = 0; kind < G_N_ELEMENTS(patterns); kind++)
     {
@@ -125,6 +125,7 @@ static gchar *native_name_instruction(NativeAssembly *assembly, const gchar *ins
     GPtrArray *notes = g_ptr_array_new_with_free_func(g_free);
     native_name_frame_operands(assembly, instruction, function, notes);
     guint bracket = 0, symbol = 0;
+    const gchar *memory_start = NULL;
     gboolean branch = g_str_has_prefix(instruction, "call") || *instruction == 'j' ||
         g_str_has_prefix(instruction, "b ") || g_str_has_prefix(instruction, "bl ") ||
         g_str_has_prefix(instruction, "b.") || g_str_has_prefix(instruction, "beq") ||
@@ -132,7 +133,10 @@ static gchar *native_name_instruction(NativeAssembly *assembly, const gchar *ins
     for (const gchar *p = instruction; *p; p++)
     {
         if (*p == '[' || *p == '(')
+        {
             bracket++;
+            memory_start = p;
+        }
         if ((*p == ']' || *p == ')') && bracket)
             bracket--;
         if (*p == '<')
@@ -149,7 +153,12 @@ static gchar *native_name_instruction(NativeAssembly *assembly, const gchar *ins
             continue;
         gchar *token = g_strndup(p, end - p);
         guint64 address = 0;
-        const NativeNamedRange *range = native_assembly_number(token, &address) ?
+        gboolean absolute_memory = bracket && memory_start;
+        for (const gchar *it = memory_start ? memory_start + 1 : p; absolute_memory && it < p; it++)
+            absolute_memory = g_ascii_isspace(*it);
+        gboolean candidate = (!bracket || absolute_memory) && *end != '(' &&
+            (p == instruction || p[-1] != '-');
+        const NativeNamedRange *range = candidate && native_assembly_number(token, &address) ?
             native_name_lookup(assembly, address, function, FALSE) : NULL;
         if (range)
         {
@@ -184,9 +193,14 @@ static gchar *native_name_addresses(NativeDebug *session, const gchar *text)
     if (!assembly || !text || !assembly->ranges->len)
         return g_strdup(text ? text : "");
     GString *output = g_string_new("");
+    gboolean quoted = FALSE, escaped = FALSE;
     for (const gchar *p = text; *p; p++)
     {
-        if (p[0] == '0' && p[1] == 'x' && (p == text || !g_ascii_isalnum(p[-1])))
+        if (*p == '"' && !escaped)
+            quoted = !quoted;
+        gboolean was_escape = escaped;
+        escaped = *p == '\\' && !was_escape;
+        if (!quoted && p[0] == '0' && p[1] == 'x' && (p == text || !g_ascii_isalnum(p[-1])))
         {
             const gchar *end = p + 2;
             while (g_ascii_isxdigit(*end))
@@ -213,6 +227,27 @@ static gchar *native_name_addresses(NativeDebug *session, const gchar *text)
     return g_string_free(output, FALSE);
 }
 
+/* EN: Annotate only leading numeric addresses of text lines, preserving memory bytes, ASCII and instruction operands.
+ * RU: Подписывает только начальные адреса строк text, сохраняя байты, ASCII и операнды инструкций. */
+static gchar *native_name_line_addresses(NativeDebug *session, const gchar *text)
+{
+    gchar **lines = g_strsplit(text ? text : "", "\n", -1);
+    GString *output = g_string_new("");
+    for (guint i = 0; lines[i]; i++)
+    {
+        const gchar *end = lines[i];
+        while (*end && !g_ascii_isspace(*end))
+            end++;
+        gchar *head = g_strndup(lines[i], end - lines[i]);
+        gchar *named = native_name_addresses(session, head);
+        g_string_append_printf(output, "%s%s%s", i ? "\n" : "", named, end);
+        g_free(named);
+        g_free(head);
+    }
+    g_strfreev(lines);
+    return g_string_free(output, FALSE);
+}
+
 /* EN: Decorate validated MI record with assembly's resolved names; preserve all original instructions and numeric addresses.
  * RU: Дополняет проверенный record разрешёнными именами assembly, сохраняя исходные инструкции и числовые адреса. */
 static gchar *native_assembly_render(NativeDebug *session, const gchar *record)
@@ -231,7 +266,7 @@ static gchar *native_assembly_render(NativeDebug *session, const gchar *record)
         gchar *function = native_debug_field(tuple, "func-name");
         gchar *notes = native_name_instruction(session->assembly, instruction,
             function ? function : session->assembly->function);
-        gchar *named = native_name_addresses(session, lines[row++]);
+        gchar *named = native_name_line_addresses(session, lines[row++]);
         g_string_append_printf(output, "%s%s%s\n", named, *notes ? "  ; " : "", notes);
         g_free(named);
         g_free(notes);

@@ -14,21 +14,27 @@ static void native_assembly_free(NativeAssembly *assembly)
     g_ptr_array_unref(assembly->rules);
     g_ptr_array_unref(assembly->ranges);
     g_ptr_array_unref(assembly->objects);
+    if (assembly->register_names)
+        g_ptr_array_unref(assembly->register_names);
     g_hash_table_unref(assembly->registers);
     g_free(assembly->record);
     g_free(assembly->function);
     g_free(assembly->request);
     g_free(assembly->last_error);
+    g_free(assembly->request_expression);
     g_free(assembly);
 }
 
-/* EN: Queue discovery for session before the owned request; manual expressions are reevaluated after every restart/read.
- * RU: Ставит сбор метаданных session перед принадлежащим request; ручные выражения вычисляются заново после запуска/чтения. */
-static void native_assembly_prepare(NativeDebug *session, gchar *request)
+/* EN: Queue discovery for session before owned request for expression; manual expressions are reevaluated after every restart/read.
+ * RU: Ставит сбор метаданных session перед принадлежащим request для expression; ручные выражения вычисляются заново после запуска/чтения. */
+static void native_assembly_prepare(NativeDebug *session, gchar *request, const gchar *expression)
 {
     NativeAssembly *assembly = session->assembly;
     assembly->active = TRUE;
     assembly->request = request;
+    assembly->span = 128;
+    g_free(assembly->request_expression);
+    assembly->request_expression = g_strdup(expression);
     assembly->frame_valid = FALSE;
     assembly->collected = assembly->unresolved = 0;
     g_clear_pointer(&assembly->last_error, g_free);
@@ -36,7 +42,11 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request)
     g_hash_table_remove_all(assembly->registers);
     native_assembly_queue(assembly, g_strdup("-gdb-set disassembly-flavor intel"), 0, NULL, NULL, NULL, NULL, 0, FALSE);
     native_assembly_queue(assembly, g_strdup("-stack-info-frame"), 1, NULL, NULL, NULL, NULL, 0, FALSE);
-    const gchar *registers[] = {"fp", "sp", "rbp", "ebp", "rsp", "esp", "x29", "r11", "r7", "s0"};
+    if (!assembly->register_names)
+        assembly->register_names = g_ptr_array_new_with_free_func(g_free);
+    g_ptr_array_set_size(assembly->register_names, 0);
+    native_assembly_queue(assembly, g_strdup("-data-list-register-names"), 13, NULL, NULL, NULL, NULL, 0, FALSE);
+    const gchar *registers[] = {"fp", "sp"};
     for (guint i = 0; i < G_N_ELEMENTS(registers); i++)
     {
         gchar *expression = g_strdup_printf("(unsigned long long)$%s", registers[i]);
@@ -118,7 +128,14 @@ static gboolean native_assembly_reply(NativeDebug *session, const gchar *record)
     {
         g_free(assembly->record);
         assembly->record = g_strdup(record);
-        native_assembly_symbols(assembly, record);
+        if (g_str_has_prefix(record, "^error") && assembly->span > 1)
+        {
+            assembly->span /= 2;
+            gchar *retry = native_assembly_window(assembly->request_expression, assembly->span);
+            native_assembly_queue(assembly, retry, 10, NULL, NULL, NULL, NULL, 0, FALSE);
+        }
+        else
+            native_assembly_symbols(assembly, record);
     }
     else if (work->action == 12)
         native_assembly_symbol_reply(assembly, work, record);

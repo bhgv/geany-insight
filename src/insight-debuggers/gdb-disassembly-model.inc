@@ -2,15 +2,15 @@
 /* EN: Build bounded disassembly requests and format GDB instruction tuples.
  * RU: Создаёт ограниченные запросы дизассемблера и форматирует инструкции GDB. */
 
-/* EN: Return an owned 128-byte MI request for expression, or NULL for invalid single-line UTF-8 input.
- * RU: Возвращает команду MI на 128 байтов для expression либо NULL для неверного однострочного UTF-8. */
-static gchar *native_assembly_command(const gchar *expression)
+/* EN: Return an owned MI request for expression/span (1..128 bytes), or NULL for invalid input.
+ * RU: Возвращает команду MI для expression/span (1..128 байтов) либо NULL для неверных данных. */
+static gchar *native_assembly_window(const gchar *expression, guint span)
 {
-    if (!expression || !*expression || strlen(expression) > 2048 ||
+    if (!span || span > 128 || !expression || !*expression || strlen(expression) > 2048 ||
         !g_utf8_validate(expression, -1, NULL) || g_utf8_strlen(expression, -1) > 512 ||
         strpbrk(expression, "\r\n"))
         return NULL;
-    gchar *end = g_strdup_printf("(%s)+128", expression);
+    gchar *end = g_strdup_printf("(%s)+%u", expression, span);
     gchar *escaped = g_strescape(expression, NULL);
     gchar *escaped_end = g_strescape(end, NULL);
     gchar *command = g_strdup_printf("-data-disassemble -s \"%s\" -e \"%s\" -- 0", escaped, escaped_end);
@@ -18,6 +18,13 @@ static gchar *native_assembly_command(const gchar *expression)
     g_free(escaped);
     g_free(end);
     return command;
+}
+
+/* EN: Return the default bounded 128-byte request for expression, or NULL when validation fails.
+ * RU: Возвращает стандартный запрос до 128 байтов для expression либо NULL при ошибке проверки. */
+static gchar *native_assembly_command(const gchar *expression)
+{
+    return native_assembly_window(expression, 128);
 }
 
 /* EN: Return owned readable instructions from record, capped at 256 rows/64 KiB; NULL denotes malformed/error output.

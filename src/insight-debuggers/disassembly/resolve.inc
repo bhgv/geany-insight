@@ -110,7 +110,8 @@ static void native_assembly_fields(NativeAssembly *assembly, const NativeAssembl
         gboolean group = !g_strcmp0(field, "public") || !g_strcmp0(field, "private") || !g_strcmp0(field, "protected");
         if (native_name_text(object, 512, FALSE) && native_name_text(field, 128, FALSE))
         {
-            gchar *label = group ? g_strdup(parent->label) : g_strdup_printf("%s.%s", parent->label, field);
+            gchar *label = group ? g_strdup(parent->label) : g_ascii_isdigit(*field) ?
+                g_strdup_printf("%s[%s]", parent->label, field) : g_strdup_printf("%s.%s", parent->label, field);
             if (!group)
                 native_assembly_queue(assembly, native_assembly_expression("-var-info-path-expression", object),
                     8, NULL, label, parent->scope, object, parent->depth, TRUE);
@@ -122,6 +123,75 @@ static void native_assembly_fields(NativeAssembly *assembly, const NativeAssembl
         g_free(type);
         g_free(field);
         g_free(object);
+        g_free(tuple);
+    }
+}
+
+/* EN: Decode GDB's actual register names and request at most 128 general-purpose values for assembly.
+ * RU: Читает настоящие имена регистров GDB и запрашивает до 128 значений общего назначения для assembly. */
+static void native_assembly_register_names(NativeAssembly *assembly, const gchar *record)
+{
+    const gchar *cursor = strstr(record, "register-names=[");
+    if (!cursor || !assembly->register_names)
+        return;
+    cursor += strlen("register-names=[");
+    GString *command = g_string_new("-data-list-register-values x");
+    guint selected = 0;
+    while (*cursor && *cursor != ']' && assembly->register_names->len < 1024)
+    {
+        if (*cursor != '"')
+        {
+            cursor++;
+            continue;
+        }
+        const gchar *start = ++cursor;
+        while (*cursor && *cursor != '"' && cursor - start < 128)
+            cursor++;
+        if (*cursor != '"')
+            break;
+        gchar *name = g_strndup(start, cursor++ - start);
+        guint index = assembly->register_names->len;
+        g_ptr_array_add(assembly->register_names, name);
+        if (selected < 128 && native_name_register(name))
+        {
+            g_string_append_printf(command, " %u", index);
+            selected++;
+        }
+    }
+    if (selected)
+        native_assembly_queue(assembly, g_string_free(command, FALSE), 14, NULL, NULL, NULL, NULL, 0, FALSE);
+    else
+        g_string_free(command, TRUE);
+}
+
+/* EN: Store confirmed scalar register values from record using assembly's matching name indices.
+ * RU: Сохраняет подтверждённые скалярные значения record по соответствующим индексам имён assembly. */
+static void native_assembly_register_values(NativeAssembly *assembly, const gchar *record)
+{
+    const gchar *cursor = strstr(record, "register-values=["), *start, *end;
+    if (!cursor || !assembly->register_names || !assembly->register_names->len)
+        return;
+    cursor += strlen("register-values=[");
+    guint count = 0;
+    while (count++ < 128 && (end = native_next_tuple(&cursor, &start)))
+    {
+        gchar *tuple = g_strndup(start, end - start);
+        gchar *index = native_debug_field(tuple, "number");
+        gchar *value = native_debug_field(tuple, "value");
+        guint64 number = 0, address = 0;
+        if (index && g_ascii_string_to_unsigned(index, 10, 0, assembly->register_names->len - 1, &number, NULL) &&
+            native_assembly_number(value, &address))
+        {
+            const gchar *name = assembly->register_names->pdata[number];
+            if (native_name_register(name))
+            {
+                guint64 *stored = g_new(guint64, 1);
+                *stored = address;
+                g_hash_table_replace(assembly->registers, g_strdup(name), stored);
+            }
+        }
+        g_free(value);
+        g_free(index);
         g_free(tuple);
     }
 }
@@ -205,6 +275,10 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
     }
     else if (work->action == 7)
         native_assembly_fields(assembly, work, record);
+    else if (work->action == 13)
+        native_assembly_register_names(assembly, record);
+    else if (work->action == 14)
+        native_assembly_register_values(assembly, record);
     else if (work->action == 8)
     {
         gchar *expression = native_debug_field(record, "path_expr");

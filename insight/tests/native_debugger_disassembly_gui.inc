@@ -65,7 +65,8 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (click(window, "Save names in debugger profile"))
             phase = 74;
     }
-    else if (phase == 74 && find(window, "Debugger profile saved for this project and executable."))
+    else if (phase == 74 && !g_strcmp0(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-instruction-status"))),
+        "Debugger profile saved for this project and executable."))
     {
         gtk_entry_set_text(GTK_ENTRY(entry), "missing_instruction_symbol");
         if (click(window, "Read instructions"))

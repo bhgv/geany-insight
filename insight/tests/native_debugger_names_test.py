@@ -69,6 +69,18 @@ int main(int argc, char **argv)
     assert(strstr(display, "0x4008 <packet.count>") && strstr(display, "packet.count+0x1"));
     assert(!strstr(display, "input"));
     g_free(display);
+    display = native_name_addresses(&session, "\"0x4008\" 0x4008");
+    assert(strstr(display, "\"0x4008\" 0x4008 <packet.count>"));
+    g_free(display);
+    notes = native_name_instruction(&assembly, "mov eax,[rbp+0x4008]", "worker");
+    assert(!strstr(notes, "packet.count"));
+    g_free(notes);
+    notes = native_name_instruction(&assembly, "mov eax,-0x4008", "worker");
+    assert(!strstr(notes, "packet.count"));
+    g_free(notes);
+    display = native_name_line_addresses(&session, "0x4008  mov eax,[rbp+0x4008]");
+    assert(strstr(display, "0x4008 <packet.count>  mov eax,[rbp+0x4008]"));
+    g_free(display);
     NativeNamedRange *frame = g_new0(NativeNamedRange, 1);
     frame->frame = frame->manual = TRUE;
     frame->offset = -16;
@@ -82,6 +94,20 @@ int main(int argc, char **argv)
     notes = native_name_instruction(&assembly, "ld a0,-16(s0)", "different");
     assert(!*notes);
     g_free(notes);
+    assembly.register_names = g_ptr_array_new_with_free_func(g_free);
+    native_assembly_register_names(&assembly, "^done,register-names=[\"rax\",\"x0\",\"a0\",\"s0\",\"v0\",\"xmm0\",\"\",\"sp\"]");
+    NativeAssemblyWork *registers = g_queue_pop_head(&assembly.work);
+    assert(registers && !strcmp(registers->command, "-data-list-register-values x 0 1 2 3 7"));
+    native_assembly_work_free(registers);
+    native_assembly_register_values(&assembly, "^done,register-values=[{number=\"0\",value=\"0x4000\"},{number=\"1\",value=\"0x4000\"},{number=\"2\",value=\"0x4000\"}]");
+    const char *indirect[] = {"mov eax,[rax+0x8]", "ldr w0,[x0,#8]", "lw a1,8(a0)"};
+    for (guint i = 0; i < G_N_ELEMENTS(indirect); i++)
+    {
+        notes = native_name_instruction(&assembly, indirect[i], "worker");
+        assert(strstr(notes, "packet.count"));
+        g_free(notes);
+    }
+    assert(!native_name_register("xmm0") && !native_name_register("v0") && !native_name_register("r32"));
     guint64 address;
     assert(!native_name_displace(0, -1, &address));
     assert(!native_name_displace(UINT64_MAX, 1, &address));
@@ -124,6 +150,7 @@ int main(int argc, char **argv)
     g_ptr_array_unref(assembly.rules);
     g_ptr_array_unref(assembly.ranges);
     g_ptr_array_unref(assembly.objects);
+    g_ptr_array_unref(assembly.register_names);
     g_hash_table_unref(assembly.registers);
     return 0;
 }

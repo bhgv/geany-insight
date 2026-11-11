@@ -25,7 +25,7 @@ static void native_name_refresh_views(NativeDebug *session)
         const gchar *raw = g_object_get_data(G_OBJECT(session->memory_text), "native-memory-raw");
         if (raw)
         {
-            gchar *text = native_name_addresses(session, raw);
+            gchar *text = native_name_line_addresses(session, raw);
             debug_set_text(session->memory_text, text);
             g_free(text);
         }

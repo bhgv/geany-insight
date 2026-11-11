@@ -71,7 +71,7 @@ int main(void)
     rule->type = g_strdup("struct Packet");
     rule->scope = g_strdup("");
     g_ptr_array_add(assembly->rules, rule);
-    native_assembly_prepare(&session, native_assembly_command("main"));
+    native_assembly_prepare(&session, native_assembly_command("main"), "main");
     assert(native_assembly_next(&session));
     char line[65536];
     while (fgets(line, sizeof line, stdin))
@@ -112,7 +112,7 @@ class NativeAssemblyPipeline(unittest.TestCase):
             target_source = root / 'layout.c'
             target_source.write_text('struct Inner { int count; }; struct Packet { char tag; struct Inner inner; };\n'
                                      'struct Packet object; int main(void) { return object.inner.count; }\n'
-                                     'void padding(void) { __asm__ volatile(".rept 256; nop; .endr"); }\n')
+)
             target = root / 'layout'
             subprocess.run(['cc', '-g', '-O0', str(target_source), '-o', str(target)], check=True)
             self.relay(helper, gdb, target)
@@ -150,6 +150,7 @@ class NativeAssemblyPipeline(unittest.TestCase):
                     break
             self.assertEqual(driver.wait(timeout=2), 0, driver.stderr.read().decode())
             self.assertIn(b'packet.inner.count', result)
+            self.assertGreater(sum(command.startswith(b'-data-disassemble') for command in commands), 1)
             self.assertTrue(any(b'-var-delete' in command for command in commands))
             self.assertTrue(any(b'-gdb-set disassembly-flavor intel' in command for command in commands))
         finally:

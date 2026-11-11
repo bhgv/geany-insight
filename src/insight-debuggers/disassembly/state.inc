@@ -29,11 +29,11 @@ typedef struct
     GPtrArray *rules, *ranges;
     GQueue work;
     NativeAssemblyWork *pending;
-    gchar *record, *function, *request, *last_error;
+    gchar *record, *function, *request, *last_error, *request_expression;
     guint64 frame_pointer, temporary_address;
     gboolean frame_valid, active;
-    GPtrArray *objects;
+    GPtrArray *objects, *register_names;
     GHashTable *registers;
-    guint collected, unresolved;
+    guint collected, unresolved, span;
     gboolean temporary_valid;
 } NativeAssembly;

@@ -51,6 +51,26 @@ static gboolean native_name_offset(const gchar *text, gint64 *offset)
     return TRUE;
 }
 
+/* EN: Accept general-purpose base-register spellings for x86/x64, ARM/ARM64 and RISC-V; exclude vector/status registers.
+ * RU: Принимает имена регистров общего назначения x86/x64, ARM/ARM64 и RISC-V, исключая векторные регистры и флаги. */
+static gboolean native_name_register(const gchar *name)
+{
+    if (!name)
+        return FALSE;
+    const gchar *fixed[] = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
+        "eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp", "fp", "sp", "lr", "ra", "gp", "tp", "zero"};
+    for (guint i = 0; i < G_N_ELEMENTS(fixed); i++)
+        if (!strcmp(name, fixed[i]))
+            return TRUE;
+    if (strchr("rxast", name[0]) && name[0] && name[1])
+    {
+        guint64 number = 0;
+        return g_ascii_string_to_unsigned(name + 1, 10, 0,
+            name[0] == 'a' ? 7 : name[0] == 's' ? 11 : name[0] == 't' ? 6 : 31, &number, NULL);
+    }
+    return FALSE;
+}
+
 /* EN: Validate rule fields without executing expressions; names may be human-readable, types must be nonempty for kind 2.
  * RU: Проверяет поля rule без выполнения выражений; имена допускают обычный текст, тип обязателен для kind 2. */
 static gboolean native_name_rule_valid(const NativeNameRule *rule)
@@ -59,7 +79,8 @@ static gboolean native_name_rule_valid(const NativeNameRule *rule)
     return rule->kind <= 2 && native_name_text(rule->anchor, 512, FALSE) &&
         native_name_text(rule->name, 128, FALSE) && native_name_text(rule->type, 256, rule->kind != 2) &&
         native_name_text(rule->scope, 512, rule->kind != 1) &&
-        (rule->kind != 1 || native_name_offset(rule->anchor, &offset));
+        (rule->kind != 1 || (native_name_offset(rule->anchor, &offset) &&
+         (!*rule->type || native_name_register(rule->type))));
 }
 
 /* EN: Decode rule index from file into owned storage; return NULL when any required field is invalid.

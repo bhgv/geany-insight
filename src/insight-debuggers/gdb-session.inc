@@ -98,11 +98,12 @@ typedef struct {
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
-static void native_assembly_prepare(NativeDebug *session, gchar *request);
+static void native_assembly_prepare(NativeDebug *session, gchar *request, const gchar *expression);
 static void native_assembly_console(NativeDebug *session, const gchar *line);
 static void native_assembly_free(NativeAssembly *assembly);
 static gboolean native_assembly_next(NativeDebug *session);
 static void native_profile_save(NativeDebug *session);
+static gchar *native_name_line_addresses(NativeDebug *session, const gchar *text);
 static gchar *native_name_addresses(NativeDebug *session, const gchar *text);
 static gboolean native_assembly_reply(NativeDebug *session, const gchar *record);
 
@@ -449,7 +450,7 @@ static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
         "-exec-next", "-exec-finish", "-interpreter-exec", "-exec-until",
         "-var-create", "-var-list-children", "-var-assign", "-break-watch",
         "-data-read-memory-bytes", "-data-disassemble", "-stack-info-frame",
-        "-exec-step-instruction", "-exec-next-instruction"
+        "-exec-step-instruction", "-exec-next-instruction", "-data-list-register-values"
     };
     gboolean matches = FALSE;
     for (guint i = 0; i < G_N_ELEMENTS(scoped); i++)

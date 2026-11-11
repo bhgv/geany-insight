@@ -351,8 +351,9 @@ on a disabled location prevent Save with an explanation, preserving the old file
 
 Pause the target and open **Machine instructions**. Enter `$pc` for the selected
 frame's program counter, a function such as `main`, or an address such as `0x1000`.
-**Read instructions** (or Enter) reads 128 bytes and shows addresses, functions,
-offsets and assembly. This is a snapshot: refresh after stepping, changing frames
+**Read instructions** (or Enter) reads up to 128 bytes and shows addresses, functions,
+offsets and assembly. Near unreadable code boundaries, the window is reduced
+with at most seven retries instead of discarding a readable short function. This is a snapshot: refresh after stepping, changing frames
 or restarting. Invalid/unreadable addresses show GDB's error without resuming.
 
 **Step instruction** executes one machine instruction, entering calls.
@@ -390,7 +391,11 @@ Applying, renaming or deleting a rule refreshes the names automatically while
 paused. **Read instructions** resolves them again on demand. GDB also supplies addressable
 parameters and locals in the selected frame; optimized-out/register-only values
 are left unnamed. Frame references are recognized in x86 Intel, ARM/ARM64 bracket
-forms and RISC-V `offset(base)` forms. Indexed expressions are left unchanged.
+forms and RISC-V `offset(base)` forms. Simple base+offset references through other general-purpose registers also use
+their values at this stop, so `[rax+8]`, `[x0,#8]` and `8(a0)` can show structure
+fields. This is a stop snapshot, not symbolic execution of future instructions.
+Indexed expressions are left unchanged. Displacements and numbers inside quoted
+strings are not reclassified as standalone absolute addresses.
 For a different function, select its frame first to resolve that function's locals.
 
 Global names also annotate pointers in locals, value trees, watches, watch graphs, source
