@@ -326,7 +326,15 @@ jobs:
       - name: Exercise GDB through an isolated real SSH gdbserver
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
-          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 python3 insight/tools/run_ci_diagnostic.py xvfb-run -a python3 insight/tests/native_debugger_remote_fixture.py _native/tests/test_insight_native_debugger_gui
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-remote.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a python3 insight/tests/native_debugger_remote_fixture.py _native/tests/test_insight_native_debugger_gui
+      - name: Publish native debugger diagnostics
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-gdb-remote-diagnostics
+          path: native-gdb-remote.log
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Install the HDL backend after native debugger checks
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: python3 insight/tools/build_editor.py --slang-only --install --prefix "$PWD/_native-install"
