@@ -51,6 +51,7 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
         gtk_combo_box_set_active(GTK_COMBO_BOX(remote->mode),
             g_key_file_get_integer(profile, "debugger", "mode", NULL));
         gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Debugger profile restored. Connect or Run explicitly."));
+        native_profile_debug_load(session, profile);
     }
     else
         gtk_label_set_text(GTK_LABEL(remote->status), error ? error->message : insight_tr("Cannot restore debugger profile."));
@@ -64,13 +65,14 @@ static void native_profile_save(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
     GKeyFile *profile = g_key_file_new();
-    g_key_file_set_integer(profile, "debugger", "version", 1);
+    g_key_file_set_integer(profile, "debugger", "version", 2);
     g_key_file_set_integer(profile, "debugger", "mode", gtk_combo_box_get_active(GTK_COMBO_BOX(remote->mode)));
     g_key_file_set_integer(profile, "debugger", "ssh-port", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)));
     g_key_file_set_integer(profile, "debugger", "server-port", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->server_port)));
     for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
         g_key_file_set_string(profile, "debugger", native_profile_names[i],
             gtk_entry_get_text(GTK_ENTRY(native_profile_entry(session, i))));
+    native_profile_debug_store(session, profile);
     GError *error = NULL;
     gboolean valid = native_profile_validate(profile, &error);
     gchar *directory = g_path_get_dirname(remote->profile_path);
@@ -96,15 +98,17 @@ static void native_profile_save(NativeDebug *session)
     g_key_file_unref(profile);
 }
 
-/* EN: Dispatch profile action from button for session data only while its target and tunnel are inactive.
- * RU: Выполняет действие button над профилем session data только при неактивных программе и туннеле. */
+/* EN: Save idle/paused session data from button; restoring/forgetting require an inactive target and tunnel.
+ * RU: Сохраняет session data по button в простое/на паузе; восстановление/удаление требуют неактивных программы и туннеля. */
 static void native_profile_clicked(GtkButton *button, gpointer data)
 {
     NativeDebug *session = data;
     NativeRemote *remote = session->remote;
-    if (!session->ready || session->pending || session->writing || session->running || session->stopped || remote->ssh)
+    if (!session->ready || session->pending || session->writing || session->running || remote->busy)
         return;
     guint action = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(button), "profile-action"));
+    if (action != 0 && (session->stopped || remote->ssh))
+        return;
     if (action == 0)
         native_profile_save(session);
     else if (action == 1)
@@ -133,6 +137,12 @@ static GtkWidget *native_profile_widget(NativeDebug *session, const gchar *targe
     {
         GtkWidget *button = gtk_button_new_with_label(insight_tr(labels[i]));
         g_object_set_data(G_OBJECT(button), "profile-action", GUINT_TO_POINTER(i));
+        if (i == 0)
+            remote->profile_save = button;
+        else if (i == 1)
+            remote->profile_restore = button;
+        else
+            remote->profile_forget = button;
         g_signal_connect(button, "clicked", G_CALLBACK(native_profile_clicked), session);
         gtk_container_add(GTK_CONTAINER(box), button);
     }

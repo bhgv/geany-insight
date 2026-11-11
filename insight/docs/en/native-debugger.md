@@ -230,7 +230,7 @@ Switch explicitly to **Local program** after disconnect for local debugging.
 
 ## Save connection and launch profiles
 
-In **Remote / SSH**, use **Save debugger profile** before connecting or after
+In **Remote / SSH**, use **Save debugger profile** before connecting, while paused, or after
 detaching. It saves the connection mode, SSH host/login/ports, identity/config
 file paths, remote executable, source roots, sysroot, and the arguments/working
 directory from **Launch settings**. SSH password prompts and key contents are
@@ -243,11 +243,32 @@ profile. The selected GDB client is still chosen in the executable picker.
 
 **Restore debugger profile** reloads the last saved form. **Forget saved profile**
 removes the saved file while keeping current form values, so they can be edited
-or saved again. These actions are available while both target and tunnel are
-inactive. Changes are saved only by **Save debugger profile**.
+or saved again. Saving is available while idle or paused, including an active SSH connection.
+Restore and Forget require an inactive target and tunnel. Changes are saved only
+by **Save debugger profile**.
 
 Profiles are private standard INI files under `insight/gdb-profiles/` in the
 editor configuration directory, with a hashed filename for project/executable
 scope. Hover over the profile buttons for the exact path. Invalid/incomplete
 profiles and files larger than 256 KiB show an explanation and preserve the
 current form. All required fields are checked before any setting is applied.
+
+### Source breakpoints and watches in a profile
+
+**Save debugger profile** also records up to 256 persistent source/function
+breakpoints and 32 watch expressions. Source points keep their condition,
+enabled/disabled state and the remaining ignored-hit count reported by GDB.
+On reopening the same project/executable, GDB recreates those source points and
+the editor refreshes their margin markers and breakpoint list. Watch expressions
+appear as **Awaiting stop** and evaluate in the selected frame at the next stop.
+Runtime values and hit totals start afresh.
+
+Restore replaces current source points and watch expressions with the saved set.
+It does not run or connect the target. Pending source points use GDB's normal
+resolution when their code becomes available. A rejected GDB command stops the
+remaining restoration and shows an error; the saved file stays intact.
+
+Data watchpoints, temporary/absolute-address breakpoints and individual C++
+sub-location enable overrides belong to the current session and are not saved.
+Parent C++ source breakpoint settings are saved. Version-one profiles still
+restore connection/launch settings; an explicit Save upgrades them to version two.

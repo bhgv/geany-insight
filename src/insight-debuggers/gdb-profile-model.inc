@@ -13,7 +13,7 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
 {
     const gchar *integer_names[] = {"version", "mode", "ssh-port", "server-port"};
     const gint minimum[] = {1, 0, 0, 1};
-    const gint maximum[] = {1, 2, 65535, 65535};
+    const gint maximum[] = {2, 2, 65535, 65535};
     for (guint i = 0; i < G_N_ELEMENTS(integer_names); i++)
     {
         GError *failure = NULL;
@@ -41,7 +41,8 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
             return FALSE;
         }
     }
-    return TRUE;
+    return g_key_file_get_integer(profile, "debugger", "version", NULL) < 2 ||
+        native_profile_debug_validate(profile, error);
 }
 
 /* EN: Build a private settings filename from directory, project and target; all returned bytes are owned.

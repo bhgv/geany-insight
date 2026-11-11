@@ -89,6 +89,10 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
         if (!ignore)
             ignore = native_debug_field(parent, "ignore");
     }
+    if (!hits)
+        hits = g_strdup("0");
+    if (!ignore)
+        ignore = g_strdup("0");
     gchar *location = file && line ? g_strdup_printf("%s:%s", file, line) :
                                     g_strdup(original ? original : what ? what : number);
     gtk_list_store_insert_with_values(session->point_rows, NULL, -1,
@@ -201,6 +205,7 @@ static void native_debug_point_reply(NativeDebug *session, const gchar *record)
     {
         session->points_pending = FALSE;
         native_points_refresh(session, record);
+        native_profile_points_snapshot(session, record);
     }
     if (session->editor_point_pending)
     {

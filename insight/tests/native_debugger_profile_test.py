@@ -3,6 +3,7 @@
 # EN: Execute the production debugger profile validator against GLib and reject corrupt snapshots.
 # RU: Выполняет производственную проверку профилей с GLib и отклоняет повреждённые снимки.
 import ctypes.util
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -23,6 +24,7 @@ typedef long glong;
 typedef long gssize;
 typedef size_t gsize;
 typedef struct GKeyFile GKeyFile;
+typedef struct {char *str; size_t len, allocated_len;} GString;
 typedef struct {unsigned domain; int code; char *message;} GError;
 #define TRUE 1
 #define FALSE 0
@@ -47,6 +49,13 @@ extern GKeyFile *g_key_file_new(void);
 extern void g_key_file_unref(GKeyFile *);
 extern int g_key_file_get_integer(GKeyFile *, const char *, const char *, GError **);
 extern char *g_key_file_get_string(GKeyFile *, const char *, const char *, GError **);
+extern int g_key_file_get_boolean(GKeyFile *, const char *, const char *, GError **);
+extern void g_key_file_set_boolean(GKeyFile *, const char *, const char *, int);
+extern char *g_strescape(const char *, const char *);
+extern GString *g_string_new(const char *);
+extern GString *g_string_append(GString *, const char *);
+extern void g_string_append_printf(GString *, const char *, ...);
+extern char *g_string_free(GString *, int);
 extern void g_key_file_set_integer(GKeyFile *, const char *, const char *, int);
 extern void g_key_file_set_string(GKeyFile *, const char *, const char *, const char *);
 '''
@@ -67,7 +76,7 @@ int main(void)
     for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
         g_key_file_set_string(profile, "debugger", native_profile_names[i], "");
     assert(native_profile_validate(profile, &error) && !error);
-    g_key_file_set_integer(profile, "debugger", "version", 2);
+    g_key_file_set_integer(profile, "debugger", "version", 3);
     assert(!native_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_set_integer(profile, "debugger", "version", 1);
@@ -80,6 +89,32 @@ int main(void)
     g_clear_error(&error);
     g_key_file_set_string(profile, "debugger", "host", "build-host");
     assert(native_profile_validate(profile, &error));
+    g_key_file_set_integer(profile, "debugger", "version", 2);
+    g_key_file_set_integer(profile, "debugger", "watch-count", 1);
+    g_key_file_set_integer(profile, "debugger", "point-count", 1);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_string(profile, "watches", "expression-0", "marker");
+    g_key_file_set_string(profile, "breakpoint-0", "location", "main");
+    g_key_file_set_string(profile, "breakpoint-0", "condition", "1");
+    g_key_file_set_boolean(profile, "breakpoint-0", "enabled", FALSE);
+    g_key_file_set_integer(profile, "breakpoint-0", "ignore", 3);
+    assert(native_profile_validate(profile, &error));
+    char *point_command = native_profile_point_command(profile, 0);
+    puts(point_command);
+    g_free(point_command);
+    g_key_file_set_string(profile, "breakpoint-0", "location", "*0x1234");
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_string(profile, "breakpoint-0", "location", "main");
+    g_key_file_set_integer(profile, "debugger", "point-count", 257);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_integer(profile, "debugger", "point-count", 1);
+    g_key_file_set_integer(profile, "debugger", "watch-count", 33);
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_integer(profile, "debugger", "watch-count", 1);
     char too_long[4098];
     memset(too_long, 'x', sizeof too_long - 1);
     too_long[sizeof too_long - 1] = '\0';
@@ -111,7 +146,9 @@ class NativeProfile(unittest.TestCase):
             self.skipTest('Needs cc and GLib/GIO runtime libraries.')
         model = Path(__file__).resolve().parents[2] / 'src/insight-debuggers/gdb-profile-model.inc'
         names = model.read_text().split('static const gchar *native_profile_names[] = {', 1)[1].split('};', 1)[0]
-        helpers = '\n'.join(function('src/insight-debuggers/gdb-profile-model.inc', name)
+        debug_helpers = '\n'.join(function('src/insight-debuggers/gdb-profile-debug-model.inc', name)
+                                  for name in ('native_profile_text_valid', 'native_profile_debug_validate', 'native_profile_point_command'))
+        helpers = debug_helpers + '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-model.inc', name)
                             for name in ('native_profile_validate', 'native_profile_path'))
         with tempfile.TemporaryDirectory(dir=model.parents[2]) as directory:
             root = Path(directory)
@@ -119,7 +156,17 @@ class NativeProfile(unittest.TestCase):
             source.write_text(DECLARATIONS + 'static const gchar *native_profile_names[] = {' + names + '};\n' + helpers + MAIN)
             subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', str(source),
                             '-o', str(root / 'profile'), *['-l:' + name for name in libraries]], check=True)
-            subprocess.run([str(root / 'profile')], check=True)
+            command = subprocess.check_output([str(root / 'profile')], text=True)
+            gdb = os.environ.get('GDB', shutil.which('gdb'))
+            if gdb:
+                (root / 'main.c').write_text('int main(void) { return 0; }\n')
+                subprocess.run(['cc', '-g', str(root / 'main.c'), '-o', str(root / 'program')], check=True)
+                result = subprocess.run([gdb, '--nx', '--quiet', '--interpreter=mi2', str(root / 'program')],
+                                        input=command + '-break-list\n-gdb-exit\n',
+                                        text=True, capture_output=True, check=True, timeout=15)
+                self.assertNotIn('^error', result.stdout)
+                for value in ('enabled="n"', 'cond="1"', 'ignore="3"'):
+                    self.assertIn(value, result.stdout)
 
 
 if __name__ == '__main__':

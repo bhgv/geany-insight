@@ -11,6 +11,13 @@ typedef struct {
     gchar *expression, *value;
 } NativeWatch;
 
+typedef struct
+{
+    gchar *location, *condition;
+    gboolean enabled;
+    guint ignore;
+} NativeSavedPoint;
+
 typedef enum
 {
     NATIVE_CONTEXT_NONE, NATIVE_CONTEXT_THREADS, NATIVE_CONTEXT_STACK,
@@ -37,7 +44,8 @@ typedef struct {
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
-    GPtrArray *expressions, *locals;
+    GPtrArray *expressions, *locals, *saved_source_points;
+    gboolean profile_restoring, profile_restore_failed;
     GtkListStore *local_rows, *point_rows, *stack_rows;
     GtkWidget *threads, *stack;
     GtkWidget *window;
@@ -84,6 +92,8 @@ typedef struct {
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
 
+static void native_profile_points_snapshot(NativeDebug *session, const gchar *record);
+static void native_profile_debug_reply(NativeDebug *session, const gchar *record);
 static void native_remote_drop(NativeDebug *session);
 static void native_remote_update(NativeDebug *session);
 static void native_remote_restore(NativeDebug *session);
@@ -207,6 +217,7 @@ static void native_debug_free(gpointer data)
     if (session->value_pending_row)
         gtk_tree_row_reference_free(session->value_pending_row);
     insight_queue_clear_full(&session->value_cleanup, g_free);
+    g_ptr_array_unref(session->saved_source_points);
     g_ptr_array_unref(session->expressions);
     g_ptr_array_unref(session->locals);
     g_object_unref(session->local_rows);

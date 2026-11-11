@@ -3287,3 +3287,6 @@ Saved debugger profile forgotten. Current form values are kept.	Сохранён
 Save debugger profile	Сохранить профиль отладчика
 Restore debugger profile	Восстановить профиль отладчика
 Forget saved profile	Забыть сохранённый профиль
+Invalid saved breakpoints or watches (limits: 256 points, 32 watches).	Недопустимые сохранённые точки или наблюдения (пределы: 256 точек, 32 наблюдения).
+Restoring saved source breakpoints…	Восстановление сохранённых точек исходников…
+Some source breakpoints could not be restored. See the GDB console.	Некоторые точки исходников не восстановлены. Подробности в консоли GDB.

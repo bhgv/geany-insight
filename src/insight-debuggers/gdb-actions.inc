@@ -56,6 +56,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
     {
         g_strchomp(line);
         gboolean quiet = FALSE;
+        native_profile_debug_reply(session, line);
         native_debug_point_reply(session, line);
         if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
         {

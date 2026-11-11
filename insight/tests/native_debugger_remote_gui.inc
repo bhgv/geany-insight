@@ -20,6 +20,20 @@ static gboolean remote_test_status(GtkWidget *window, const gchar *text)
     return label && strstr(gtk_label_get_text(GTK_LABEL(label)), text);
 }
 
+/* EN: Fill the profile breakpoint editor from title in data, testing a nonzero saved ignore count.
+ * RU: Заполняет редактор точки по заголовку data, проверяя сохранение ненулевого числа пропусков. */
+static gboolean profile_point_rule(gpointer data)
+{
+    const gchar *title = data;
+    GtkWidget *editor = window_named(title);
+    GtkWidget *entry = editor ? find(editor, "insight-gdb-breakpoint-rule") : NULL;
+    if (!entry)
+        return G_SOURCE_CONTINUE;
+    gtk_entry_set_text(GTK_ENTRY(entry), !strcmp(title, "Breakpoint condition") ? "1" : "3");
+    gtk_dialog_response(GTK_DIALOG(editor), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
 /* EN: Advance the remote scenario for window/tabs, including reconnect, detach, Stop and refused SSH.
  * RU: Продвигает удалённый сценарий window/tabs с переподключением, detach, Stop и отказом SSH. */
 static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
@@ -44,15 +58,17 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
                     ==, g_getenv("INSIGHT_GDB_SSH_HOST"));
                 g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-remote-executable"))),
                     ==, g_getenv("INSIGHT_GDB_REMOTE_EXECUTABLE"));
+                g_assert(point_column(window, 2, "n"));
+                g_assert(point_column(window, 3, "1"));
+                g_assert(point_column(window, 5, "3"));
+                g_assert(find(window, "marker = Awaiting stop"));
                 g_assert(click(window, "Forget saved profile"));
                 g_assert(click(window, "Save debugger profile"));
                 gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host")), "changed-host");
                 g_assert(click(window, "Restore debugger profile"));
                 g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host"))),
                     ==, g_getenv("INSIGHT_GDB_SSH_HOST"));
-                gtk_entry_set_text(GTK_ENTRY(find(window, "Function or file:line")), "main");
-                if (click(window, "Add Breakpoint"))
-                    phase++;
+                phase = 24;
                 return G_SOURCE_CONTINUE;
             }
             gtk_combo_box_set_active(GTK_COMBO_BOX(mode), extended ? 2 : 1);
@@ -68,13 +84,48 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
             port = find(window, "insight-gdb-server-port");
             gtk_spin_button_set_value(GTK_SPIN_BUTTON(port), atoi(g_getenv("INSIGHT_GDB_SERVER_PORT")));
             gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-sysroot")), "/");
-            g_assert(click(window, "Save debugger profile"));
-            g_assert(remote_test_status(window, "Debugger profile saved"));
-            profile_reopened = TRUE;
-            gtk_widget_destroy(window);
-            phase = 0;
+            gtk_entry_set_text(GTK_ENTRY(find(window, "GDB watch expression")), "marker");
+            g_assert(click(window, "Add Watch"));
+            gtk_entry_set_text(GTK_ENTRY(find(window, "Function or file:line")), "main");
+            if (click(window, "Add Breakpoint"))
+                phase = 20;
         }
     }
+    else if (phase == 20 && point_column(window, 2, "y") &&
+             gtk_widget_is_sensitive(find(window, "Breakpoint condition")))
+    {
+        phase = 21;
+        g_timeout_add(100, profile_point_rule, "Breakpoint condition");
+        click(window, "Breakpoint condition");
+    }
+    else if (phase == 21 && point_column(window, 3, "1") && click(window, "Enable / Disable"))
+        phase = 22;
+    else if (phase == 22 && point_column(window, 2, "n") &&
+             gtk_widget_is_sensitive(find(window, "Ignore first hits")))
+    {
+        phase = 23;
+        g_timeout_add(100, profile_point_rule, "Ignore first hits");
+        click(window, "Ignore first hits");
+    }
+    else if (phase == 23 && point_column(window, 5, "3") && click(window, "Save debugger profile"))
+    {
+        g_assert(remote_test_status(window, "Debugger profile saved"));
+        profile_reopened = TRUE;
+        gtk_widget_destroy(window);
+        phase = 0;
+    }
+    else if (phase == 24 && point_column(window, 2, "n") && point_column(window, 5, "3") &&
+             click(window, "Enable / Disable"))
+        phase = 25;
+    else if (phase == 25 && point_column(window, 2, "y") &&
+             gtk_widget_is_sensitive(find(window, "Ignore first hits")))
+    {
+        phase = 26;
+        g_timeout_add(100, point_rule, "Ignore first hits");
+        click(window, "Ignore first hits");
+    }
+    else if (phase == 26 && point_column(window, 5, "0"))
+        phase = 2;
     else if (phase == 2 && click(window, "Connect gdbserver via SSH"))
         phase++;
     else if (phase == 3 && remote_test_status(window, "SSH gdbserver connected"))
@@ -94,6 +145,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         GtkWidget *entry = find(window, "GDB watch expression");
         if (entry && gtk_widget_is_sensitive(entry))
         {
+            g_assert(click(window, "Save debugger profile"));
             gtk_entry_set_text(GTK_ENTRY(entry), "marker");
             if (click(window, "Add Watch"))
                 phase++;

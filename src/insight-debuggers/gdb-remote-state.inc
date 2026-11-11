@@ -12,6 +12,7 @@ typedef struct
     GtkWidget *mode, *form, *host, *user, *port, *identity, *config;
     GtkWidget *server_host, *server_port, *executable, *remote_source, *local_source, *sysroot;
     GtkWidget *connect, *disconnect, *status, *profile_controls;
+    GtkWidget *profile_save, *profile_restore, *profile_forget;
     GSubprocess *ssh;
     GDataInputStream *output, *errors;
     GCancellable *cancel;
