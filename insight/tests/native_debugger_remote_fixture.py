@@ -35,11 +35,11 @@ def stop(child):
 # EN: Configure real loopback services and pass their settings to the editor test binary from argv.
 # RU: Настраивает настоящие loopback-службы и передаёт параметры тестовому редактору из argv.
 def main():
-    if os.name != 'posix' or not os.environ.get('DISPLAY') or not os.environ.get('GEANY_RUN_GUI_TESTS'):
+    if not sys.platform.startswith('linux') or not os.environ.get('DISPLAY') or not os.environ.get('GEANY_RUN_GUI_TESTS'):
         return 77
     import pwd
     sshd = shutil.which('sshd') or '/usr/sbin/sshd'
-    programs = {name: shutil.which(name) for name in ('ssh', 'ssh-keygen', 'gdbserver', 'cc')}
+    programs = {name: shutil.which(name) for name in ('ssh', 'ssh-keygen', 'gdbserver', 'c++')}
     if not Path(sshd).is_file() or not all(programs.values()):
         return 77
     with tempfile.TemporaryDirectory(prefix='insight-remote-gdb-') as temporary:
@@ -75,18 +75,31 @@ def main():
             # RU: Ограниченный цикл позволяет проверить Pause; PID нужны для очистки отсоединённых программ.
             pid_file = root / 'inferior-pids'
             source.write_text(
-                '#include <unistd.h>\n#include <stdio.h>\n'
+                '#include <unistd.h>\n#include <stdio.h>\n#include <sys/prctl.h>\n'
                 'template<typename T> __attribute__((noinline)) int profile_twice(T x) { return (int)x * 2; }\n'
                 'int main(void) {\n volatile int marker = 41;\n alarm(30);\n'
+                ' prctl(PR_SET_PTRACER, PR_SET_PTRACER_ANY, 0, 0, 0);\n'
                 f' FILE *pids = fopen("{pid_file}", "a");\n'
                 ' if (pids) { fprintf(pids, "%d\\n", (int)getpid()); fclose(pids); }\n'
                 ' while (marker == 41) usleep(10000);\n return profile_twice(marker) + profile_twice(1.0);\n}\n')
             executable = root / 'remote app'
-            subprocess.run([shutil.which('c++') or 'c++', '-g', '-O0', f'-fdebug-prefix-map={source_root}=/insight-remote-build',
+            subprocess.run([programs['c++'], '-g', '-O0', f'-fdebug-prefix-map={source_root}=/insight-remote-build',
                             str(source), '-o', str(executable)], check=True)
             with (root / 'ssh.log').open('w+') as ssh_log, (root / 'gdbserver.log').open('w+') as server_log:
                 children.append(subprocess.Popen([sshd, '-D', '-e', '-f', str(config)], stdout=ssh_log, stderr=ssh_log))
                 for mode in (2, 1):
+                    attach_process = None
+                    if mode == 2:
+                        # EN: An independently started inferior permits a real PID attach under Linux Yama.
+                        # RU: Независимо запущенный процесс позволяет проверить подключение по PID при Linux Yama.
+                        attach_process = subprocess.Popen([str(executable)])
+                        children.append(attach_process)
+                        for _ in range(100):
+                            if pid_file.exists() and str(attach_process.pid) in pid_file.read_text().splitlines():
+                                break
+                            time.sleep(0.02)
+                        else:
+                            raise RuntimeError('Attach inferior did not initialize')
                     arguments = [programs['gdbserver']]
                     if mode == 2:
                         arguments.append('--multi')
@@ -110,7 +123,8 @@ def main():
                     else:
                         raise RuntimeError('Loopback services did not become ready')
                     env = os.environ.copy()
-                    env.update(LC_ALL='C.UTF-8', INSIGHT_GDB_REMOTE_GUI='1', INSIGHT_GDB_REMOTE_MODE=str(mode), INSIGHT_GDB_SSH_HOST='127.0.0.1',
+                    env.update(LC_ALL='C.UTF-8', INSIGHT_GDB_REMOTE_GUI='1', INSIGHT_GDB_REMOTE_MODE=str(mode),
+                               INSIGHT_GDB_ATTACH_PID=str(attach_process.pid if attach_process else 0), INSIGHT_GDB_SSH_HOST='127.0.0.1',
                                INSIGHT_GDB_SSH_PORT=str(ssh_port), INSIGHT_GDB_SERVER_PORT=str(server_port),
                                INSIGHT_GDB_REFUSED_PORT=str(refused_port), INSIGHT_GDB_SSH_USER=user,
                                INSIGHT_GDB_SSH_KEY=str(root / 'client'), INSIGHT_GDB_SSH_CONFIG=str(client_config),
@@ -125,6 +139,9 @@ def main():
                             log.seek(0)
                             print(f'{label} fixture diagnostics:\n{log.read()}', file=sys.stderr)
                     stop(children.pop())
+                    if attach_process:
+                        assert attach_process.poll() is None, 'Detach must leave the attached program alive'
+                        stop(children.pop())
             assert not (root / 'mux').exists(), 'Debugger must not reuse or leave an SSH control master'
             return 0
         finally:

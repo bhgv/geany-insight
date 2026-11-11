@@ -3292,3 +3292,11 @@ Restoring saved source breakpoints…	Восстановление сохран�
 Some source breakpoints could not be restored. See the GDB console.	Некоторые точки исходников не восстановлены. Подробности в консоли GDB.
 Invalid saved C++ locations (maximum 1024 entries; source coordinates are required).	Неверные сохранённые подпозиции C++ (не более 1024; нужны координаты исходников).
 Profile restored; %u C++ locations await matching symbols.	Профиль восстановлен; подпозиции C++, ожидающие однозначных символов: %u.
+Enter a remote PID from 1 to 2147483647.	Введите удалённый PID от 1 до 2147483647.
+Attaching to remote process…	Подключение к удалённому процессу…
+Remote process PID (--multi)	PID удалённого процесса (--multi)
+Attach remote process	Подключиться к удалённому процессу
+PID on the gdbserver machine. Connect using extended-remote first; the remote account must have tracing permission.	PID на машине с gdbserver. Сначала подключитесь через extended-remote; удалённая учётная запись должна иметь право трассировки.
+Remote process attached. Inspect or Continue; Detach leaves it running.	Подключено к удалённому процессу. Исследуйте или продолжите; отсоединение оставляет его работающим.
+Attach failed; SSH connection remains open: %s	Не удалось подключиться к процессу; SSH остаётся открытым: %s
+Unknown GDB error	Неизвестная ошибка GDB

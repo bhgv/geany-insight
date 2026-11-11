@@ -218,6 +218,22 @@ continue, disconnects GDB and closes the owned tunnel. Closing the debugger
 also closes its SSH process; detach explicitly first when the remote process
 must continue. The editor does not terminate the separately started gdbserver.
 
+### Attach to a running remote process
+
+Start `gdbserver --multi 127.0.0.1:2345` on the remote machine and connect using
+**SSH: extended-remote (--multi)**. Open the local executable with matching debug
+symbols. In **Remote process PID (--multi)** enter the PID on the gdbserver machine,
+then click **Attach remote process** or press Enter in that field. This attaches
+to the existing process and pauses it; it does not launch the remote executable.
+Use the same stacks, variables, watches, memory, Continue and Pause controls.
+
+An invalid/nonexistent PID or denied tracing permission is shown in connection
+status; the SSH tunnel stays open so you can correct the PID and retry. The remote
+account must be allowed to trace that process under the operating system's rules.
+Attach is unavailable while another target is active and in plain `remote` mode.
+**Detach and close SSH** leaves the attached process running; **Stop** terminates it.
+PID is deliberately not stored in debugger profiles.
+
 If the build recorded paths such as `/build/project`, fill **Source root recorded
 in remote build** with that prefix and **Matching local source root** with the
 existing local project directory. GDB applies `set substitute-path` before

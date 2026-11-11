@@ -19,6 +19,9 @@ DECLARATIONS = r'''
 #include <string.h>
 typedef char gchar;
 typedef unsigned int guint;
+typedef unsigned long guint64;
+#define G_MAXINT 2147483647
+extern guint64 g_ascii_strtoull(const char *, char **, unsigned);
 typedef int gboolean;
 typedef struct {void **pdata; guint len;} GPtrArray;
 typedef struct {void *head, *tail; guint length;} GQueue;
@@ -43,6 +46,15 @@ MAIN = r'''
  * RU: Проверяет границы argv, IPv6, отсутствие оболочки и очистку только собственного сопоставления. */
 int main(void)
 {
+    const char *invalid_pids[] = {NULL, "", "0", "-1", "+1", "1;quit", "1\n", " 1", "2147483648", "99999999999999999999"};
+    for (unsigned i = 0; i < G_N_ELEMENTS(invalid_pids); i++)
+        assert(!native_attach_command(invalid_pids[i]));
+    char *attach = native_attach_command("0000000123");
+    assert(attach && !strcmp(attach, "-target-attach 123"));
+    g_free(attach);
+    attach = native_attach_command("2147483647");
+    assert(attach && !strcmp(attach, "-target-attach 2147483647"));
+    g_free(attach);
     const char *invalid[] = {"", "-oProxyCommand=evil", "host;touch file", "host\nother", "user@host", "a b", "$(cmd)"};
     for (unsigned i = 0; i < G_N_ELEMENTS(invalid); i++)
         assert(!native_remote_host_valid(invalid[i]));
@@ -116,7 +128,9 @@ class NativeRemote(unittest.TestCase):
         library = ctypes.util.find_library('glib-2.0')
         if not library or not shutil.which('cc'):
             self.skipTest('Needs cc and the GLib runtime library.')
-        helpers = [function('src/insight-debuggers/gdb-remote-model.inc', name) for name in
+        helpers = [function('src/insight-debuggers/gdb-context.inc', 'native_context_id'),
+                   function('src/insight-debuggers/gdb-attach-model.inc', 'native_attach_command')]
+        helpers += [function('src/insight-debuggers/gdb-remote-model.inc', name) for name in
                    ('native_remote_host_valid', 'native_remote_argv', 'native_remote_console', 'native_remote_mapping', 'native_remote_setting')]
         with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parents[2]) as temporary:
             root = Path(temporary)

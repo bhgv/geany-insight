@@ -46,6 +46,33 @@ static gboolean profile_cpp_location(GtkWidget *window, const gchar *function, c
     return FALSE;
 }
 
+/* EN: Select and activate window's main stack frame after PID attach; return FALSE until frames are available.
+ * RU: Выбирает и открывает кадр main в window после подключения по PID; до загрузки стека возвращает FALSE. */
+static gboolean remote_attach_main_frame(GtkWidget *window)
+{
+    GtkWidget *view = find(window, "insight-gdb-stack");
+    if (!view || !gtk_widget_is_sensitive(view))
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+         valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *name = NULL;
+        gtk_tree_model_get(model, &row, 1, &name, -1);
+        gboolean matches = !g_strcmp0(name, "main");
+        g_free(name);
+        if (matches)
+        {
+            GtkTreePath *path = gtk_tree_model_get_path(model, &row);
+            gtk_tree_view_row_activated(GTK_TREE_VIEW(view), path, gtk_tree_view_get_column(GTK_TREE_VIEW(view), 0));
+            gtk_tree_path_free(path);
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 /* EN: Fill the profile breakpoint editor from title in data, testing a nonzero saved ignore count.
  * RU: Заполняет редактор точки по заголовку data, проверяя сохранение ненулевого числа пропусков. */
 static gboolean profile_point_rule(gpointer data)
@@ -66,7 +93,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;
     static guint previous_phase = G_MAXUINT;
-    static gboolean profile_reopened;
+    static gboolean profile_reopened, attach_tested;
     if (previous_phase != phase)
     {
         g_print("C/C++ remote GTK: mode=%s phase=%u\n", extended ? "extended" : "remote", phase);
@@ -173,6 +200,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         {
             g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
             g_assert(!gtk_widget_is_sensitive(find(window, "Restart")));
+            g_assert(!gtk_widget_is_sensitive(find(window, "Attach remote process")));
         }
         if (click(window, extended ? "Run" : "Continue"))
             phase++;
@@ -214,6 +242,44 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         phase++;
     else if (phase == 12 && click(window, "Detach and close SSH"))
         phase++;
+    else if (phase == 13 && extended && !attach_tested && remote_test_status(window, "Remote disconnected"))
+    {
+        if (click(window, "Connect gdbserver via SSH"))
+            phase = 40;
+    }
+    else if (phase == 40 && remote_test_status(window, "SSH gdbserver connected"))
+    {
+        GtkWidget *pid = find(window, "insight-gdb-attach-pid");
+        g_assert(gtk_widget_is_sensitive(pid));
+        gtk_entry_set_text(GTK_ENTRY(pid), "2147483647");
+        if (click(window, "Attach remote process"))
+            phase = 41;
+    }
+    else if (phase == 41 && remote_test_status(window, "Attach failed; SSH connection remains open"))
+    {
+        remote_test_entry(window, "insight-gdb-attach-pid", "INSIGHT_GDB_ATTACH_PID");
+        if (click(window, "Attach remote process"))
+            phase = 42;
+    }
+    else if (phase == 42 && remote_test_status(window, "Remote process attached") &&
+             gtk_widget_is_sensitive(find(window, "Continue")))
+    {
+        g_assert(!gtk_widget_is_sensitive(find(window, "Attach remote process")));
+        g_assert(!gtk_widget_is_sensitive(find(window, "insight-gdb-attach-pid")));
+        if (remote_attach_main_frame(window))
+            phase = 46;
+    }
+    else if (phase == 46 && has_local(window, "marker", "41") && click(window, "Continue"))
+        phase = 43;
+    else if (phase == 43 && click(window, "Pause"))
+        phase = 44;
+    else if (phase == 44 && click(window, "Detach and close SSH"))
+        phase = 45;
+    else if (phase == 45 && remote_test_status(window, "Remote disconnected"))
+    {
+        attach_tested = TRUE;
+        phase = 13;
+    }
     else if (phase == 13 && remote_test_status(window, "Remote disconnected"))
     {
         GtkWidget *port = find(window, "insight-gdb-ssh-port");
@@ -230,7 +296,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (connect && gtk_widget_is_sensitive(connect))
         {
             g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
-            g_print("C/C++ remote GTK: profiles, SSH forwarding, source mapping, breakpoints, locals, watches, pause, detach, reconnect and Stop passed.\n");
+            g_print("C/C++ remote GTK: profiles, SSH forwarding, source mapping, breakpoints, locals, watches, pause, PID attach/retry, detach, reconnect and Stop passed.\n");
             passed = TRUE;
             gtk_widget_destroy(window);
             gtk_main_quit();

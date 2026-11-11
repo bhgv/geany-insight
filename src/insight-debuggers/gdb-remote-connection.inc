@@ -17,6 +17,7 @@ static void native_remote_update(NativeDebug *session)
     if (!remote)
         return;
     gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy;
+    native_attach_update(session, idle);
     gtk_widget_set_sensitive(remote->mode, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->form, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->profile_controls, idle && !session->running);
@@ -129,6 +130,28 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
         gtk_label_set_text(GTK_LABEL(remote->status), insight_tr(remote->extended ?
             "SSH gdbserver connected. Run starts the remote executable." :
             "SSH gdbserver connected. Continue resumes the remote program."));
+    }
+    else if (request == NATIVE_REMOTE_ATTACH)
+    {
+        if (success)
+        {
+            session->running = FALSE;
+            session->stopped = TRUE;
+            session->points_needed = TRUE;
+            session->threads_needed = session->stack_needed = session->locals_needed = TRUE;
+            session->watch_next = 0;
+            gtk_label_set_text(GTK_LABEL(remote->status),
+                insight_tr("Remote process attached. Inspect or Continue; Detach leaves it running."));
+        }
+        else
+        {
+            gchar *message = native_debug_field(record, "msg");
+            gchar *status = g_strdup_printf(insight_tr("Attach failed; SSH connection remains open: %s"),
+                message ? message : insight_tr("Unknown GDB error"));
+            gtk_label_set_text(GTK_LABEL(remote->status), status);
+            g_free(status);
+            g_free(message);
+        }
     }
     else if (request == NATIVE_REMOTE_DETACH)
     {
