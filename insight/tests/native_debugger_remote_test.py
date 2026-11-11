@@ -70,7 +70,11 @@ int main(void)
     for (unsigned i = 0; args[i]; i++)
         assert(strcmp(args[i], "-oBatchMode=yes"));
     g_strfreev(args);
-    assert(!native_remote_argv("ssh", "host", "", 0, "", "", "localhost", 2345, 4567, TRUE));
+    args = native_remote_argv("ssh", "host", "", 0, "", "", "localhost", 2345, 4567, TRUE);
+    assert(args);
+    for (unsigned i = 0; args[i]; i++)
+        assert(strcmp(args[i], "-p"));
+    g_strfreev(args);
     assert(!native_remote_argv("ssh", "host", "", 22, "", "", "localhost", 65536, 4567, TRUE));
     GQueue queue = {0};
     native_remote_mapping(&queue, "/build with spaces", "C:\\local source");

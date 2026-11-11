@@ -191,6 +191,7 @@ gdbserver --multi 127.0.0.1:2345
 Open **Remote / SSH** in the debugger. Choose **SSH: existing gdbserver** for
 the first command or **SSH: extended-remote (--multi)** for the second. Enter
 SSH host/config alias, login, SSH port and optional identity/config files.
+Port `0` preserves the SSH config alias's port (or OpenSSH's default port 22).
 The gdbserver host is resolved **on the SSH server**; normally keep `127.0.0.1`
 and port `2345`. For `--multi`, enter the executable's full **remote** path.
 Arguments come from **Launch settings**; its local working directory is not

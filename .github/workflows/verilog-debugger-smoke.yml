@@ -40,6 +40,7 @@ on:
       - 'insight/tests/verilog-debugger-gui/**'
       - 'insight/tests/native_debugger_gui_test.c'
       - 'insight/tests/native_debugger_values_gui.inc'
+      - 'insight/tests/native_debugger_remote_gui.inc'
       - 'insight/tests/native-debug/**'
       - 'tests/meson.build'
 

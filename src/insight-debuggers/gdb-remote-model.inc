@@ -17,7 +17,7 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
                                   guint server_port, guint local_port, gboolean askpass)
 {
     if (!native_remote_host_valid(host) || !native_remote_host_valid(server_host) ||
-        !port || port > 65535 || !server_port || server_port > 65535 || !local_port || local_port > 65535)
+        port > 65535 || !server_port || server_port > 65535 || !local_port || local_port > 65535)
         return NULL;
     GPtrArray *args = g_ptr_array_new_with_free_func(g_free);
     const gchar *options[] = {ssh, "-T", "-oExitOnForwardFailure=yes", "-oConnectTimeout=15",
@@ -31,8 +31,11 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
         g_ptr_array_add(args, g_strdup("-F"));
         g_ptr_array_add(args, g_strdup(config));
     }
-    g_ptr_array_add(args, g_strdup("-p"));
-    g_ptr_array_add(args, g_strdup_printf("%u", port));
+    if (port)
+    {
+        g_ptr_array_add(args, g_strdup("-p"));
+        g_ptr_array_add(args, g_strdup_printf("%u", port));
+    }
     if (*user)
     {
         g_ptr_array_add(args, g_strdup("-l"));

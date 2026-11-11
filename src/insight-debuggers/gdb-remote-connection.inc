@@ -137,7 +137,7 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
             g_free(message);
             insight_queue_clear_full(&session->launch_commands, g_free);
         }
-        else
+        else if (success || remote->ssh)
             gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Remote disconnected; SSH tunnel closed."));
         native_remote_drop(session);
         native_target_clear(session);

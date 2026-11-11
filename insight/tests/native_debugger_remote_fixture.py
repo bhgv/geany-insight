@@ -84,36 +84,45 @@ def main():
                             str(source), '-o', str(executable)], check=True)
             with (root / 'ssh.log').open('w+') as ssh_log, (root / 'gdbserver.log').open('w+') as server_log:
                 children.append(subprocess.Popen([sshd, '-D', '-e', '-f', str(config)], stdout=ssh_log, stderr=ssh_log))
-                children.append(subprocess.Popen([programs['gdbserver'], '--multi', f'127.0.0.1:{server_port}'],
-                                                  stdout=server_log, stderr=server_log))
-                for _ in range(200):
-                    if any(child.poll() is not None for child in children):
-                        raise RuntimeError('Loopback service exited before readiness')
+                for mode in (2, 1):
+                    arguments = [programs['gdbserver']]
+                    if mode == 2:
+                        arguments.append('--multi')
+                    arguments.append(f'127.0.0.1:{server_port}')
+                    if mode == 1:
+                        arguments.append(str(executable))
                     server_log.seek(0)
-                    if 'Listening on port' in server_log.read():
-                        try:
-                            with socket.create_connection(('127.0.0.1', ssh_port), timeout=0.1):
-                                break
-                        except OSError:
-                            pass
-                    time.sleep(0.05)
-                else:
-                    raise RuntimeError('Loopback services did not become ready')
-                env = os.environ.copy()
-                env.update(LC_ALL='C.UTF-8', INSIGHT_GDB_REMOTE_GUI='1', INSIGHT_GDB_SSH_HOST='127.0.0.1',
-                           INSIGHT_GDB_SSH_PORT=str(ssh_port), INSIGHT_GDB_SERVER_PORT=str(server_port),
-                           INSIGHT_GDB_REFUSED_PORT=str(refused_port), INSIGHT_GDB_SSH_USER=user,
-                           INSIGHT_GDB_SSH_KEY=str(root / 'client'), INSIGHT_GDB_SSH_CONFIG=str(client_config),
-                           INSIGHT_GDB_REMOTE_EXECUTABLE=str(executable), INSIGHT_GDB_REMOTE_SOURCE='/insight-remote-build',
-                           INSIGHT_GDB_LOCAL_SOURCE=str(source_root))
-                try:
-                    subprocess.run([str(Path(sys.argv[1]).resolve()), str(executable),
-                                    str(source), str(root / 'profile')], env=env, check=True, timeout=120)
-                finally:
-                    for label, log in [('SSH', ssh_log), ('gdbserver', server_log)]:
-                        log.flush()
-                        log.seek(0)
-                        print(f'{label} fixture diagnostics:\n{log.read()}', file=sys.stderr)
+                    server_log.truncate()
+                    children.append(subprocess.Popen(arguments, stdout=server_log, stderr=server_log))
+                    for _ in range(200):
+                        if any(child.poll() is not None for child in children):
+                            raise RuntimeError('Loopback service exited before readiness')
+                        server_log.seek(0)
+                        if 'Listening on port' in server_log.read():
+                            try:
+                                with socket.create_connection(('127.0.0.1', ssh_port), timeout=0.1):
+                                    break
+                            except OSError:
+                                pass
+                        time.sleep(0.05)
+                    else:
+                        raise RuntimeError('Loopback services did not become ready')
+                    env = os.environ.copy()
+                    env.update(LC_ALL='C.UTF-8', INSIGHT_GDB_REMOTE_GUI='1', INSIGHT_GDB_REMOTE_MODE=str(mode), INSIGHT_GDB_SSH_HOST='127.0.0.1',
+                               INSIGHT_GDB_SSH_PORT=str(ssh_port), INSIGHT_GDB_SERVER_PORT=str(server_port),
+                               INSIGHT_GDB_REFUSED_PORT=str(refused_port), INSIGHT_GDB_SSH_USER=user,
+                               INSIGHT_GDB_SSH_KEY=str(root / 'client'), INSIGHT_GDB_SSH_CONFIG=str(client_config),
+                               INSIGHT_GDB_REMOTE_EXECUTABLE=str(executable), INSIGHT_GDB_REMOTE_SOURCE='/insight-remote-build',
+                               INSIGHT_GDB_LOCAL_SOURCE=str(source_root))
+                    try:
+                        subprocess.run([str(Path(sys.argv[1]).resolve()), str(executable),
+                                        str(source), str(root / f'profile-{mode}')], env=env, check=True, timeout=120)
+                    finally:
+                        for label, log in [('SSH', ssh_log), ('gdbserver', server_log)]:
+                            log.flush()
+                            log.seek(0)
+                            print(f'{label} fixture diagnostics:\n{log.read()}', file=sys.stderr)
+                    stop(children.pop())
             return 0
         finally:
             for child in reversed(children):

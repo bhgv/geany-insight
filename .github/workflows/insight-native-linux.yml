@@ -248,6 +248,7 @@ on:
       - insight/tests/c_operator_tokens_test.py
       - insight/tests/hdl_instance_models_test.py
       - insight/tests/native_debugger*.py
+      - insight/tests/native_debugger_remote_gui.inc
       - insight/tests/native_debugger_compile_fixture.c
       - src/insight-debuggers/**
       - meson.build
@@ -304,7 +305,6 @@ jobs:
           meson setup _native --prefix="$PWD/_native-install" --libdir=lib -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=true -Dclang-provider=system -Dclang=enabled -Dclang-cpp=enabled -Dclang-bundle=true -Dmac-integration=disabled
           meson compile -C _native
           meson install -C _native
-          python3 insight/tools/build_editor.py --slang-only --install --prefix "$PWD/_native-install"
           python3 - <<'PY'
           import pathlib, subprocess
           root = pathlib.Path('_native-install').resolve()
@@ -325,6 +325,9 @@ jobs:
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
           LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a python3 insight/tests/native_debugger_remote_fixture.py _native/tests/test_insight_native_debugger_gui
+      - name: Install the HDL backend after native debugger checks
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: python3 insight/tools/build_editor.py --slang-only --install --prefix "$PWD/_native-install"
       - name: Check HDL completion in the running editor
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |

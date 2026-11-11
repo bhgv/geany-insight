@@ -120,7 +120,9 @@ static GtkWidget *native_remote_widget(NativeDebug *session, const gchar *target
     gtk_container_set_border_width(GTK_CONTAINER(grid), 8);
     remote->host = native_remote_entry(GTK_GRID(grid), 0, "SSH host / config alias", "", "insight-gdb-ssh-host");
     remote->user = native_remote_entry(GTK_GRID(grid), 1, "SSH login (empty: SSH config)", "", "insight-gdb-ssh-user");
-    remote->port = native_remote_spinner(GTK_GRID(grid), 2, "SSH port", 22, "insight-gdb-ssh-port");
+    remote->port = native_remote_spinner(GTK_GRID(grid), 2, "SSH port (0: SSH config)", 22, "insight-gdb-ssh-port");
+    gtk_spin_button_set_range(GTK_SPIN_BUTTON(remote->port), 0, 65535);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(remote->port), 0);
     remote->identity = native_remote_entry(GTK_GRID(grid), 3, "SSH identity file (optional)", "", "insight-gdb-ssh-key");
     remote->config = native_remote_entry(GTK_GRID(grid), 4, "SSH config file (optional)", "", "insight-gdb-ssh-config");
     remote->server_host = native_remote_entry(GTK_GRID(grid), 5, "gdbserver host as seen by SSH server",

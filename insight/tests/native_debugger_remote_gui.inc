@@ -24,12 +24,13 @@ static gboolean remote_test_status(GtkWidget *window, const gchar *text)
  * RU: Продвигает удалённый сценарий window/tabs с переподключением, detach, Stop и отказом SSH. */
 static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
+    gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;
     if (phase == 1)
     {
         GtkWidget *mode = find(window, "insight-gdb-connection-mode");
         if (mode && gtk_widget_is_sensitive(mode))
         {
-            gtk_combo_box_set_active(GTK_COMBO_BOX(mode), 2);
+            gtk_combo_box_set_active(GTK_COMBO_BOX(mode), extended ? 2 : 1);
             remote_test_entry(window, "insight-gdb-ssh-host", "INSIGHT_GDB_SSH_HOST");
             remote_test_entry(window, "insight-gdb-ssh-user", "INSIGHT_GDB_SSH_USER");
             remote_test_entry(window, "insight-gdb-ssh-key", "INSIGHT_GDB_SSH_KEY");
@@ -49,8 +50,16 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 2 && click(window, "Connect gdbserver via SSH"))
         phase++;
-    else if (phase == 3 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
-        phase++;
+    else if (phase == 3 && remote_test_status(window, "SSH gdbserver connected"))
+    {
+        if (!extended)
+        {
+            g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
+            g_assert(!gtk_widget_is_sensitive(find(window, "Restart")));
+        }
+        if (click(window, extended ? "Run" : "Continue"))
+            phase++;
+    }
     else if (phase == 4 && source_markers() && click(window, "Step Over"))
         phase++;
     else if (phase == 5 && has_local(window, "marker", "41"))
@@ -74,9 +83,13 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         phase++;
     else if (phase == 8 && click(window, "Detach and close SSH"))
         phase++;
-    else if (phase == 9 && remote_test_status(window, "Remote disconnected") &&
-             click(window, "Connect gdbserver via SSH"))
-        phase++;
+    else if (phase == 9 && remote_test_status(window, "Remote disconnected"))
+    {
+        if (!extended)
+            phase = 13;
+        else if (click(window, "Connect gdbserver via SSH"))
+            phase++;
+    }
     else if (phase == 10 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
         phase++;
     else if (phase == 11 && source_markers() && click(window, "Stop"))
@@ -98,6 +111,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         GtkWidget *connect = find(window, "Connect gdbserver via SSH");
         if (connect && gtk_widget_is_sensitive(connect))
         {
+            g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
             g_print("C/C++ remote GTK: SSH forwarding, source mapping, breakpoints, locals, watches, pause, detach, reconnect and Stop passed.\n");
             passed = TRUE;
             gtk_widget_destroy(window);

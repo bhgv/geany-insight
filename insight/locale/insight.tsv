@@ -3273,3 +3273,4 @@ SSH connection cancelled.	Подключение SSH отменено.
 Enter valid SSH/server hosts, existing optional key/config files, and both source roots or neither.	Задайте допустимые адреса SSH/сервера, существующие файлы ключа/конфигурации и оба корня исходников либо ни одного.
 GDB executable (gdb, gdb-multiarch or cross GDB)	Исполняемый файл GDB (gdb, gdb-multiarch или кросс-GDB)
 GDB was not found. Choose an installed GDB executable.	GDB не найден. Выберите установленный исполняемый файл GDB.
+SSH port (0: SSH config)	Порт SSH (0: из конфигурации)
