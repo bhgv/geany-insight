@@ -21,11 +21,10 @@ On a Windows x64 computer with working downloads, run from your checkout:
 build.cmd -DownloadBundle D:\GeanyTransfer
 ```
 
-This prepares the complete UCRT64 toolchain, the editor's committed sources,
+This prepares the complete UCRT64 toolchain, the editor's current sources,
 LLVM/Clang, slang and its dependencies, and the pinned Icarus archive. It
 does not compile the editor. By default preparation uses a separate
-`tools\bundle-msys64` under the selected build root. Commit tracked editor
-changes before preparing the bundle. Existing initialized compiler revisions
+`tools\bundle-msys64` under the selected build root. Local tracked edits and nonignored new source files are included in the bundle. Existing initialized compiler revisions
 must match the pinned versions. The command stops on a missing or incompatible
 dependency.
 

@@ -121,10 +121,13 @@ class OfflineBundle(unittest.TestCase):
         archive.write_bytes(b'verified fixture')
         metadata = source / 'insight/tools/windows-toolchain.json'
         metadata.parent.mkdir(parents=True)
+        (source / 'tracked.bin').write_bytes(bytes(range(256)))
+        (source / 'deleted.c').write_text('int removed;')
+        (source / '.gitignore').write_text('generated.obj')
         metadata.write_text(json.dumps({
             'repository': 'https://example.invalid/editor.git',
             'iverilog': {'version': '13.0', 'sha256': bundle.digest(archive)}}))
-        subprocess.check_call(['git', '-C', str(source), 'add', 'insight'])
+        subprocess.check_call(['git', '-C', str(source), 'add', 'insight', 'tracked.bin', 'deleted.c', '.gitignore'])
         subprocess.check_call(['git', '-C', str(source), '-c', 'user.name=Test',
                                '-c', 'user.email=test@example.org', 'commit', '-qm', 'metadata'])
         output = self.root / 'usb bundle'

@@ -73,6 +73,33 @@ def clone(source, destination):
     run(['git', '-C', destination, 'checkout', '--detach', revision(source)])
 
 
+# EN: Copy tracked edits and nonignored new files from source to destination, excluding dependency roots.
+# RU: Копирует правки и новые неигнорируемые файлы из source в destination, исключая корни зависимостей.
+def snapshot_changes(source, destination, excluded=()):
+    changes = subprocess.check_output([
+        'git', '-C', str(source), 'diff', '--binary', '--no-ext-diff', '--no-textconv',
+        '--ignore-submodules=all', 'HEAD', '--', '.'])
+    if changes:
+        with tempfile.TemporaryDirectory(prefix='insight-edits-') as directory:
+            patch = Path(directory) / 'working-tree.patch'
+            patch.write_bytes(changes)
+            run(['git', '-c', 'core.autocrlf=false', '-C', destination,
+                 'apply', '--binary', '--whitespace=nowarn', patch])
+    untracked = subprocess.check_output([
+        'git', '-C', str(source), 'ls-files', '--others', '--exclude-standard', '-z'])
+    for entry in untracked.split(bytes([0])):
+        if not entry:
+            continue
+        relative = entry.decode('utf-8')
+        if any(relative == root or relative.startswith(root + '/') for root in excluded):
+            continue
+        original = source / relative
+        if original.is_file() or original.is_symlink():
+            target = destination / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original, target, follow_symlinks=False)
+
+
 # EN: Download the pinned simulator into cache and verify before publishing the archive.
 # RU: Загружает закреплённый симулятор в cache и проверяет архив до сохранения.
 def simulator_archive(cache):
@@ -103,11 +130,6 @@ def simulator_archive(cache):
 # EN: Collect downloads into bundle; export source repos with no absolute submodule links.
 # RU: Собирает загрузки в bundle, экспортируя репозитории без абсолютных ссылок подмодулей.
 def prepare(bundle, cache, provider):
-    dirty = subprocess.check_output(
-        ['git', '-C', str(ROOT), 'status', '--porcelain', '--untracked-files=no',
-         '--ignore-submodules=all'], text=True).strip()
-    if dirty:
-        raise ValueError('Commit tracked editor changes before preparing a portable bundle.')
     prepare_slang(ROOT / 'external/slang', ROOT / 'external/slang-deps')
     archive = simulator_archive(cache)
     validate(ROOT, cache, provider)
@@ -115,6 +137,8 @@ def prepare(bundle, cache, provider):
     with tempfile.TemporaryDirectory(prefix='insight-bundle-') as temporary:
         exported = Path(temporary) / 'source'
         clone(ROOT, exported)
+        snapshot_changes(ROOT, exported, (
+            'external/slang', 'external/slang-deps', 'external/llvm-project'))
         manifest = json.loads((ROOT / 'insight/tools/windows-toolchain.json').read_text(encoding='utf-8'))
         run(['git', '-C', exported, 'remote', 'set-url', 'origin', manifest['repository']])
         dependencies = ['external/slang'] + ['external/slang-deps/' + name for name in DEPS]
@@ -122,6 +146,7 @@ def prepare(bundle, cache, provider):
             dependencies.append('external/llvm-project')
         for relative in dependencies:
             clone(ROOT / relative, exported / relative)
+            snapshot_changes(ROOT / relative, exported / relative)
         validate(exported, cache, provider)
         # EN: MSYS tar expects POSIX paths when launched by native UCRT Python.
         # RU: MSYS tar ожидает POSIX-пути при запуске из родного UCRT Python.
