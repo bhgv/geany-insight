@@ -127,7 +127,7 @@ static void semantic_call_tree(const gchar *query, gboolean incoming)
             if (!memchr(text, 0, length) && g_utf8_validate(text, length, NULL))
             {
                 g_hash_table_insert(j->buffers, g_strdup(doc->file_name), text);
-                bytes+ = length;
+                bytes += length;
             }
             else g_free(text);
         }

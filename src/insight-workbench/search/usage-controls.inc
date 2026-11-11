@@ -77,7 +77,7 @@ static void usage_start(GtkWidget *widget, gpointer data)
     wb.usage_keywords = mode == 3 && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.search_keywords));
     wb.usage_context = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(wb.search_context));
     if (wb.usage_keywords && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.search_variations)))
-        wb.usage_flags| = INSIGHT_KEYWORD_VARIATIONS;
+        wb.usage_flags |= INSIGHT_KEYWORD_VARIATIONS;
     if (mode == 3 && !(wb.usage_keywords ? insight_keyword_collect("", 0, query, wb.usage_flags, wb.usage_context, NULL, 0, &total, &query_error) : insight_context_collect("", 0, query, wb.usage_flags, NULL, 0, &total, &query_error)))
     {
         set_usage_status(query_error ? query_error->message : "Invalid text search query");

@@ -820,3 +820,5 @@ EXTRA_DIST += insight/tests/slang_completion_test.c insight/tests/slang_completi
 EXTRA_DIST += insight/tools/windows-offline.ps1 insight/tools/windows_bundle.py insight/tests/windows_bundle_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/windows-offline.svg
+
+EXTRA_DIST += insight/tests/c_operator_tokens_test.py

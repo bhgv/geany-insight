@@ -63,7 +63,7 @@ static gboolean hdl_capture_step(gpointer data)
             g_hash_table_size(j->buffers) >= 256) goto done;
             c->text = g_string_new(NULL);
             c->offset = 0;
-            c->total+ = length;
+            c->total += length;
             if (!g_ptr_array_find_with_equal_func(j->paths, doc->file_name, (GEqualFunc)g_str_equal, NULL))
             g_ptr_array_add(j->paths, g_strdup(doc->file_name));
             if (j->paths->len>256) goto done;

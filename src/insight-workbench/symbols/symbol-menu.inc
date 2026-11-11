@@ -220,16 +220,16 @@ static GtkWidget *symbol_menu(GtkTreeView *view)
         GtkWidget *item = g_object_get_data(G_OBJECT(menu), key);
         g_free(key);
         gboolean enabled = ready;
-        if (i == SP_OPEN || i == SP_INFO || i == SP_REFERENCES) enabled & = line != 0;
-        if (i == SP_NAME || i == SP_ONLY || i == SP_HIDE) enabled & = selected;
-        if (i == SP_LOCATION || i == SP_PATH || i == SP_FILTER_FILE) enabled & = line && path && path[0] != '@';
-        if (i == SP_QUALIFIED || i == SP_LINE || i == SP_FILTER_NAME || i == SP_FILTER_SCOPE) enabled & = line != 0;
-        if (i == SP_EXPAND_ONE || i == SP_COLLAPSE_ONE) enabled & = grouped && selected;
-        if (i == SP_EXPAND || i == SP_COLLAPSE) enabled & = grouped;
-        if (i == SP_MORE) enabled & = insight_symbol_view_has_more(view);
+        if (i == SP_OPEN || i == SP_INFO || i == SP_REFERENCES) enabled &= line != 0;
+        if (i == SP_NAME || i == SP_ONLY || i == SP_HIDE) enabled &= selected;
+        if (i == SP_LOCATION || i == SP_PATH || i == SP_FILTER_FILE) enabled &= line && path && path[0] != '@';
+        if (i == SP_QUALIFIED || i == SP_LINE || i == SP_FILTER_NAME || i == SP_FILTER_SCOPE) enabled &= line != 0;
+        if (i == SP_EXPAND_ONE || i == SP_COLLAPSE_ONE) enabled &= grouped && selected;
+        if (i == SP_EXPAND || i == SP_COLLAPSE) enabled &= grouped;
+        if (i == SP_MORE) enabled &= insight_symbol_view_has_more(view);
         if (i == SP_LOCATE)
         {
-            enabled & = GTK_WIDGET(view) == wb.local_view;
+            enabled &= GTK_WIDGET(view) == wb.local_view;
             gtk_widget_set_no_show_all(item, GTK_WIDGET(view) != wb.local_view);
             gtk_widget_set_visible(item, GTK_WIDGET(view) == wb.local_view);
         }
@@ -238,8 +238,8 @@ static GtkWidget *symbol_menu(GtkTreeView *view)
             gboolean local = GTK_WIDGET(view) == wb.local_view;
             gtk_widget_set_no_show_all(item, !local);
             gtk_widget_set_visible(item, local);
-            enabled & = local && line && document_get_current() && document_get_current()->id == wb.local_doc_id;
-            if (i != SP_COPY_TEXT && document_get_current()) enabled & = !document_get_current()->readonly && !SSM(document_get_current()->editor->sci, SCI_GETREADONLY, 0, 0);
+            enabled &= local && line && document_get_current() && document_get_current()->id == wb.local_doc_id;
+            if (i != SP_COPY_TEXT && document_get_current()) enabled &= !document_get_current()->readonly && !SSM(document_get_current()->editor->sci, SCI_GETREADONLY, 0, 0);
         }
         if (i == SP_HELP) enabled = TRUE;
         gtk_widget_set_sensitive(item, enabled);

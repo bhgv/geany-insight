@@ -245,7 +245,7 @@ static HdlJob *hdl_snapshot(const gchar *query, gboolean diagnostics)
         else
         {
             g_hash_table_insert(j->buffers, g_strdup(doc->file_name), text);
-            total+ = length;
+            total += length;
         }
     }
     g_hash_table_unref(seen);
