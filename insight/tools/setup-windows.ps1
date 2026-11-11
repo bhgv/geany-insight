@@ -121,7 +121,7 @@ $RootDir=$locations.RootDir; $MsysRoot=$locations.MsysRoot
 $SourceDir=$locations.SourceDir; $InstallDir=$locations.InstallDir
 if ($defaultCache) { $CacheDir=Join-Path $RootDir 'downloads' }
 if ($DownloadBundle -and -not $PSBoundParameters.ContainsKey('MsysRoot')) {
-    $MsysRoot = Join-Path $RootDir 'toolsundle-msys64'
+    $MsysRoot = Join-Path $RootDir (Join-Path 'tools' 'bundle-msys64')
 }
 # Keep installation paths compatible with the MSYS2 installer and shell launchers.
 if ($MsysRoot -notmatch '^[A-Za-z]:\\[A-Za-z0-9_\\.\-]+$') {

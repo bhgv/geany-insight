@@ -38,6 +38,16 @@ class OfflineBundle(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
+    # EN: Reject hidden control bytes that can corrupt paths in bootstrap scripts.
+    # RU: Отклоняет скрытые управляющие байты, повреждающие пути скриптов сборки.
+    def test_bootstrap_scripts_have_no_hidden_control_bytes(self):
+        tools = Path(__file__).resolve().parents[1] / 'tools'
+        for path in sorted(tools.glob('*.ps1')):
+            with self.subTest(script=path.name):
+                invalid = [(offset, byte) for offset, byte in enumerate(path.read_bytes())
+                           if byte < 32 and byte not in (9, 10, 13)]
+                self.assertEqual(invalid, [])
+
     # EN: Prove an exported nested repo still works after the original checkout disappears.
     # RU: Проверяет вложенный репозиторий после удаления исходного рабочего дерева.
     def test_git_export_survives_relocation(self):
