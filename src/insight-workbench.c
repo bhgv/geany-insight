@@ -312,6 +312,8 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/gdb-data-actions.inc"
 #include "insight-debuggers/gdb-memory-model.inc"
 #include "insight-debuggers/gdb-memory-ui.inc"
+#include "insight-debuggers/gdb-disassembly-model.inc"
+#include "insight-debuggers/gdb-disassembly-ui.inc"
 #include "insight-debuggers/gdb-remote-model.inc"
 #include "insight-debuggers/gdb-remote-process.inc"
 #include "insight-debuggers/gdb-attach-model.inc"

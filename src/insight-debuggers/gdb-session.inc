@@ -44,7 +44,9 @@ typedef struct {
     GDataInputStream *output;
     GCancellable *cancel;
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
-    GtkTextView *console, *watches;
+    GtkTextView *console, *watches, *assembly_text;
+    GtkWidget *assembly_expression, *assembly_status;
+    gboolean assembly_pending;
     GtkWidget *inspection, *observer_log, *tabs, *watch_entry, *watch_add, *watch_remove;
     GPtrArray *expressions, *locals, *saved_points, *profile_disabled_pending;
     guint profile_insert_next, profile_insert_count, profile_insert_index;
@@ -96,6 +98,8 @@ typedef struct {
     gchar *editor_point_pending;
     gboolean closed, ready, running, stopped, pending, writing;
 } NativeDebug;
+
+static gboolean native_assembly_reply(NativeDebug *session, const gchar *record);
 
 static void native_profile_points_snapshot(NativeDebug *session, const gchar *record);
 static void native_profile_debug_reply(NativeDebug *session, const gchar *record);

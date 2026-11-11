@@ -1,0 +1,70 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Build bounded disassembly requests and format GDB instruction tuples.
+ * RU: Создаёт ограниченные запросы дизассемблера и форматирует инструкции GDB. */
+
+/* EN: Return an owned 128-byte MI request for expression, or NULL for invalid single-line UTF-8 input.
+ * RU: Возвращает команду MI на 128 байтов для expression либо NULL для неверного однострочного UTF-8. */
+static gchar *native_assembly_command(const gchar *expression)
+{
+    if (!expression || !*expression || strlen(expression) > 2048 ||
+        !g_utf8_validate(expression, -1, NULL) || g_utf8_strlen(expression, -1) > 512 ||
+        strpbrk(expression, "\r\n"))
+        return NULL;
+    gchar *end = g_strdup_printf("(%s)+128", expression);
+    gchar *escaped = g_strescape(expression, NULL);
+    gchar *escaped_end = g_strescape(end, NULL);
+    gchar *command = g_strdup_printf("-data-disassemble -s \"%s\" -e \"%s\" -- 0", escaped, escaped_end);
+    g_free(escaped_end);
+    g_free(escaped);
+    g_free(end);
+    return command;
+}
+
+/* EN: Return owned readable instructions from record, capped at 256 rows/64 KiB; NULL denotes malformed/error output.
+ * RU: Возвращает читаемые инструкции из record до 256 строк/64 КиБ; NULL означает повреждение или ошибку. */
+static gchar *native_assembly_format(const gchar *record)
+{
+    const gchar *prefix = "^done,asm_insns=[";
+    if (!g_str_has_prefix(record, prefix))
+        return NULL;
+    const gchar *cursor = record + strlen(prefix), *start, *end;
+    GString *text = g_string_new("");
+    guint count = 0;
+    gboolean complete = TRUE;
+    while ((end = native_next_tuple(&cursor, &start)))
+    {
+        if (++count > 256 || end - start > 8192)
+            break;
+        gchar *tuple = g_strndup(start, end - start);
+        gchar *address = native_debug_field(tuple, "address");
+        gchar *instruction = native_debug_field(tuple, "inst");
+        gchar *function = native_debug_field(tuple, "func-name");
+        gchar *offset = native_debug_field(tuple, "offset");
+        gboolean valid = address && instruction && !strpbrk(address, "\r\n") &&
+            g_utf8_validate(instruction, -1, NULL);
+        if (valid)
+        {
+            gchar *label = g_strdup_printf("%s + %s", function ? function : "?", offset ? offset : "0");
+            gchar *safe = g_strescape(label, NULL);
+            g_string_append_printf(text, "%s  <%s>  %s\n", address, safe, instruction);
+            g_free(safe);
+            g_free(label);
+        }
+        g_free(offset);
+        g_free(function);
+        g_free(instruction);
+        g_free(address);
+        g_free(tuple);
+        if (!valid || text->len > 65536)
+        {
+            complete = FALSE;
+            break;
+        }
+    }
+    if (!complete || !count || count > 256 || text->len > 65536 || *cursor != ']')
+    {
+        g_string_free(text, TRUE);
+        return NULL;
+    }
+    return g_string_free(text, FALSE);
+}

@@ -346,3 +346,16 @@ Data watchpoints and temporary/absolute-address breakpoints remain session-only.
 Versions one through three are readable; Save upgrades to version four. The existing
 256 KiB profile limit also includes C++ location metadata. Missing source coordinates
 on a disabled location prevent Save with an explanation, preserving the old file.
+
+## Machine instructions
+
+Pause the target and open **Machine instructions**. Enter `$pc` for the selected
+frame's program counter, a function such as `main`, or an address such as `0x1000`.
+**Read instructions** (or Enter) reads 128 bytes and shows addresses, functions,
+offsets and assembly. This is a snapshot: refresh after stepping, changing frames
+or restarting. Invalid/unreadable addresses show GDB's error without resuming.
+
+**Step instruction** executes one machine instruction, entering calls.
+**Next instruction** steps over a call. Both act on GDB's selected thread and
+require a paused target; ordinary breakpoints still apply. These controls also
+work through a connected gdbserver. They do not require source lines.

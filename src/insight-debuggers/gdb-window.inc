@@ -174,6 +174,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
                              gtk_label_new(insight_tr("Launch settings")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_values_widget(session),
                              gtk_label_new(insight_tr("Inspect values")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_assembly_widget(session),
+                             gtk_label_new(insight_tr("Machine instructions")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_memory_widget(session),
                              gtk_label_new(insight_tr("Memory")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_remote_widget(session, target),

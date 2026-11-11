@@ -3319,3 +3319,13 @@ Restoring saved breakpoints…	Восстановление сохранённы
 Some breakpoints could not be restored. See the GDB console.	Некоторые точки останова не удалось восстановить. Подробности в консоли GDB.
 Could not release the remote pause signal.	Не удалось снять сигнал удалённой паузы.
 SSH could not change the pause signal. Check signal permissions in Console.	Не удалось изменить сигнал паузы через SSH. Проверьте права отправки сигналов в консоли.
+Machine instructions	Машинные инструкции
+Read instructions	Прочитать инструкции
+Step instruction	Шаг с заходом по инструкции
+Next instruction	Шаг без захода по инструкции
+Address expression ($pc, function or 0x…):	Выражение адреса ($pc, функция или 0x…):
+Enter a single-line address expression (up to 512 characters).	Введите однострочное выражение адреса (до 512 символов).
+Reading machine instructions…	Чтение машинных инструкций…
+Instruction snapshot: 128 bytes from the requested address. Refresh after stepping or changing frames.	Снимок инструкций: 128 байтов с указанного адреса. Обновите после шага или смены кадра.
+No readable machine instructions at this address.	По этому адресу нет читаемых машинных инструкций.
+Pause the program, then read instructions. This is a snapshot, not a live view.	Приостановите программу и прочитайте инструкции. Это снимок, без автоматического обновления.
