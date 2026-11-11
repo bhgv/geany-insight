@@ -249,7 +249,8 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (click(window, "Connect gdbserver via SSH"))
             phase = 40;
     }
-    else if (phase == 40 && remote_test_status(window, "SSH gdbserver connected"))
+    else if (phase == 40 && remote_test_status(window, "SSH gdbserver connected") &&
+             gtk_widget_is_sensitive(find(window, "insight-gdb-attach-pid")))
     {
         GtkWidget *pid = find(window, "insight-gdb-attach-pid");
         g_assert(gtk_widget_is_sensitive(pid));
