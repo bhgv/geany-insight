@@ -843,3 +843,5 @@ EXTRA_DIST += insight/tests/native_debugger_remote_test.py insight/tests/native_
 EXTRA_DIST += insight/tests/native_debugger_profile_test.py
 
 EXTRA_DIST += insight/tests/native_debugger_profile_locations_test.py
+
+EXTRA_DIST += insight/tools/run_ci_diagnostic.py
