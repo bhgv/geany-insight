@@ -103,15 +103,6 @@ static void native_value_row(NativeDebug *session, GtkTreeIter *parent, const gc
 static void native_value_children(NativeDebug *session, GtkTreeIter *parent, const gchar *record)
 {
     GtkTreeModel *model = GTK_TREE_MODEL(session->value_rows);
-    GtkTreeIter row;
-    gboolean valid = gtk_tree_model_iter_children(model, &row, parent);
-    while (valid)
-    {
-        guint mode = 0;
-        gtk_tree_model_get(model, &row, 7, &mode, -1);
-        valid = mode ? gtk_tree_store_remove(session->value_rows, &row) :
-                       gtk_tree_model_iter_next(model, &row);
-    }
     const gchar *cursor = strstr(record, "children=[");
     guint returned = 0;
     if (cursor)
@@ -125,6 +116,15 @@ static void native_value_children(NativeDebug *session, GtkTreeIter *parent, con
             g_free(tuple);
             returned++;
         }
+    }
+    GtkTreeIter row;
+    gboolean valid = gtk_tree_model_iter_children(model, &row, parent);
+    while (valid)
+    {
+        guint mode = 0;
+        gtk_tree_model_get(model, &row, 7, &mode, -1);
+        valid = mode ? gtk_tree_store_remove(session->value_rows, &row) :
+                       gtk_tree_model_iter_next(model, &row);
     }
     guint total = 0;
     gtk_tree_model_get(model, parent, 5, &total, -1);

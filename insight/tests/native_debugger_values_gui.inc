@@ -39,7 +39,8 @@ static gboolean value_member(GtkWidget *window, const gchar *parent, const gchar
     GtkTreePath *path = gtk_tree_path_new_from_string(parent);
     GtkTreeIter root, child;
     gboolean found = FALSE;
-    if (gtk_tree_model_get_iter(model, &root, path))
+    if (gtk_tree_view_row_expanded(GTK_TREE_VIEW(tree), path) &&
+        gtk_tree_model_get_iter(model, &root, path))
         for (gboolean valid = gtk_tree_model_iter_children(model, &child, &root); valid;
              valid = gtk_tree_model_iter_next(model, &child))
         {
