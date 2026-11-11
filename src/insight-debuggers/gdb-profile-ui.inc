@@ -59,8 +59,8 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
     g_key_file_unref(profile);
 }
 
-/* EN: Save only session's form values to its private profile; report validation and filesystem failures.
- * RU: Сохраняет только поля формы session в личный профиль; сообщает ошибки проверки и файловой системы. */
+/* EN: Save session's form, source points and watches; preserve the old profile on validation/write failures.
+ * RU: Сохраняет форму, точки исходников и наблюдения session; при ошибках проверки/записи прежний профиль сохраняется. */
 static void native_profile_save(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
@@ -85,10 +85,19 @@ static void native_profile_save(NativeDebug *session)
     {
         gsize length = 0;
         gchar *contents = g_key_file_to_data(profile, &length, &error);
-        GFile *file = g_file_new_for_path(remote->profile_path);
-        valid = contents && g_file_replace_contents(file, contents, length, NULL, FALSE,
-            G_FILE_CREATE_PRIVATE, NULL, NULL, &error);
-        g_object_unref(file);
+        if (contents && length > 256 * 1024)
+        {
+            g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                insight_tr("Debugger profile exceeds the 256 KiB limit."));
+            valid = FALSE;
+        }
+        else
+        {
+            GFile *file = g_file_new_for_path(remote->profile_path);
+            valid = contents && g_file_replace_contents(file, contents, length, NULL, FALSE,
+                G_FILE_CREATE_PRIVATE, NULL, NULL, &error);
+            g_object_unref(file);
+        }
         g_free(contents);
     }
     gtk_label_set_text(GTK_LABEL(remote->status), valid ? insight_tr("Debugger profile saved for this project and executable.") :
