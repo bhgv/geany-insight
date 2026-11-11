@@ -95,6 +95,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
     gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;
     static guint previous_phase = G_MAXUINT;
     static gboolean profile_reopened, attach_tested;
+    static guint attach_value_wait;
     if (previous_phase != phase)
     {
         g_print("C/C++ remote GTK: mode=%s phase=%u\n", extended ? "extended" : "remote", phase);
@@ -252,6 +253,9 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
     {
         GtkWidget *pid = find(window, "insight-gdb-attach-pid");
         g_assert(gtk_widget_is_sensitive(pid));
+        gtk_entry_set_text(GTK_ENTRY(pid), "12345678901234567890");
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(pid)), ==, "12345678901234567890");
+        g_assert(!gtk_widget_is_sensitive(find(window, "Attach remote process")));
         gtk_entry_set_text(GTK_ENTRY(pid), "2147483647");
         if (click(window, "Attach remote process"))
             phase = 41;
@@ -272,6 +276,8 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 46 && has_local(window, "marker", "41") && click(window, "Continue"))
         phase = 43;
+    else if (phase == 46 && ++attach_value_wait >= 100)
+        return timeout(NULL);
     else if (phase == 43 && click(window, "Pause"))
         phase = 44;
     else if (phase == 44 && click(window, "Detach and close SSH"))

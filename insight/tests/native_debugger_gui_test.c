@@ -175,10 +175,60 @@ static gboolean choose(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+/* EN: Print bounded text views and string model rows under widget to diagnose an actual GUI timeout.
+ * RU: Печатает ограниченные текстовые поля и строки моделей widget для диагностики сбоя интерфейса. */
+static void native_gui_dump(GtkWidget *widget)
+{
+    if (GTK_IS_TEXT_VIEW(widget))
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(widget));
+        GtkTextIter first, last;
+        gtk_text_buffer_get_end_iter(buffer, &last);
+        gtk_text_buffer_get_iter_at_offset(buffer, &first, MAX(0, gtk_text_iter_get_offset(&last) - 16000));
+        gchar *text = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+        g_printerr("GDB GUI text %s:\n%s\n", gtk_widget_get_name(widget), text);
+        g_free(text);
+    }
+    if (GTK_IS_TREE_VIEW(widget))
+    {
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(widget));
+        GtkTreeIter row;
+        guint count = 0;
+        for (gboolean valid = model && gtk_tree_model_get_iter_first(model, &row); valid && count++ < 16;
+             valid = gtk_tree_model_iter_next(model, &row))
+        {
+            g_printerr("GDB GUI row %s:", gtk_widget_get_name(widget));
+            for (gint i = 0; i < MIN(10, gtk_tree_model_get_n_columns(model)); i++)
+            {
+                if (gtk_tree_model_get_column_type(model, i) == G_TYPE_STRING)
+                {
+                    gchar *value = NULL;
+                    gtk_tree_model_get(model, &row, i, &value, -1);
+                    g_printerr(" [%d]=%.1024s", i, value ? value : "");
+                    g_free(value);
+                }
+            }
+            g_printerr("\n");
+        }
+    }
+    if (GTK_IS_CONTAINER(widget))
+    {
+        GList *children = gtk_container_get_children(GTK_CONTAINER(widget));
+        for (GList *it = children; it; it = it->next)
+            native_gui_dump(it->data);
+        g_list_free(children);
+    }
+}
+
+/* EN: Report the failed phase and bounded debugger widgets; data is unused and the test exits with failure.
+ * RU: Показывает этап и ограниченные данные окна отладчика; data не используется, тест завершается с ошибкой. */
 static gboolean timeout(gpointer data)
 {
     (void)data;
     g_printerr("C/C++ GDB GTK test timed out at phase %u\n", phase);
+    GtkWidget *window = window_named("C/C++ Debugger");
+    if (window)
+        native_gui_dump(window);
     exit(1);
 }
 

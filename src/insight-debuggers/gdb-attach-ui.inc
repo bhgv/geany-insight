@@ -54,7 +54,7 @@ static GtkWidget *native_attach_widget(NativeDebug *session)
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     GtkWidget *caption = gtk_label_new(insight_tr("Remote process PID (--multi)"));
     remote->pid = gtk_entry_new();
-    gtk_entry_set_max_length(GTK_ENTRY(remote->pid), 10);
+    gtk_entry_set_max_length(GTK_ENTRY(remote->pid), 64);
     gtk_entry_set_input_purpose(GTK_ENTRY(remote->pid), GTK_INPUT_PURPOSE_DIGITS);
     gtk_entry_set_width_chars(GTK_ENTRY(remote->pid), 12);
     gtk_widget_set_name(remote->pid, "insight-gdb-attach-pid");
