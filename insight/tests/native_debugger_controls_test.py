@@ -204,7 +204,29 @@ def controls_source(main):
     helpers += [function('src/insight-debuggers/gdb-source-markers.inc', 'native_source_points')]
     helpers += [function('src/insight-debuggers/gdb-breakpoints.inc', n) for n in
                 ('native_point_tuple', 'native_points_snapshot')]
-    return declarations + '\n'.join(helpers) + main
+    hooks = r'''
+/* EN: The breakpoint-row fixture has no instruction widget; session is deliberately unused by its UI hooks.
+ * RU: У фикстуры строк точек нет виджета инструкций; session намеренно не используется обработчиками интерфейса. */
+static void native_instruction_refresh(NativeDebug *session)
+{
+    (void)session;
+}
+/* EN: Ignore instruction-cache reset for session without an instruction widget.
+ * RU: Пропускает сброс кеша инструкций session без виджета инструкций. */
+static void native_instruction_points_reset(NativeDebug *session)
+{
+    (void)session;
+}
+/* EN: Ignore instruction metadata tuple/parent for session; its production parser is tested by the naming fixture.
+ * RU: Пропускает метаданные tuple/parent инструкций session; настоящий разбор проверяет фикстура имён. */
+static void native_instruction_point(NativeDebug *session, const char *tuple, const char *parent)
+{
+    (void)session;
+    (void)tuple;
+    (void)parent;
+}
+'''
+    return declarations + hooks + '\n'.join(helpers) + main
 
 
 class NativeControls(unittest.TestCase):

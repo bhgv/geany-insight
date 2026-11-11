@@ -263,6 +263,9 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
     gboolean numeric = native_assembly_number(value, &number);
     if (work->action == 1)
     {
+        gchar *address = native_debug_field(record, "addr");
+        assembly->instruction_pc_valid = native_assembly_number(address, &assembly->instruction_pc);
+        g_free(address);
         g_free(assembly->function);
         assembly->function = native_debug_field(record, "func");
         native_assembly_user_rules(assembly);

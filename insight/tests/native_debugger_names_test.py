@@ -37,6 +37,30 @@ int main(int argc, char **argv)
     assembly.objects = g_ptr_array_new_with_free_func(g_free);
     assembly.registers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     NativeDebug session = {.assembly = &assembly};
+    assembly.instruction_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    assembly.instruction_marks = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    char *instruction = native_instruction_address("● ▶ 0x00004010  <main> mov eax,0x44");
+    assert(instruction && !strcmp(instruction, "0x4010"));
+    g_free(instruction);
+    assert(!native_instruction_address("mov eax,0x4010"));
+    assert(!native_instruction_address("0x4010evil"));
+    native_instruction_point(&session,
+        "{number=\"2\",type=\"breakpoint\",addr=\"0x4010\",enabled=\"y\",original-location=\"main\"", NULL);
+    assert(!g_hash_table_lookup(assembly.instruction_points, "0x4010"));
+    assert(GPOINTER_TO_UINT(g_hash_table_lookup(assembly.instruction_marks, "0x4010")) == 2);
+    native_instruction_point(&session,
+        "{number=\"3\",type=\"breakpoint\",addr=\"0x4010\",enabled=\"n\",original-location=\"*0x4010\"", NULL);
+    assert(!strcmp(g_hash_table_lookup(assembly.instruction_points, "0x4010"), "3"));
+    assert(GPOINTER_TO_UINT(g_hash_table_lookup(assembly.instruction_marks, "0x4010")) == 2);
+    native_instruction_point(&session, "{number=\"4.1\",addr=\"0x4020\",enabled=\"y\"",
+        "{number=\"4\",type=\"breakpoint\",enabled=\"n\"");
+    assert(GPOINTER_TO_UINT(g_hash_table_lookup(assembly.instruction_marks, "0x4020")) == 1);
+    native_instruction_point(&session,
+        "{number=\"5\",type=\"hw watchpoint\",addr=\"0x5000\",enabled=\"y\",original-location=\"*0x5000\"", NULL);
+    assert(!g_hash_table_lookup(assembly.instruction_marks, "0x5000"));
+    native_instruction_points_reset(&session);
+    assert(g_hash_table_size(assembly.instruction_points) == 0);
+    assert(g_hash_table_size(assembly.instruction_marks) == 0);
     const char *regs[] = {"fp", "rbp", "ebp", "x29", "r11", "r7", "s0", "sp"};
     for (guint i = 0; i < G_N_ELEMENTS(regs); i++)
     {
@@ -218,7 +242,13 @@ int main(int argc, char **argv)
     assert(!native_name_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_unref(profile);
-    if (argc == 3)
+    if (argc == 3 && !strcmp(argv[1], "point"))
+    {
+        native_instruction_point(&session, argv[2], NULL);
+        assert(g_hash_table_size(assembly.instruction_points) == 1);
+        assert(g_hash_table_size(assembly.instruction_marks) == 1);
+    }
+    else if (argc == 3)
     {
         NativeAssemblyWork work = {.action = (guint)atoi(argv[1]), .label = "object", .scope = "",
                                    .manual = TRUE, .expression = "0x4008"};
@@ -237,6 +267,8 @@ int main(int argc, char **argv)
     g_ptr_array_unref(assembly.objects);
     g_ptr_array_unref(assembly.register_names);
     g_hash_table_unref(assembly.registers);
+    g_hash_table_unref(assembly.instruction_points);
+    g_hash_table_unref(assembly.instruction_marks);
     return 0;
 }
 '''
@@ -251,12 +283,13 @@ class NativeNames(unittest.TestCase):
             self.skipTest('Needs cc and GLib/GIO runtimes.')
         directory = Path('src/insight-debuggers/disassembly')
         helpers = '\n'.join(function('src/insight-debuggers/gdb-context.inc', name)
-                            for name in ('native_debug_field', 'native_next_tuple'))
+                            for name in ('native_debug_field', 'native_next_tuple', 'native_context_id'))
         model = Path('src/insight-debuggers/gdb-disassembly-model.inc').read_text()
         code = ABI + (directory / 'state.inc').read_text()
         code += '\ntypedef struct {NativeAssembly *assembly;} NativeDebug;\n' + helpers + model
         for name in ('rules.inc', 'resolve.inc', 'annotations.inc'):
             code += (directory / name).read_text()
+        code += (directory / 'instruction-model.inc').read_text()
         code += function(str(directory / 'names-ui.inc'), 'native_name_profile_store') + MAIN
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -282,6 +315,7 @@ class NativeNames(unittest.TestCase):
         subprocess.run(['cc', '-g', '-O0', str(source), '-o', str(target)], check=True)
         commands = ('-gdb-set disassembly-flavor intel\n'
                     '-data-disassemble -s main -e main+8 -- 0\n'
+                    '-break-insert *main\n'
                     '-var-create typed * "*(struct Packet*)&object"\n'
                     '-var-list-children --no-values typed 0 64\n'
                     '-data-evaluate-expression "(unsigned long long)&((struct Packet*)0)->inner"\n'
@@ -292,6 +326,8 @@ class NativeNames(unittest.TestCase):
         self.assertTrue(any(line.startswith('^done,asm_insns=') for line in records), result.stdout)
         assembly = next(line for line in records if line.startswith('^done,asm_insns='))
         self.assertNotIn('%rip', assembly)
+        point = next(line for line in records if line.startswith('^done,bkpt='))
+        subprocess.run([str(helper), 'point', point], check=True)
         fields = next(line for line in records if 'children=[' in line and line.startswith('^done'))
         output = subprocess.check_output([str(helper), '7', fields], text=True)
         self.assertIn('-var-info-path-expression "typed.inner"', output)

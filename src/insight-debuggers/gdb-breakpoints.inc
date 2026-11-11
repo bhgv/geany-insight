@@ -64,6 +64,7 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple, const g
         g_free(number);
         return;
     }
+    native_instruction_point(session, tuple, parent);
     gchar *function = native_debug_field(tuple, "func");
     gchar *file = native_debug_field(tuple, "fullname");
     gchar *line = native_debug_field(tuple, "line");
@@ -134,6 +135,7 @@ static void native_points_snapshot(NativeDebug *session, const gchar *record)
     const gchar *body = strstr(record, "body=[");
     if (!g_str_has_prefix(record, "^done") || !body)
         return;
+    native_instruction_points_reset(session);
     gtk_list_store_clear(session->point_rows);
     g_hash_table_remove_all(session->editor_points);
     g_ptr_array_set_size(session->point_markers, 0);
@@ -168,6 +170,7 @@ static void native_points_snapshot(NativeDebug *session, const gchar *record)
     }
     g_free(parent);
     native_source_points(session);
+    native_instruction_refresh(session);
 }
 
 /* EN: Apply record to session while preserving the selected breakpoint by GDB number.

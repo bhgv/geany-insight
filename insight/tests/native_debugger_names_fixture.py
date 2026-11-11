@@ -14,6 +14,8 @@ typedef void GtkWidget;
 typedef void GtkListStore;
 typedef struct GRegex GRegex;
 typedef struct GMatchInfo GMatchInfo;
+#define GUINT_TO_POINTER(v) ((void *)(uintptr_t)(v))
+#define GPOINTER_TO_UINT(v) ((guint)(uintptr_t)(v))
 #define G_MAXUINT64 UINT64_MAX
 #define G_MAXINT64 INT64_MAX
 #define G_GINT64_MODIFIER "l"

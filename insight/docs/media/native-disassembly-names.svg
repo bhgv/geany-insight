@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="530" viewBox="0 0 920 530" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="670" viewBox="0 0 920 670" role="img" aria-labelledby="title desc">
 <title id="title">Symbolic disassembly / Имена в дизассемблере</title>
 <desc id="desc">Illustrative address, typed-field and function-scoped names across x86, ARM and RISC-V. Пример глобальных адресов, полей типов и имён внутри функции.</desc>
-<rect width="920" height="530" rx="14" fill="#edf3f9"/>
+<rect width="920" height="670" rx="14" fill="#edf3f9"/>
 <g font-family="sans-serif" fill="#17334d">
 <text x="24" y="36" font-size="22">One name, all references / Одно имя для всех обращений</text>
 <rect x="24" y="56" width="872" height="112" rx="8" fill="#fff" stroke="#6685a3"/>
@@ -21,5 +21,11 @@
 <text x="42" y="426" font-size="17">mov eax,0x2a  ; const 0x2a</text>
 <text x="42" y="456" font-size="16">Stop / Остановка → $pc → symbols / имена → fields / поля</text>
 <text x="42" y="484" font-size="15">Save profile / Профиль: rules persist / правила; addresses reevaluated / адреса заново</text>
+<rect x="24" y="522" width="872" height="124" rx="8" fill="#fff" stroke="#6685a3"/>
+<circle cx="44" cy="550" r="7" fill="#c62828"/>
+<text x="62" y="556" font-size="17">▶ 0x4010   mov eax,42</text>
+<text x="42" y="584" font-size="16">F2 → address breakpoint / точка адреса → confirmed / подтверждено GDB</text>
+<text x="42" y="610" font-size="16">Cursor row / Строка курсора → Memory / Память · Until / До инструкции</text>
+<text x="42" y="634" font-size="14">Source rules stay / Правила исходников сохраняются</text>
 </g>
 </svg>

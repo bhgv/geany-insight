@@ -3365,3 +3365,9 @@ Registers at the last instruction read	Регистры на момент пос
 Watch selected register	Наблюдать выбранный регистр
 View register address in memory	Открыть адрес регистра в памяти
 Registers from the last instruction read. Changed values are highlighted within the same thread/frame. Click Register to sort by name.	Регистры последнего чтения инструкций. Изменения выделяются в пределах одного потока/кадра. Нажмите «Регистр» для сортировки по имени.
+
+Toggle instruction breakpoint (F2)	Переключить точку на инструкции (F2)
+View instruction address in memory	Открыть адрес инструкции в памяти
+Run to instruction	Выполнить до инструкции
+Place the cursor on an instruction row first.	Сначала установите курсор на строку инструкции.
+The selected frame is already at this instruction.	Выбранный кадр уже находится на этой инструкции.

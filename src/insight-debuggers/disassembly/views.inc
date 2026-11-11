@@ -50,6 +50,8 @@ static void native_assembly_context(NativeDebug *session)
         else
             i++;
     }
+    assembly->instruction_pc_valid = FALSE;
+    native_instruction_refresh(session);
     assembly->follow_needed = TRUE;
     g_hash_table_remove_all(assembly->registers);
     g_clear_pointer(&assembly->function, g_free);
@@ -70,6 +72,7 @@ static void native_assembly_finish(NativeDebug *session)
     gchar *text = assembly->record ? native_assembly_render(session, assembly->record) : NULL;
     gchar *error = text || !assembly->record ? NULL : native_debug_field(assembly->record, "msg");
     debug_set_text(assembly->text, text ? text : "");
+    native_instruction_refresh(session);
     gtk_label_set_text(GTK_LABEL(assembly->status), text ?
         insight_tr("Intel on x86/x64; native syntax on ARM/RISC-V. Names annotate original addresses. Up to 128 data locations, 64 symbols, 3 field levels. Refresh after stepping or changing frames.") :
         error ? error : insight_tr("No readable machine instructions at this address."));

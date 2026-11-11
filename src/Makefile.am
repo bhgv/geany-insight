@@ -324,6 +324,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-remote-connection.inc \
 	insight-debuggers/gdb-remote-ui.inc \
 	insight-debuggers/gdb-session.inc \
+	insight-debuggers/gdb-session/state.inc \
 	insight-debuggers/gdb-watches.inc \
 	insight-debuggers/gdb-context.inc \
 	insight-debuggers/gdb-backtraces.inc \
@@ -341,6 +342,8 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-disassembly-ui.inc \
 	insight-debuggers/disassembly/annotations.inc \
 	insight-debuggers/disassembly/follow-ui.inc \
+	insight-debuggers/disassembly/instruction-model.inc \
+	insight-debuggers/disassembly/instruction-ui.inc \
 	insight-debuggers/disassembly/names-ui.inc \
 	insight-debuggers/disassembly/pipeline.inc \
 	insight-debuggers/disassembly/resolve.inc \

@@ -444,3 +444,25 @@ Select a row and use **Watch selected register** to add `$register` to watches,
 or **View register address in memory** to inspect the address it contains. Reads
 and actions use the selected GDB frame. This is the same snapshot as the
 instruction listing: enable follow mode or read again to refresh it.
+
+### Instruction cursor actions
+
+Pause, open **Machine instructions**, and read `$pc` or a function. Put the
+cursor on the instruction row itself. **Toggle instruction breakpoint (F2)**
+or F2 in the instruction view adds/removes a breakpoint at that numeric
+address. The confirmed point also appears in **Breakpoints**: a red ● means
+enabled, a gray ○ means disabled. Source/function breakpoints are shown too;
+F2 removes only a separate address breakpoint, preserving source rules.
+
+The ▶ highlight identifies the selected frame's confirmed instruction pointer,
+not necessarily the first displayed instruction. It disappears while running
+or after a frame change until the next instruction read. **Follow the selected
+frame at each stop** keeps the visible snapshot refreshed.
+
+**View instruction address in memory** opens bytes at the row's address.
+**Run to instruction** uses GDB's `until *address` for the selected thread/frame:
+other breakpoints or signals may stop earlier, and returning from the frame
+can stop the operation before reaching the address. Selecting the current PC
+keeps the program paused. These actions require an idle paused session; the
+same commands work with an SSH gdbserver. Numeric address breakpoints belong
+to the current GDB session and are not saved as portable profile locations.

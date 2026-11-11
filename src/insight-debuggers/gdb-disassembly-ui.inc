@@ -39,6 +39,8 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
 {
     NativeAssembly *assembly = g_new0(NativeAssembly, 1);
     session->assembly = assembly;
+    assembly->instruction_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    assembly->instruction_marks = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     assembly->rules = g_ptr_array_new_with_free_func(native_name_rule_free);
     assembly->ranges = g_ptr_array_new_with_free_func(native_name_range_free);
     assembly->objects = g_ptr_array_new_with_free_func(g_free);
@@ -67,6 +69,15 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
         g_ptr_array_add(session->paused_controls, button);
         gtk_flow_box_insert(GTK_FLOW_BOX(bar), button, -1);
     }
+    const gchar *actions[] = {"Toggle instruction breakpoint (F2)", "View instruction address in memory", "Run to instruction"};
+    for (guint i = 0; i < G_N_ELEMENTS(actions); i++)
+    {
+        GtkWidget *button = gtk_button_new_with_label(insight_tr(actions[i]));
+        g_object_set_data(G_OBJECT(button), "instruction-action", GUINT_TO_POINTER(i));
+        g_signal_connect(button, "clicked", G_CALLBACK(native_instruction_action), session);
+        g_ptr_array_add(session->paused_controls, button);
+        gtk_flow_box_insert(GTK_FLOW_BOX(bar), button, -1);
+    }
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
     assembly->follow = gtk_check_button_new_with_label(insight_tr("Follow the selected frame at each stop"));
     gtk_widget_set_name(assembly->follow, "insight-gdb-follow-instructions");
@@ -80,6 +91,8 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
     gtk_box_pack_start(GTK_BOX(page), assembly->status, FALSE, FALSE, 0);
     GtkWidget *view = gtk_text_view_new();
     assembly->text = view;
+    gtk_text_view_set_cursor_visible(GTK_TEXT_VIEW(view), TRUE);
+    g_signal_connect(view, "key-press-event", G_CALLBACK(native_instruction_key), session);
     gtk_widget_set_name(view, "insight-gdb-instructions");
     gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
     gtk_text_view_set_monospace(GTK_TEXT_VIEW(view), TRUE);

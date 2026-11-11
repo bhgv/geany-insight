@@ -81,11 +81,12 @@ static gboolean native_assembly_gui_select_register(GtkWidget *window, const gch
     return FALSE;
 }
 
-/* EN: Advance phases 70..80 through names, profiles, instruction following and register actions in window, then resume value tests in tabs.
- * RU: Продвигает фазы 70..80 имён, профилей, слежения и регистров window, затем возвращает тесты значений в tabs. */
+/* EN: Advance phases 70..84 through names, profiles, instruction following, breakpoint and register actions in window, then resume value tests in tabs.
+ * RU: Продвигает фазы 70..84 имён, профилей, слежения, точек и регистров window, затем возвращает тесты значений в tabs. */
 static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     static gchar *previous_instruction;
+    static gint points_before;
     GtkWidget *entry = find(window, "insight-gdb-instruction-address");
     if (!entry || !gtk_widget_is_sensitive(entry))
         return G_SOURCE_CONTINUE;
@@ -175,7 +176,45 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (memory && address && !g_strcmp0(gtk_entry_get_text(GTK_ENTRY(address)), "$rbp") &&
             gtk_text_buffer_get_char_count(gtk_text_view_get_buffer(GTK_TEXT_VIEW(memory))))
         {
-            g_print("C/C++ GTK: automatic fields, names, profiles, PC following and register watch/memory passed.\n");
+            GtkWidget *view = find(window, "insight-gdb-instructions");
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+            GtkTextIter start;
+            gtk_text_buffer_get_start_iter(buffer, &start);
+            gtk_text_buffer_place_cursor(buffer, &start);
+            GtkWidget *points = find(window, "insight-gdb-breakpoints");
+            points_before = gtk_tree_model_iter_n_children(
+                gtk_tree_view_get_model(GTK_TREE_VIEW(points)), NULL);
+            if (click(window, "Toggle instruction breakpoint (F2)"))
+                phase = 81;
+        }
+    }
+    else if (phase == 81 || phase == 82)
+    {
+        GtkWidget *points = find(window, "insight-gdb-breakpoints");
+        gint count = gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(points)), NULL);
+        if (phase == 81 && count == points_before + 1 && native_assembly_gui_text(window, "● "))
+        {
+            GtkWidget *view = find(window, "insight-gdb-instructions");
+            GdkEventKey key = {0};
+            key.type = GDK_KEY_PRESS;
+            key.keyval = GDK_KEY_F2;
+            gboolean handled = FALSE;
+            g_signal_emit_by_name(view, "key-press-event", &key, &handled);
+            if (handled)
+                phase = 82;
+        }
+        else if (phase == 82 && count == points_before)
+        {
+            if (click(window, "View instruction address in memory"))
+                phase = 83;
+        }
+    }
+    else if (phase == 83)
+    {
+        GtkWidget *address = find(window, "insight-gdb-memory-address");
+        if (address && g_str_has_prefix(gtk_entry_get_text(GTK_ENTRY(address)), "0x"))
+        {
+            g_print("C/C++ GTK: instruction button/F2 confirmed points and code address memory passed.\n");
             phase = 16;
         }
     }
