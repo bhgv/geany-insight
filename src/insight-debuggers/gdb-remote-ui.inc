@@ -150,6 +150,7 @@ static GtkWidget *native_remote_widget(NativeDebug *session, const gchar *target
     gtk_box_pack_start(GTK_BOX(buttons), remote->connect, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(buttons), remote->disconnect, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(page), buttons, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(page), native_profile_widget(session, target), FALSE, FALSE, 0);
     remote->status = gtk_label_new(insight_tr(
         "Start gdbserver on the remote machine first. SSH uses keys/agent or the installed askpass helper."));
     gtk_widget_set_name(remote->status, "insight-gdb-remote-status");

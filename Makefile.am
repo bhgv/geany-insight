@@ -839,3 +839,5 @@ EXTRA_DIST += insight/tests/windows_offline_restore_test.ps1
 EXTRA_DIST += insight/tests/native_debugger_memory_test.py
 
 EXTRA_DIST += insight/tests/native_debugger_remote_test.py insight/tests/native_debugger_remote_fixture.py insight/tests/native_debugger_remote_gui.inc
+
+EXTRA_DIST += insight/tests/native_debugger_profile_test.py

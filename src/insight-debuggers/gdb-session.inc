@@ -190,6 +190,7 @@ static void native_debug_free(gpointer data)
         native_remote_drop(session);
         g_free(session->remote->source_mapping);
         g_free(session->remote->original_sysroot);
+        g_free(session->remote->profile_path);
         g_free(session->remote);
     }
     insight_lua_debug_free(session->observer);

@@ -26,6 +26,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;
     static guint previous_phase = G_MAXUINT;
+    static gboolean profile_reopened;
     if (previous_phase != phase)
     {
         g_print("C/C++ remote GTK: mode=%s phase=%u\n", extended ? "extended" : "remote", phase);
@@ -36,6 +37,24 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         GtkWidget *mode = find(window, "insight-gdb-connection-mode");
         if (mode && gtk_widget_is_sensitive(mode))
         {
+            if (profile_reopened)
+            {
+                g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(mode)), ==, extended ? 2 : 1);
+                g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host"))),
+                    ==, g_getenv("INSIGHT_GDB_SSH_HOST"));
+                g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-remote-executable"))),
+                    ==, g_getenv("INSIGHT_GDB_REMOTE_EXECUTABLE"));
+                g_assert(click(window, "Forget saved profile"));
+                g_assert(click(window, "Save debugger profile"));
+                gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host")), "changed-host");
+                g_assert(click(window, "Restore debugger profile"));
+                g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host"))),
+                    ==, g_getenv("INSIGHT_GDB_SSH_HOST"));
+                gtk_entry_set_text(GTK_ENTRY(find(window, "Function or file:line")), "main");
+                if (click(window, "Add Breakpoint"))
+                    phase++;
+                return G_SOURCE_CONTINUE;
+            }
             gtk_combo_box_set_active(GTK_COMBO_BOX(mode), extended ? 2 : 1);
             remote_test_entry(window, "insight-gdb-ssh-host", "INSIGHT_GDB_SSH_HOST");
             remote_test_entry(window, "insight-gdb-ssh-user", "INSIGHT_GDB_SSH_USER");
@@ -49,9 +68,11 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
             port = find(window, "insight-gdb-server-port");
             gtk_spin_button_set_value(GTK_SPIN_BUTTON(port), atoi(g_getenv("INSIGHT_GDB_SERVER_PORT")));
             gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-sysroot")), "/");
-            gtk_entry_set_text(GTK_ENTRY(find(window, "Function or file:line")), "main");
-            if (click(window, "Add Breakpoint"))
-                phase++;
+            g_assert(click(window, "Save debugger profile"));
+            g_assert(remote_test_status(window, "Debugger profile saved"));
+            profile_reopened = TRUE;
+            gtk_widget_destroy(window);
+            phase = 0;
         }
     }
     else if (phase == 2 && click(window, "Connect gdbserver via SSH"))
@@ -118,7 +139,7 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (connect && gtk_widget_is_sensitive(connect))
         {
             g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
-            g_print("C/C++ remote GTK: SSH forwarding, source mapping, breakpoints, locals, watches, pause, detach, reconnect and Stop passed.\n");
+            g_print("C/C++ remote GTK: profiles, SSH forwarding, source mapping, breakpoints, locals, watches, pause, detach, reconnect and Stop passed.\n");
             passed = TRUE;
             gtk_widget_destroy(window);
             gtk_main_quit();

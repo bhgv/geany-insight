@@ -202,6 +202,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     g_signal_connect_object(geany_object, "document-open", G_CALLBACK(native_source_document), dialog, G_CONNECT_AFTER);
     g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(native_source_document), dialog, G_CONNECT_AFTER);
     g_signal_connect(tabs, "switch-page", G_CALLBACK(native_all_stacks_page), dialog);
+    native_profile_load(session, TRUE);
     gtk_widget_show_all(dialog);
 
     g_data_input_stream_read_line_async(session->output, G_PRIORITY_DEFAULT,

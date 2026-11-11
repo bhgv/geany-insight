@@ -242,3 +242,27 @@ library tree, or `target:` to let GDB read target libraries through gdbserver.
 Disconnect restores the initial sysroot and removes only this form's source
 mapping. A failed connection never falls back to running the local symbol file.
 Switch explicitly to **Local program** after disconnect for local debugging.
+
+## Save connection and launch profiles
+
+In **Remote / SSH**, use **Save debugger profile** before connecting or after
+detaching. It saves the connection mode, SSH host/login/ports, identity/config
+file paths, remote executable, source roots, sysroot, and the arguments/working
+directory from **Launch settings**. SSH password prompts and key contents are
+handled by SSH, outside this settings file.
+
+Opening the same executable in the same project restores its form automatically.
+Click **Connect** or **Run** explicitly to proceed. Different projects and different
+executable paths have separate profiles; rebuilding at the same path keeps the
+profile. The selected GDB client is still chosen in the executable picker.
+
+**Restore debugger profile** reloads the last saved form. **Forget saved profile**
+removes the saved file while keeping current form values, so they can be edited
+or saved again. These actions are available while both target and tunnel are
+inactive. Changes are saved only by **Save debugger profile**.
+
+Profiles are private standard INI files under `insight/gdb-profiles/` in the
+editor configuration directory, with a hashed filename for project/executable
+scope. Hover over the profile buttons for the exact path. Invalid/incomplete
+profiles and files larger than 256 KiB show an explanation and preserve the
+current form. All required fields are checked before any setting is applied.

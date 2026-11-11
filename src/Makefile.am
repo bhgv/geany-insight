@@ -306,6 +306,8 @@ libgeany_la_SOURCES += \
 	insight-debuggers/scripts/observer-history.inc \
 	insight-debuggers/scripts/observer-editor.inc \
 	insight-debuggers/scripts/window.inc \
+	insight-debuggers/gdb-profile-model.inc \
+	insight-debuggers/gdb-profile-ui.inc \
 	insight-debuggers/gdb-remote-state.inc \
 	insight-debuggers/gdb-remote-model.inc \
 	insight-debuggers/gdb-remote-process.inc \

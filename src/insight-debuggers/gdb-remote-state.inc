@@ -11,12 +11,12 @@ typedef struct
 {
     GtkWidget *mode, *form, *host, *user, *port, *identity, *config;
     GtkWidget *server_host, *server_port, *executable, *remote_source, *local_source, *sysroot;
-    GtkWidget *connect, *disconnect, *status;
+    GtkWidget *connect, *disconnect, *status, *profile_controls;
     GSubprocess *ssh;
     GDataInputStream *output, *errors;
     GCancellable *cancel;
     guint timer, local_port;
     gboolean busy, connected, extended, detach_needed, disconnect_needed;
     NativeRemoteRequest pending;
-    gchar *source_mapping, *original_sysroot;
+    gchar *source_mapping, *original_sysroot, *profile_path;
 } NativeRemote;

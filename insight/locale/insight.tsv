@@ -3275,3 +3275,15 @@ GDB executable (gdb, gdb-multiarch or cross GDB)	Исполняемый файл
 GDB was not found. Choose an installed GDB executable.	GDB не найден. Выберите установленный исполняемый файл GDB.
 SSH port (0: SSH config)	Порт SSH (0: из конфигурации)
 Paths must not contain line breaks.	Пути не должны содержать переводы строк.
+Invalid debugger profile version, mode or port.	Недопустимая версия профиля, режим или порт отладчика.
+Invalid or missing debugger profile field.	Недопустимое или отсутствующее поле профиля отладчика.
+Debugger profile was not found or cannot be read.	Профиль отладчика не найден или недоступен для чтения.
+Debugger profile exceeds the 256 KiB limit.	Размер профиля отладчика превышает 256 КиБ.
+Debugger profile restored. Connect or Run explicitly.	Профиль отладчика восстановлен. Для подключения или запуска нажмите соответствующую кнопку.
+Cannot restore debugger profile.	Не удалось восстановить профиль отладчика.
+Debugger profile saved for this project and executable.	Профиль отладчика сохранён для этого проекта и программы.
+Cannot save debugger profile.	Не удалось сохранить профиль отладчика.
+Saved debugger profile forgotten. Current form values are kept.	Сохранённый профиль удалён. Текущие значения формы сохранены.
+Save debugger profile	Сохранить профиль отладчика
+Restore debugger profile	Восстановить профиль отладчика
+Forget saved profile	Забыть сохранённый профиль

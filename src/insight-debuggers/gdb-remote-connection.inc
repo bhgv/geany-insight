@@ -19,6 +19,7 @@ static void native_remote_update(NativeDebug *session)
     gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy;
     gtk_widget_set_sensitive(remote->mode, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->form, idle && !remote->ssh && !session->running && !session->stopped);
+    gtk_widget_set_sensitive(remote->profile_controls, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->connect, idle && native_remote_selected(session) &&
         !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->disconnect, remote->ssh &&
