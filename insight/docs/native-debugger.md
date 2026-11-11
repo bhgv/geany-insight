@@ -399,7 +399,9 @@ forms and RISC-V `offset(base)` forms. Simple base+offset references through oth
 their values at this stop, so `[rax+8]`, `[x0,#8]` and `8(a0)` can show structure
 fields. This is a stop snapshot, not symbolic execution of future instructions.
 Indexed expressions are left unchanged. Displacements and numbers inside quoted
-strings are not reclassified as standalone absolute addresses.
+strings are not reclassified as standalone absolute addresses. Negative immediates
+retain their sign. FS/GS-relative references are not matched to flat addresses
+without a confirmed segment base.
 For a different function, select its frame first to resolve that function's locals.
 
 Global names also annotate pointers in locals, value trees, watches, watch graphs, source

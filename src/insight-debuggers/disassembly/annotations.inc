@@ -82,11 +82,13 @@ static void native_name_frame(NativeAssembly *assembly, const gchar *function,
     }
 }
 
-/* EN: Find x86/ARM bracket and RISC-V displacement(base) forms in instruction for function; omit indexed expressions.
- * RU: Ищет формы x86/ARM со скобками и RISC-V displacement(base) в instruction для function; пропускает индексацию. */
+/* EN: Find x86/ARM/RISC-V base+offset operands in instruction for function; skip indexing and unknown FS/GS segment bases.
+ * RU: Ищет обращения x86/ARM/RISC-V в instruction для function; пропускает индексацию и неизвестные базы сегментов FS/GS. */
 static void native_name_frame_operands(NativeAssembly *assembly, const gchar *instruction,
     const gchar *function, GPtrArray *notes)
 {
+    if (strstr(instruction, "fs:") || strstr(instruction, "gs:"))
+        return;
     const gchar *patterns[] = {
         "\\[\\s*([a-z][a-z0-9]*)\\s*(?:([+-])\\s*(0x[0-9a-fA-F]+|[0-9]+)|,\\s*#?(-?(?:0x[0-9a-fA-F]+|[0-9]+)))?\\s*\\]",
         "(-?(?:0x[0-9a-fA-F]+|[0-9]+))\\(([a-z][a-z0-9]*)\\)"
@@ -126,6 +128,7 @@ static gchar *native_name_instruction(NativeAssembly *assembly, const gchar *ins
     native_name_frame_operands(assembly, instruction, function, notes);
     guint bracket = 0, symbol = 0;
     const gchar *memory_start = NULL;
+    gboolean segmented = strstr(instruction, "fs:") || strstr(instruction, "gs:");
     gboolean branch = g_str_has_prefix(instruction, "call") || *instruction == 'j' ||
         g_str_has_prefix(instruction, "b ") || g_str_has_prefix(instruction, "bl ") ||
         g_str_has_prefix(instruction, "b.") || g_str_has_prefix(instruction, "beq") ||
@@ -156,7 +159,7 @@ static gchar *native_name_instruction(NativeAssembly *assembly, const gchar *ins
         gboolean absolute_memory = bracket && memory_start;
         for (const gchar *it = memory_start ? memory_start + 1 : p; absolute_memory && it < p; it++)
             absolute_memory = g_ascii_isspace(*it);
-        gboolean candidate = (!bracket || absolute_memory) && *end != '(' &&
+        gboolean candidate = !segmented && (!bracket || absolute_memory) && *end != '(' &&
             (p == instruction || p[-1] != '-');
         const NativeNamedRange *range = candidate && native_assembly_number(token, &address) ?
             native_name_lookup(assembly, address, function, FALSE) : NULL;
@@ -171,7 +174,9 @@ static gchar *native_name_instruction(NativeAssembly *assembly, const gchar *ins
             const gchar *suffix = end;
             while (g_ascii_isspace(*suffix))
                 suffix++;
-            gchar *label = g_strdup_printf(*suffix == '<' ? "address %s" : "const %s", token);
+            gchar *signed_token = p > instruction && p[-1] == '-' ? g_strconcat("-", token, NULL) : g_strdup(token);
+            gchar *label = g_strdup_printf(*suffix == '<' ? "address %s" : "const %s", signed_token);
+            g_free(signed_token);
             native_name_note(notes, label);
             g_free(label);
         }

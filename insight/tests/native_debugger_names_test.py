@@ -76,6 +76,9 @@ int main(int argc, char **argv)
     assert(!strstr(notes, "packet.count"));
     g_free(notes);
     notes = native_name_instruction(&assembly, "mov eax,-0x4008", "worker");
+    assert(!strstr(notes, "packet.count") && strstr(notes, "const -0x4008"));
+    g_free(notes);
+    notes = native_name_instruction(&assembly, "mov eax,gs:0x4008", "worker");
     assert(!strstr(notes, "packet.count"));
     g_free(notes);
     display = native_name_line_addresses(&session, "0x4008  mov eax,[rbp+0x4008]");
@@ -107,6 +110,9 @@ int main(int argc, char **argv)
         assert(strstr(notes, "packet.count"));
         g_free(notes);
     }
+    notes = native_name_instruction(&assembly, "mov eax,fs:[rax+0x8]", "worker");
+    assert(!strstr(notes, "packet.count"));
+    g_free(notes);
     assert(!native_name_register("xmm0") && !native_name_register("v0") && !native_name_register("r32"));
     guint64 address;
     assert(!native_name_displace(0, -1, &address));
