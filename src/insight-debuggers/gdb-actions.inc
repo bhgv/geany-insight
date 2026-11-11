@@ -159,7 +159,9 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
     }
     else if (!session->closed)
     {
-        session->ready = session->running = session->stopped = FALSE;
+        native_target_clear(session);
+        insight_queue_clear_full(&session->launch_commands, g_free);
+        session->ready = session->kill_pending = FALSE;
         native_debug_log(session, error ? error->message : insight_tr("GDB session ended."));
         native_debug_update(session);
     }

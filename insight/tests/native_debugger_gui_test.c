@@ -150,7 +150,7 @@ static gboolean source_markers(void)
     gboolean point = FALSE, stop = FALSE;
     for (gint line = 0; line < sci_get_line_count(document->editor->sci); line++)
     {
-        guint marks = SSM(document->editor->sci, SCI_MARKERGET, line, 0);
+        guint marks = scintilla_send_message(document->editor->sci, SCI_MARKERGET, line, 0);
         point |= (marks & (1u << 18)) != 0;
         stop |= (marks & (1u << 19)) != 0;
     }

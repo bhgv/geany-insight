@@ -59,6 +59,7 @@ typedef struct {
 static void native_target_clear(NativeDebug *session);
 static gchar *native_launch_next(NativeDebug *session);
 static void native_source_stopped(NativeDebug *session);
+static gchar *native_point_key(const gchar *filename, guint line);
 static void native_debug_send(GtkWidget *dialog, const gchar *command);
 static void native_all_stacks_reply(NativeDebug *session, const gchar *record);
 static gboolean native_context_id(const gchar *value);

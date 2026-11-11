@@ -101,3 +101,10 @@ automatically. Unresolved points remain in the list until GDB can resolve
 them (for example after loading a shared library). Source navigation and dots
 require a full source path and line number from GDB. Only the session's own
 markers are removed on debugger close.
+
+For C++ overloads and templates, all GDB sub-locations (`1.1`, `1.2`, …) are
+listed with their source coordinates. Their condition and counters are inherited
+from the parent. **Enable / Disable** can change one sub-location; it becomes
+active only when the parent is enabled too. Condition, ignored hits and deletion
+apply to the whole parent breakpoint, including all its locations. If several
+locations share a source line, its dot is red whenever any location is active.

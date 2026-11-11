@@ -3190,3 +3190,4 @@ Hit count	Число попаданий
 Restart	Перезапустить
 Executable	Исполняемый файл
 C/C++ breakpoints	Точки останова C/C++
+Sub-locations require an enabled parent. Condition, ignored hits and Delete apply to the whole breakpoint.	Подпозиция действует только при включённой родительской точке. Условие, пропуск попаданий и удаление относятся ко всей точке.

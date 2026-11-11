@@ -59,29 +59,60 @@ static void native_source_stopped(NativeDebug *session)
     native_marker_add(session->stop_markers, session->stop_file, session->stop_line, 19, 0x80dfff);
 }
 
-/* EN: Restore session's margin dots when document opens or activates; object is unused.
- * RU: Восстанавливает точки session при открытии/активации document; object не используется. */
+/* EN: Rebuild session's dots, letting any enabled location win over disabled ones on the same line.
+ * RU: Перестраивает точки session: включённая позиция имеет приоритет над выключенной на той же строке. */
+static void native_source_points(NativeDebug *session)
+{
+    g_ptr_array_set_size(session->point_markers, 0);
+    GHashTable *seen = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GtkTreeModel *model = GTK_TREE_MODEL(session->point_rows);
+    GHashTable *disabled = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    GtkTreeIter parent_row;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &parent_row); valid;
+         valid = gtk_tree_model_iter_next(model, &parent_row))
+    {
+        gchar *number = NULL, *enabled = NULL;
+        gtk_tree_model_get(model, &parent_row, 1, &number, 2, &enabled, -1);
+        if (number && !strchr(number, '.') && !g_strcmp0(enabled, "n"))
+            g_hash_table_add(disabled, g_strdup(number));
+        g_free(enabled);
+        g_free(number);
+    }
+    for (guint pass = 0; pass < 2; pass++)
+    {
+        GtkTreeIter row;
+        for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+             valid = gtk_tree_model_iter_next(model, &row))
+        {
+            gchar *file = NULL, *line = NULL, *enabled = NULL, *owner = NULL;
+            gtk_tree_model_get(model, &row, 6, &file, 7, &line, 2, &enabled, 1, &owner, -1);
+            gchar *dot = owner ? strchr(owner, '.') : NULL;
+            if (dot)
+                *dot = '\0';
+            guint64 number;
+            gboolean active = !g_strcmp0(enabled, "y") &&
+                              !(owner && g_hash_table_contains(disabled, owner));
+            if (active == (pass == 0) && file && line &&
+                g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL) &&
+                g_hash_table_add(seen, native_point_key(file, number)))
+                native_marker_add(session->point_markers, file, number,
+                                  active ? 18 : 20, active ? 0x2020df : 0x888888);
+            g_free(owner);
+            g_free(enabled);
+            g_free(line);
+            g_free(file);
+        }
+    }
+    g_hash_table_unref(disabled);
+    g_hash_table_unref(seen);
+}
+
+/* EN: Restore dialog's dots when document opens or activates; object is unused.
+ * RU: Восстанавливает точки dialog при открытии/активации document; object не используется. */
 static void native_source_document(GObject *object, GeanyDocument *document, gpointer dialog)
 {
     (void)object;
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
-    if (session->closed || !DOC_VALID(document))
-        return;
-    g_ptr_array_set_size(session->point_markers, 0);
-    GtkTreeModel *model = GTK_TREE_MODEL(session->point_rows);
-    GtkTreeIter row;
-    for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
-         valid = gtk_tree_model_iter_next(model, &row))
-    {
-        gchar *file = NULL, *line = NULL, *enabled = NULL;
-        gtk_tree_model_get(model, &row, 6, &file, 7, &line, 2, &enabled, -1);
-        guint64 number;
-        if (file && line && g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL))
-            native_marker_add(session->point_markers, file, number,
-                              !g_strcmp0(enabled, "y") ? 18 : 20,
-                              !g_strcmp0(enabled, "y") ? 0x2020df : 0x888888);
-        g_free(enabled);
-        g_free(line);
-        g_free(file);
-    }
+    if (!session->closed && DOC_VALID(document))
+        native_source_points(session);
 }

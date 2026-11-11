@@ -18,6 +18,21 @@ static gchar *native_point_key(const gchar *filename, guint line)
     return key;
 }
 
+/* EN: Validate GDB number, accepting a decimal breakpoint or its decimal sub-location.
+ * RU: Проверяет number GDB: десятичный номер точки либо её десятичной подпозиции. */
+static gboolean native_point_number(const gchar *number)
+{
+    if (native_context_id(number))
+        return TRUE;
+    const gchar *dot = number ? strchr(number, '.') : NULL;
+    if (!dot || !native_context_id(dot + 1))
+        return FALSE;
+    gchar *parent = g_strndup(number, dot - number);
+    gboolean valid = native_context_id(parent);
+    g_free(parent);
+    return valid;
+}
+
 /* EN: Toggle filename:line in dialog data using GDB's confirmed breakpoint identifier.
  * RU: Переключает filename:line в диалоге data по подтверждённому идентификатору GDB. */
 static void native_debug_toggle(const gchar *filename, guint line, gpointer data)
@@ -39,12 +54,12 @@ static void native_debug_toggle(const gchar *filename, guint line, gpointer data
     g_free(escaped);
 }
 
-/* EN: Parse one breakpoint tuple into session's list/map/markers; preserve unresolved entries.
- * RU: Разбирает кортеж точки в список, карту и маркеры session; сохраняет неразрешённые точки. */
-static void native_point_tuple(NativeDebug *session, const gchar *tuple)
+/* EN: Add tuple to session; inherit condition and counters from parent for sub-locations.
+ * RU: Добавляет tuple в session; для подпозиций наследует условие и счётчики parent. */
+static void native_point_tuple(NativeDebug *session, const gchar *tuple, const gchar *parent)
 {
     gchar *number = native_debug_field(tuple, "number");
-    if (!native_context_id(number))
+    if (!native_point_number(number))
     {
         g_free(number);
         return;
@@ -56,8 +71,23 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple)
     gchar *condition = native_debug_field(tuple, "cond");
     gchar *hits = native_debug_field(tuple, "times");
     gchar *ignore = native_debug_field(tuple, "ignore");
+    gchar *what = native_debug_field(tuple, "what");
+    if (strstr(tuple, "locations=["))
+    {
+        g_clear_pointer(&file, g_free);
+        g_clear_pointer(&line, g_free);
+    }
+    if (parent)
+    {
+        if (!condition)
+            condition = native_debug_field(parent, "cond");
+        if (!hits)
+            hits = native_debug_field(parent, "times");
+        if (!ignore)
+            ignore = native_debug_field(parent, "ignore");
+    }
     gchar *location = file && line ? g_strdup_printf("%s:%s", file, line) :
-                                    g_strdup(original ? original : number);
+                                    g_strdup(original ? original : what ? what : number);
     gtk_list_store_insert_with_values(session->point_rows, NULL, -1,
         0, location, 1, number, 2, enabled, 3, condition, 4, hits, 5, ignore,
         6, file, 7, line, -1);
@@ -66,13 +96,15 @@ static void native_point_tuple(NativeDebug *session, const gchar *tuple)
         guint64 row = g_ascii_strtoull(line, NULL, 10);
         if (row && row <= G_MAXINT)
         {
-            g_hash_table_replace(session->editor_points, native_point_key(file, row), g_strdup(number));
-            native_marker_add(session->point_markers, file, row,
-                              !g_strcmp0(enabled, "y") ? 18 : 20,
-                              !g_strcmp0(enabled, "y") ? 0x2020df : 0x888888);
+            gchar *owner = g_strdup(number);
+            gchar *dot = strchr(owner, '.');
+            if (dot)
+                *dot = '\0';
+            g_hash_table_replace(session->editor_points, native_point_key(file, row), owner);
         }
     }
     g_free(location);
+    g_free(what);
     g_free(ignore);
     g_free(hits);
     g_free(condition);
@@ -96,12 +128,34 @@ static void native_points_snapshot(NativeDebug *session, const gchar *record)
     const gchar *cursor = body + strlen("body=[");
     const gchar *start, *end;
     guint count = 0;
+    gchar *parent = NULL;
     while (count++ < 4096 && (end = native_next_tuple(&cursor, &start)))
     {
         gchar *tuple = g_strndup(start, end - start);
-        native_point_tuple(session, tuple);
+        gchar *number = native_debug_field(tuple, "number");
+        if (native_context_id(number))
+        {
+            g_free(parent);
+            parent = g_strdup(tuple);
+        }
+        native_point_tuple(session, tuple, native_context_id(number) ? NULL : parent);
+        const gchar *nested = strstr(tuple, "locations=[");
+        if (nested)
+        {
+            nested += strlen("locations=[");
+            const gchar *child_start, *child_end;
+            while (count++ < 4096 && (child_end = native_next_tuple(&nested, &child_start)))
+            {
+                gchar *child = g_strndup(child_start, child_end - child_start);
+                native_point_tuple(session, child, tuple);
+                g_free(child);
+            }
+        }
+        g_free(number);
         g_free(tuple);
     }
+    g_free(parent);
+    native_source_points(session);
 }
 
 /* EN: Apply record to session while preserving the selected breakpoint by GDB number.
@@ -177,13 +231,16 @@ static void native_point_edit(GtkButton *button, gpointer data)
         return;
     GtkTreeIter row;
     gchar *number = native_point_selected(session, &row);
-    if (!native_context_id(number))
+    if (!native_point_number(number))
     {
         g_free(number);
         return;
     }
     g_object_ref(dialog);
     const gchar *action = g_object_get_data(G_OBJECT(button), "point-action");
+    gchar *dot = strchr(number, '.');
+    if (dot && strcmp(action, "toggle"))
+        *dot = '\0';
     gchar *command = NULL;
     if (!strcmp(action, "delete"))
         command = g_strdup_printf("-break-delete %s", number);
@@ -302,5 +359,9 @@ static GtkWidget *native_points_widget(NativeDebug *session, GtkWidget *dialog)
         gtk_box_pack_start(GTK_BOX(session->point_controls), button, FALSE, FALSE, 0);
     }
     gtk_box_pack_start(GTK_BOX(page), session->point_controls, FALSE, FALSE, 0);
+    GtkWidget *hint = gtk_label_new(insight_tr(
+        "Sub-locations require an enabled parent. Condition, ignored hits and Delete apply to the whole breakpoint."));
+    gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
+    gtk_box_pack_start(GTK_BOX(page), hint, FALSE, FALSE, 0);
     return page;
 }
