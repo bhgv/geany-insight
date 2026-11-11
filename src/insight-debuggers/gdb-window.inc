@@ -29,16 +29,24 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     insight_panel_help_attach(box, "native-debugger.md");
     NativeDebug *session = g_new0(NativeDebug, 1);
+    session->window = dialog;
+    session->paused_controls = g_ptr_array_new();
     session->point_markers = g_ptr_array_new_with_free_func(native_marker_free);
     session->stop_markers = g_ptr_array_new_with_free_func(native_marker_free);
     session->points_needed = TRUE;
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set confirm off"));
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell off"));
+    g_queue_push_tail(&session->launch_commands, g_strdup("-enable-pretty-printing"));
     session->editor_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     session->process = process;
     session->output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(process));
     session->cancel = g_cancellable_new();
     session->status = gtk_label_new(NULL);
+    gtk_widget_set_name(session->status, "insight-gdb-stop-reason");
+    gtk_label_set_line_wrap(GTK_LABEL(session->status), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(session->status), 100);
+    gtk_label_set_lines(GTK_LABEL(session->status), 2);
+    gtk_label_set_ellipsize(GTK_LABEL(session->status), PANGO_ELLIPSIZE_END);
     gtk_box_pack_start(GTK_BOX(box), session->status, FALSE, FALSE, 4);
 
     GtkWidget *toolbar = gtk_flow_box_new();
@@ -46,7 +54,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(toolbar), 6);
     gtk_box_pack_start(GTK_BOX(box), toolbar, FALSE, FALSE, 4);
     const gchar *labels[] = {"Run", "Continue", "Step Into", "Step Over", "Step Out",
-                             "Pause", "Stack", "Locals", "Stop", "Restart"};
+                             "Pause", "Stack", "Locals", "Stop", "Restart", "Run to Cursor"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         GtkWidget *button = gtk_button_new_with_label(insight_tr(labels[i]));
@@ -80,6 +88,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     session->locals = g_ptr_array_new_with_free_func(native_watch_free);
     session->local_rows = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     GtkWidget *locals = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->local_rows));
+    session->locals_view = locals;
+    g_ptr_array_add(session->paused_controls, locals);
     gtk_widget_set_name(locals, "insight-gdb-frame-variables");
     const gchar *local_columns[] = {"Name", "Value", "Kind"};
     for (guint i = 0; i < G_N_ELEMENTS(local_columns); i++)
@@ -106,7 +116,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *watch_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     GtkWidget *watch_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
     session->watch_entry = gtk_entry_new();
-    gtk_entry_set_max_length(GTK_ENTRY(session->watch_entry), 80);
+    gtk_entry_set_max_length(GTK_ENTRY(session->watch_entry), 1024);
     gtk_entry_set_placeholder_text(GTK_ENTRY(session->watch_entry), insight_tr("GDB watch expression"));
     session->watch_add = gtk_button_new_with_label(insight_tr("Add Watch"));
     session->watch_remove = gtk_button_new_with_label(insight_tr("Remove Watch"));
@@ -117,6 +127,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_box_pack_start(GTK_BOX(watch_row), session->watch_remove, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(watch_page), watch_row, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(watch_page), watch_scroll, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(watch_page), native_data_buttons(session, FALSE), FALSE, FALSE, 0);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), watch_page, gtk_label_new(insight_tr("Watches")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), debug_create_watch_tab(session->graph_view),
                              gtk_label_new(insight_tr("Watch graph")));
@@ -126,7 +137,10 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     GtkWidget *log = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
     session->observer_log = debug_create_view(log, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), log, gtk_label_new(insight_tr("Observer log")));
-    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), local_scroll, gtk_label_new(insight_tr("Variables")));
+    GtkWidget *local_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_start(GTK_BOX(local_page), local_scroll, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(local_page), native_data_buttons(session, TRUE), FALSE, FALSE, 0);
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), local_page, gtk_label_new(insight_tr("Variables")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_points_widget(session, dialog),
                              gtk_label_new(insight_tr("C/C++ breakpoints")));
     GtkWidget *context = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
@@ -155,6 +169,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
                              gtk_label_new(insight_tr("All thread stacks")));
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_launch_widget(session, target),
                              gtk_label_new(insight_tr("Launch settings")));
+    gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_values_widget(session),
+                             gtk_label_new(insight_tr("Inspect values")));
     g_signal_connect(session->threads, "changed", G_CALLBACK(native_select_thread), dialog);
     g_signal_connect(gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack)), "changed",
                      G_CALLBACK(native_select_frame), dialog);

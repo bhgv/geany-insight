@@ -3191,3 +3191,34 @@ Restart	Перезапустить
 Executable	Исполняемый файл
 C/C++ breakpoints	Точки останова C/C++
 Sub-locations require an enabled parent. Condition, ignored hits and Delete apply to the whole breakpoint.	Подпозиция действует только при включённой родительской точке. Условие, пропуск попаданий и удаление относятся ко всей точке.
+Inspect values	Дерево значений
+Inspect Expression	Исследовать выражение
+C/C++ expression to inspect	Выражение C/C++ для исследования
+Expression / member	Выражение / член
+Change Value	Изменить значение
+Add selected watch	Наблюдать выбранный член
+Break on Write	Остановка при записи
+Break on Read	Остановка при чтении
+Break on Access	Остановка при любом доступе
+Inspect selected value	Исследовать выбранное значение
+Watch selected value	Наблюдать выбранное значение
+Change selected value	Изменить выбранное значение
+Inspect watch expression	Исследовать выражение наблюдения
+Run to Cursor	Выполнить до курсора
+Pause, choose a thread and frame, then inspect an expression.	Приостановите программу, выберите поток и кадр, затем исследуйте выражение.
+Expand to load members	Раскройте для загрузки членов
+Load next 128 members…	Загрузить следующие 128 членов…
+Values belong to the selected thread and frame at this stop.	Значения относятся к выбранному потоку и кадру на этой остановке.
+Value tree limit reached (4096 entries). Inspect a narrower expression.	Достигнут предел дерева (4096 элементов). Исследуйте более узкое выражение.
+Inspect a narrower expression (depth limit: 64).	Исследуйте более узкое выражение (предел глубины: 64).
+Expand a value to inspect its members. Double-click to edit a scalar.	Раскройте значение для просмотра членов. Двойной щелчок редактирует скаляр.
+Enter a C/C++ value expression. This changes the paused program.	Введите выражение значения C/C++. Оно изменит состояние приостановленной программы.
+Enter a value while the same frame is paused.	Введите значение на паузе в том же кадре.
+Data watchpoint	Остановка по данным
+Paused by signal	Остановка по сигналу
+Breakpoint hit	Срабатывание точки останова
+Step complete	Шаг завершён
+Function returned	Возврат из функции
+Stopped	Остановлено
+Awaiting stop	Ожидание остановки
+Watch expression exceeds 1024 characters.	Выражение наблюдения превышает 1024 символа.

@@ -39,6 +39,7 @@ on:
       - 'insight/tests/verilog_debugger_gui_test.c'
       - 'insight/tests/verilog-debugger-gui/**'
       - 'insight/tests/native_debugger_gui_test.c'
+      - 'insight/tests/native_debugger_values_gui.inc'
       - 'insight/tests/native-debug/**'
       - 'tests/meson.build'
 
@@ -69,6 +70,7 @@ jobs:
         run: |
           python3 insight/tests/native_debugger_models_test.py
           python3 insight/tests/native_debugger_controls_test.py
+          python3 insight/tests/native_debugger_values_test.py
           python3 insight/tests/native_debugger_compile_test.py
       - name: Build and install on Linux
         id: linux_build

@@ -307,12 +307,16 @@ libgeany_la_SOURCES += \
 	insight-debuggers/scripts/observer-editor.inc \
 	insight-debuggers/scripts/window.inc \
 	insight-debuggers/gdb-session.inc \
+	insight-debuggers/gdb-watches.inc \
 	insight-debuggers/gdb-context.inc \
 	insight-debuggers/gdb-backtraces.inc \
 	insight-debuggers/gdb-source-markers.inc \
 	insight-debuggers/gdb-lifecycle.inc \
 	insight-debuggers/gdb-breakpoints.inc \
 	insight-debuggers/gdb-actions.inc \
+	insight-debuggers/gdb-values-model.inc \
+	insight-debuggers/gdb-values-ui.inc \
+	insight-debuggers/gdb-data-actions.inc \
 	insight-debuggers/gdb-window.inc \
 	insight-python-debug.c \
 	insight-python-debug.h \

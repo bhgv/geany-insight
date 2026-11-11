@@ -203,6 +203,8 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         }
         return;
     }
+    if (request == NATIVE_CONTEXT_SELECT_THREAD || request == NATIVE_CONTEXT_SELECT_FRAME)
+        native_values_reset(session);
     if (request == NATIVE_CONTEXT_SELECT_THREAD)
     {
         session->stack_needed = TRUE;

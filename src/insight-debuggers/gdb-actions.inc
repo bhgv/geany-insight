@@ -55,11 +55,14 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
     if (!session->closed && line)
     {
         g_strchomp(line);
+        gboolean quiet = FALSE;
         native_debug_point_reply(session, line);
         if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
         {
             session->running = TRUE;
             session->stopped = FALSE;
+            native_values_reset(session);
+            g_clear_pointer(&session->stop_detail, g_free);
             session->all_stacks_needed = FALSE;
             g_ptr_array_set_size(session->stop_markers, 0);
             g_clear_pointer(&session->requested_frame, g_free);
@@ -71,6 +74,9 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             session->stopped = !g_str_has_prefix(line, "*stopped,reason=\"exited");
             if (session->stopped)
             {
+                native_values_reset(session);
+                g_free(session->stop_detail);
+                session->stop_detail = native_stop_detail(line);
                 session->watch_next = 0;
                 g_clear_pointer(&session->selected_thread, g_free);
                 g_clear_pointer(&session->selected_frame, g_free);
@@ -87,8 +93,16 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             native_target_clear(session);
         if (*line == '^')
         {
-            native_lifecycle_reply(session, line);
-            if (g_str_has_prefix(line, "^error"))
+            quiet = native_values_reply(session, line);
+            if (!quiet)
+                native_lifecycle_reply(session, line);
+            if (session->data_refresh_pending)
+            {
+                session->data_refresh_pending = FALSE;
+                if (g_str_has_prefix(line, "^done") && session->stopped)
+                    native_data_refresh(session);
+            }
+            if (!quiet && g_str_has_prefix(line, "^error"))
             {
                 gchar *message = native_debug_field(line, "msg");
                 if (message)
@@ -103,6 +117,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 session->console_pending = FALSE;
                 if (session->stopped)
                 {
+                    native_values_reset(session);
                     g_clear_pointer(&session->selected_thread, g_free);
                     g_clear_pointer(&session->selected_frame, g_free);
                     session->threads_needed = session->stack_needed = session->locals_needed = TRUE;
@@ -150,7 +165,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             }
             g_free(decoded);
         }
-        else if (*line && strcmp(line, "(gdb)") && *line != '=' && strcmp(line, "^done"))
+        else if (!quiet && *line && strcmp(line, "(gdb)") && *line != '=' && strcmp(line, "^done"))
             native_debug_log(session, line);
         native_debug_update(session);
         native_debug_resume(dialog, session);
@@ -185,6 +200,11 @@ static void native_debug_clicked(GtkButton *button, gpointer data)
     if (action == NATIVE_STOP || action == NATIVE_RESTART)
     {
         native_lifecycle_request(dialog, action == NATIVE_RESTART);
+        return;
+    }
+    if (action == NATIVE_UNTIL)
+    {
+        native_run_to_cursor(dialog);
         return;
     }
     if (action == NATIVE_RUN)

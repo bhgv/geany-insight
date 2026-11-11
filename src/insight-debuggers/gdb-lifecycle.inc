@@ -8,6 +8,10 @@ static void native_target_clear(NativeDebug *session)
 {
     session->running = session->stopped = session->resume = FALSE;
     session->stop_requested = FALSE;
+    native_values_reset(session);
+    g_clear_pointer(&session->stop_detail, g_free);
+    g_clear_pointer(&session->data_command, g_free);
+    session->data_refresh_pending = FALSE;
     session->threads_needed = session->stack_needed = session->locals_needed = FALSE;
     session->all_stacks_needed = session->frame_select_needed = FALSE;
     g_clear_pointer(&session->selected_thread, g_free);

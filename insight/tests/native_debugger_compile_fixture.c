@@ -33,10 +33,14 @@ extern GtkWidget *debug_create_view(GtkWidget *, gboolean);
 extern void diff_source_open(const gchar *, guint);
 void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/gdb-session.inc"
+#include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
 #include "insight-debuggers/gdb-backtraces.inc"
 #include "insight-debuggers/gdb-source-markers.inc"
 #include "insight-debuggers/gdb-lifecycle.inc"
 #include "insight-debuggers/gdb-breakpoints.inc"
 #include "insight-debuggers/gdb-actions.inc"
+#include "insight-debuggers/gdb-values-model.inc"
+#include "insight-debuggers/gdb-values-ui.inc"
+#include "insight-debuggers/gdb-data-actions.inc"
 #include "insight-debuggers/gdb-window.inc"

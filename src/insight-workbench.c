@@ -295,12 +295,16 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/scripts/window.inc"
 
 #include "insight-debuggers/gdb-session.inc"
+#include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
 #include "insight-debuggers/gdb-backtraces.inc"
 #include "insight-debuggers/gdb-source-markers.inc"
 #include "insight-debuggers/gdb-lifecycle.inc"
 #include "insight-debuggers/gdb-breakpoints.inc"
 #include "insight-debuggers/gdb-actions.inc"
+#include "insight-debuggers/gdb-values-model.inc"
+#include "insight-debuggers/gdb-values-ui.inc"
+#include "insight-debuggers/gdb-data-actions.inc"
 #include "insight-debuggers/gdb-window.inc"
 
 static GtkWidget *tool_submenu(const gchar *label)

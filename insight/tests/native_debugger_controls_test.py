@@ -99,8 +99,8 @@ int main(int argc, char **argv)
     assert(!strcmp(command, "-exec-run"));
     g_free(command);
     assert(!native_launch_next(&session));
-    session.point_rows = gtk_list_store_new(8, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    session.point_rows = gtk_list_store_new(9, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     session.editor_points = g_hash_table_new(g_str_hash, g_str_equal);
     session.point_markers = g_ptr_array_new();
     native_points_snapshot(&session, argv[1]);
@@ -138,8 +138,8 @@ int main(int argc, char **argv)
     assert(native_point_number("1.2") && !native_point_number("1..2"));
     assert(!native_point_number("1.bad") && !native_point_number("-1"));
     NativeDebug session = {0};
-    session.point_rows = gtk_list_store_new(8, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
+    session.point_rows = gtk_list_store_new(9, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
+        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
     session.editor_points = g_hash_table_new(g_str_hash, g_str_equal);
     session.point_markers = g_ptr_array_new();
     native_points_snapshot(&session, argv[1]);

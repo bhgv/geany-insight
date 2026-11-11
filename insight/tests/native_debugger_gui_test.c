@@ -182,6 +182,8 @@ static gboolean timeout(gpointer data)
     exit(1);
 }
 
+#include "native_debugger_values_gui.inc"
+
 /* EN: Advance the debugger GUI scenario; data is unused. Stop after all checks pass.
  * RU: Продвигает сценарий интерфейса; data не используется. Завершает успешную проверку. */
 static gboolean drive(gpointer data)
@@ -209,6 +211,8 @@ static gboolean drive(gpointer data)
     if (!GTK_IS_NOTEBOOK(tabs))
         return G_SOURCE_CONTINUE;
 
+    if (phase >= 16)
+        return native_values_gui_step(window, tabs);
     if (phase == 1)
     {
         GtkWidget *location = find(window, "Function or file:line");
@@ -317,10 +321,8 @@ static gboolean drive(gpointer data)
              source_markers() && point_column(window, 3, "1"))
     {
         g_print("C/C++ GTK: GDB frames, markers, breakpoint edits, stop and restart passed.\n");
-        passed = TRUE;
-        gtk_widget_destroy(window);
-        gtk_main_quit();
-        return G_SOURCE_REMOVE;
+        phase++;
+        return G_SOURCE_CONTINUE;
     }
     return G_SOURCE_CONTINUE;
 }
@@ -342,7 +344,7 @@ int main(int argc, char **argv)
     gchar *editor_args[] = {argv[0], "--new-instance", "--no-session", "--no-plugins",
                            "--config", profile, observer, NULL};
     g_timeout_add(100, drive, NULL);
-    g_timeout_add_seconds(60, timeout, NULL);
+    g_timeout_add_seconds(120, timeout, NULL);
     gint result = main_lib(G_N_ELEMENTS(editor_args) - 1, editor_args);
     g_free(profile);
     g_free(observer);

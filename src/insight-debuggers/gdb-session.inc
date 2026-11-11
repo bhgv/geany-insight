@@ -4,7 +4,7 @@
 
 typedef enum {
     NATIVE_RUN, NATIVE_CONTINUE, NATIVE_INTO, NATIVE_OVER, NATIVE_OUT,
-    NATIVE_PAUSE, NATIVE_STACK, NATIVE_LOCALS, NATIVE_STOP, NATIVE_RESTART, NATIVE_ACTION_COUNT
+    NATIVE_PAUSE, NATIVE_STACK, NATIVE_LOCALS, NATIVE_STOP, NATIVE_RESTART, NATIVE_UNTIL, NATIVE_ACTION_COUNT
 } NativeDebugAction;
 
 typedef struct {
@@ -17,6 +17,18 @@ typedef enum
     NATIVE_CONTEXT_SELECT_THREAD, NATIVE_CONTEXT_SELECT_FRAME, NATIVE_CONTEXT_ALL_STACK
 } NativeContextRequest;
 
+typedef enum
+{
+    NATIVE_DATA_INSPECT, NATIVE_DATA_WATCH, NATIVE_DATA_ASSIGN,
+    NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS
+} NativeDataAction;
+
+typedef enum
+{
+    NATIVE_VALUE_NONE, NATIVE_VALUE_CREATE, NATIVE_VALUE_CHILDREN,
+    NATIVE_VALUE_ASSIGN, NATIVE_VALUE_DELETE, NATIVE_VALUE_PATH
+} NativeValueRequest;
+
 typedef struct {
     GSubprocess *process;
     GDataInputStream *output;
@@ -27,6 +39,17 @@ typedef struct {
     GPtrArray *expressions, *locals;
     GtkListStore *local_rows, *point_rows, *stack_rows;
     GtkWidget *threads, *stack;
+    GtkWidget *window;
+    GPtrArray *paused_controls;
+    GtkTreeStore *value_rows;
+    GtkWidget *value_tree, *value_expression, *value_status, *locals_view;
+    gchar *value_root, *value_pending_name, *value_pending_expression, *stop_detail, *data_command;
+    GtkTreeRowReference *value_pending_row;
+    GQueue value_cleanup;
+    NativeValueRequest value_request;
+    guint value_generation, value_pending_generation, value_serial, value_offset, value_nodes;
+    NativeDataAction value_path_action;
+    gboolean value_reload, data_refresh_pending;
     GtkWidget *launch_args, *launch_directory, *launch_status, *point_controls, *points_view;
     GQueue launch_commands;
     gboolean stop_requested, kill_pending, points_needed, points_pending, console_pending;
@@ -57,6 +80,15 @@ typedef struct {
 } NativeDebug;
 
 static void native_target_clear(NativeDebug *session);
+static void native_values_reset(NativeDebug *session);
+static gchar *native_values_next(NativeDebug *session, gboolean cleanup);
+static gboolean native_values_reply(NativeDebug *session, const gchar *record);
+static void native_data_refresh(NativeDebug *session);
+static void native_data_use_expression(NativeDebug *session, const gchar *expression, NativeDataAction action);
+static void native_assign_dialog(NativeDebug *session, const gchar *expression, const gchar *value,
+                                 const gchar *object);
+static void native_run_to_cursor(GtkWidget *dialog);
+static gchar *native_stop_detail(const gchar *record);
 static gchar *native_launch_next(NativeDebug *session);
 static void native_source_stopped(NativeDebug *session);
 static gchar *native_point_key(const gchar *filename, guint line);
@@ -69,9 +101,14 @@ static gboolean native_context_id(const gchar *value);
 static void native_debug_update(NativeDebug *session)
 {
     gboolean idle = session->ready && !session->pending && !session->writing;
-    gtk_label_set_text(GTK_LABEL(session->status),
-        insight_tr(!session->ready ? "Starting or disconnected" :
-                   session->running ? "Running" : session->stopped ? "Paused" : "Ready"));
+    const gchar *state = insight_tr(!session->ready ? "Starting or disconnected" :
+        session->running ? "Running" : session->stopped ? "Paused" : "Ready");
+    gchar *status = session->stopped && session->stop_detail ?
+        g_strdup_printf("%s — %s", state, session->stop_detail) : g_strdup(state);
+    gtk_label_set_text(GTK_LABEL(session->status), status);
+    g_free(status);
+    for (guint i = 0; i < session->paused_controls->len; i++)
+        gtk_widget_set_sensitive(session->paused_controls->pdata[i], idle && session->stopped);
     for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
         gtk_widget_set_sensitive(session->buttons[i], idle &&
             (i == NATIVE_PAUSE ? session->running :
@@ -123,73 +160,6 @@ static void native_debug_log(NativeDebug *session, const gchar *line)
     g_free(text);
 }
 
-/* EN: Release the watch stored in data.
- * RU: Освобождает наблюдение из data. */
-static void native_watch_free(gpointer data)
-{
-    NativeWatch *watch = data;
-    g_free(watch->expression);
-    g_free(watch->value);
-    g_free(watch);
-}
-
-/* EN: Rebuild session watches and compare them with the previous snapshot if compare is true.
- * RU: Обновляет наблюдения session и сравнивает их с предыдущим снимком, если задан compare. */
-static void native_watch_refresh(NativeDebug *session, gboolean compare)
-{
-    InsightLuaWatchGraph *graph = session->graph;
-    memset(graph, 0, sizeof *graph);
-    graph->node_count = 1;
-    g_strlcpy(graph->nodes[0].label, "GDB frame", sizeof graph->nodes[0].label);
-    for (guint i = 0; i < session->expressions->len; i++)
-    {
-        NativeWatch *watch = session->expressions->pdata[i];
-        guint id = graph->node_count++;
-        InsightLuaWatchNode *node = &graph->nodes[id];
-        g_strlcpy(node->label, watch->expression, sizeof node->label);
-        g_strlcpy(node->value, watch->value ? watch->value : "Awaiting stop", sizeof node->value);
-        g_snprintf(node->path, sizeof node->path, "gdb:%s", watch->expression);
-        InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
-        edge->from = 0;
-        edge->to = id;
-        g_strlcpy(edge->label, "watch", sizeof edge->label);
-    }
-    for (guint i = 0; i < session->locals->len &&
-         graph->node_count < G_N_ELEMENTS(graph->nodes) &&
-         graph->edge_count < G_N_ELEMENTS(graph->edges); i++)
-    {
-        NativeWatch *local = session->locals->pdata[i];
-        guint id = graph->node_count++;
-        InsightLuaWatchNode *node = &graph->nodes[id];
-        g_strlcpy(node->label, local->expression, sizeof node->label);
-        g_strlcpy(node->value, local->value, sizeof node->value);
-        g_snprintf(node->path, sizeof node->path, "gdb:local:%s", local->expression);
-        InsightLuaWatchEdge *edge = &graph->edges[graph->edge_count++];
-        edge->from = 0;
-        edge->to = id;
-        g_strlcpy(edge->label, "local", sizeof edge->label);
-    }
-    insight_lua_debug_observer_watch(session->observer, graph);
-    session->graph_view->watch_selected = -1;
-    GString *text = g_string_new(NULL);
-    for (guint i = 0; i < session->expressions->len; i++)
-    {
-        NativeWatch *watch = session->expressions->pdata[i];
-        g_string_append_printf(text, "%s = %s\n", watch->expression,
-                               watch->value ? watch->value : "Awaiting stop");
-    }
-    for (guint i = 1; i < graph->node_count; i++)
-        if (g_str_has_prefix(graph->nodes[i].path, "observer:"))
-            g_string_append_printf(text, "%s = %s\n", graph->nodes[i].label, graph->nodes[i].value);
-    gchar *valid = g_utf8_make_valid(text->str, -1);
-    debug_set_text(GTK_WIDGET(session->watches), valid);
-    g_free(valid);
-    g_string_free(text, TRUE);
-    if (compare)
-        debug_watch_compare(session->graph_view);
-    debug_watch_layout(session->graph_view);
-}
-
 /* EN: Release the closed GDB session in data.
  * RU: Освобождает закрытый сеанс GDB из data. */
 static void native_debug_free(gpointer data)
@@ -198,6 +168,16 @@ static void native_debug_free(gpointer data)
     insight_lua_debug_free(session->observer);
     g_hash_table_unref(session->editor_points);
     g_free(session->editor_point_pending);
+    g_free(session->stop_detail);
+    g_free(session->data_command);
+    g_ptr_array_unref(session->paused_controls);
+    g_object_unref(session->value_rows);
+    g_free(session->value_root);
+    g_free(session->value_pending_name);
+    g_free(session->value_pending_expression);
+    if (session->value_pending_row)
+        gtk_tree_row_reference_free(session->value_pending_row);
+    insight_queue_clear_full(&session->value_cleanup, g_free);
     g_ptr_array_unref(session->expressions);
     g_ptr_array_unref(session->locals);
     g_object_unref(session->local_rows);
@@ -252,11 +232,25 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         g_free(launch);
         return;
     }
+    if (session->data_command)
+    {
+        gchar *command = g_steal_pointer(&session->data_command);
+        native_debug_send(dialog, command);
+        g_free(command);
+        return;
+    }
     if (session->points_needed)
     {
         session->points_needed = FALSE;
         session->points_pending = TRUE;
         native_debug_send(dialog, "-break-list");
+        return;
+    }
+    gchar *value_cleanup = native_values_next(session, TRUE);
+    if (value_cleanup)
+    {
+        native_debug_send(dialog, value_cleanup);
+        g_free(value_cleanup);
         return;
     }
     if (!session->stopped)
@@ -300,6 +294,15 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
         native_debug_send(dialog, command);
         g_free(command);
         g_free(escaped);
+    }
+    else if (session->value_reload)
+    {
+        gchar *command = native_values_next(session, FALSE);
+        if (command)
+        {
+            native_debug_send(dialog, command);
+            g_free(command);
+        }
     }
     else if (session->all_stacks_visible && session->all_stacks_needed)
     {
@@ -358,7 +361,8 @@ static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
     const gchar *scoped[] = {
         "-stack-list-frames", "-stack-list-variables", "-stack-select-frame",
         "-data-evaluate-expression", "-exec-continue", "-exec-step",
-        "-exec-next", "-exec-finish", "-interpreter-exec"
+        "-exec-next", "-exec-finish", "-interpreter-exec", "-exec-until",
+        "-var-create", "-var-list-children", "-var-assign", "-break-watch"
     };
     gboolean matches = FALSE;
     for (guint i = 0; i < G_N_ELEMENTS(scoped); i++)

@@ -123,3 +123,47 @@ from the parent. **Enable / Disable** can change one sub-location; it becomes
 active only when the parent is enabled too. Condition, ignored hits and deletion
 apply to the whole parent breakpoint, including all its locations. If several
 locations share a source line, its dot is red whenever any location is active.
+
+## Structured values and editing
+
+On a stop, select a variable in **Variables** and choose **Inspect selected
+value**, or enter an expression in **Watches** and use **Inspect watch
+expression**. **Inspect values** also accepts any C/C++ expression directly.
+The tree shows member names, types and values. Expand a structure, class,
+array or pointer to request its children from GDB. C++ members use GDB's
+resolved expression paths, including access groups and base classes where
+supported by GDB. Installed GDB pretty-printers are enabled when available.
+
+Large arrays load 128 children at a time. Activate **Load next 128 members…**
+for another page. A tree is limited to 4096 entries and depth 64; inspect a
+sub-expression to narrow a large object. **Add selected watch** adds the
+selected member's full expression to the regular watches and watch graph.
+
+Double-click a scalar in the tree, use **Change Value**, or select a local
+and use **Change selected value**. Enter a C/C++ value expression and apply
+it. This modifies the paused program in the selected thread/frame. On success,
+locals, watches and graph values refresh; an existing tree is re-created and
+can be expanded again. Rejected writes preserve the previous snapshot and
+show GDB's error. Run, stop and thread/frame changes clear the tree; inspect
+the expression again in the new context. Stale asynchronous replies are discarded.
+
+## Data watchpoints and execution to cursor
+
+On a pause, select a local or a member in the value tree and choose
+**Break on Write**, **Break on Read**, or **Break on Access**. The same actions
+use the expression entered in **Watches**. These are GDB data watchpoints:
+write stops when the value changes, read stops on a read, and access stops
+on either read or write. The selected expression must be meaningful in the
+current frame. Hardware support and available watchpoint slots depend on
+the target; GDB reports unsupported requests. Local watchpoints can be
+removed automatically when their scope ends.
+
+The breakpoint table's **Type** distinguishes source breakpoints from data
+watchpoints. It supports the same enable, delete, condition and ignored-hit
+controls. A data stop opens its source when GDB provides coordinates; the
+status includes its expression and old/new values when supplied by GDB.
+
+Place the editor caret on a saved source line and click **Run to Cursor**.
+The selected thread runs using GDB's `until` command. Existing breakpoints,
+watchpoints, signals or returning from the current frame can stop it before
+the requested line. Invalid source locations leave the program paused.
