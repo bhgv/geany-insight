@@ -24,7 +24,7 @@ static void native_remote_drop(NativeDebug *session)
     g_clear_object(&remote->cancel);
     remote->attached_pid = 0;
     remote->interrupt_pending = FALSE;
-    remote->pause_requested = remote->clear_stop_signal = remote->release_pending = FALSE;
+    remote->pause_requested = remote->clear_stop_signal = remote->release_pending = remote->own_continue_pending = FALSE;
     remote->busy = remote->connected = remote->detach_needed = remote->disconnect_needed = FALSE;
     remote->pending = NATIVE_REMOTE_NONE;
 }

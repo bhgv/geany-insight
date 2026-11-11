@@ -262,7 +262,9 @@ When gdbserver is on the SSH server's loopback address (`127.0.0.1`, `::1`, or
 This also works when the process is not a process-group leader. The SSH account
 needs permission to signal that process. GDB must confirm the stop before controls
 are enabled. The editor sends SIGCONT through the owned SSH channel while GDB
-still holds the process stopped, then clears only this pause's pending SIGSTOP before continuing or
+still holds the process stopped. If GDB reports this owned SIGCONT on Continue,
+the editor clears it and continues automatically; unrelated stops remain visible.
+It clears only this pause's pending SIGSTOP before continuing or
 detaching, without changing global signal policies. For gdbserver on a different
 forwarded host, Pause uses GDB's normal interrupt command.
 

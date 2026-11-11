@@ -54,16 +54,17 @@ extern int g_strcmp0(const char *, const char *);
 typedef enum {NATIVE_REMOTE_CLEAR_STOP, NATIVE_REMOTE_DETACH, NATIVE_REMOTE_DISCONNECT} NativeRemoteRequest;
 typedef struct {
     guint attached_pid;
-    gboolean pause_requested, interrupt_pending, clear_stop_signal, busy, detach_needed, disconnect_needed, release_pending;
+    gboolean pause_requested, interrupt_pending, clear_stop_signal, busy, detach_needed, disconnect_needed, release_pending, own_continue_pending;
     NativeRemoteRequest pending;
     void *status;
 } NativeRemote;
-typedef struct {NativeRemote *remote;} NativeDebug;
+typedef struct {NativeRemote *remote; gboolean resume;} NativeDebug;
 /* EN: Record the release request in the headless fixture without opening an SSH connection.
  * RU: Учитывает запрос снятия остановки в невизуальной фикстуре без открытия SSH-соединения. */
 static void native_attach_release(NativeDebug *session)
 {
     session->remote->release_pending = TRUE;
+    session->remote->own_continue_pending = TRUE;
 }
 
 /* EN: Ignore label and text in the headless state fixture; the production helper still takes its real branch.
@@ -97,6 +98,19 @@ int main(void)
     g_free(queued);
     native_attach_stopped(&session, "*stopped,signal-name=\"SIGSTOP\"");
     assert(!remote.clear_stop_signal);
+    /* EN: Only our next SIGCONT is continued automatically; unrelated signals consume ownership.
+     * RU: Автоматически продолжается лишь следующий собственный SIGCONT; чужой сигнал снимает признак владения. */
+    remote.own_continue_pending = TRUE;
+    native_attach_stopped(&session, "*stopped,signal-name=\"SIGCONT\"");
+    assert(session.resume && remote.clear_stop_signal && !remote.own_continue_pending);
+    session.resume = remote.clear_stop_signal = FALSE;
+    native_attach_stopped(&session, "*stopped,signal-name=\"SIGCONT\"");
+    assert(!session.resume && !remote.clear_stop_signal);
+    remote.own_continue_pending = TRUE;
+    native_attach_stopped(&session, "*stopped,reason=\"breakpoint-hit\"");
+    assert(!remote.own_continue_pending && !session.resume);
+    native_attach_stopped(&session, "*stopped,signal-name=\"SIGCONT\"");
+    assert(!session.resume);
     assert(!native_attach_signal_line(0, "127.0.0.1", FALSE));
     assert(!native_attach_signal_line(123, "other-host", FALSE));
     assert(!native_attach_signal_line(123, NULL, FALSE));

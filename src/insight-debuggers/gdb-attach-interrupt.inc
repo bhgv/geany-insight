@@ -22,6 +22,7 @@ static void native_attach_interrupt_written(GObject *stream, GAsyncResult *resul
     {
         session->remote->interrupt_pending = session->remote->pause_requested = FALSE;
         session->remote->release_pending = session->remote->clear_stop_signal = FALSE;
+        session->remote->own_continue_pending = FALSE;
         session->remote->busy = session->remote->detach_needed = session->remote->disconnect_needed = FALSE;
         insight_queue_clear_full(&session->launch_commands, g_free);
         session->stop_requested = FALSE;
@@ -60,6 +61,7 @@ static void native_attach_release(NativeDebug *session)
     if (line && remote->ssh)
     {
         remote->release_pending = TRUE;
+        remote->own_continue_pending = TRUE;
         native_attach_control_write(session, line, TRUE);
     }
     else
@@ -107,7 +109,7 @@ static gboolean native_attach_interrupt_reply(NativeDebug *session, const gchar 
         remote->interrupt_pending = success && !session->stopped;
     if (!success)
     {
-        remote->pause_requested = remote->clear_stop_signal = FALSE;
+        remote->pause_requested = remote->clear_stop_signal = remote->own_continue_pending = FALSE;
         remote->busy = remote->detach_needed = remote->disconnect_needed = FALSE;
         session->stop_requested = FALSE;
         insight_queue_clear_full(&session->launch_commands, g_free);
@@ -120,22 +122,36 @@ static gboolean native_attach_interrupt_reply(NativeDebug *session, const gchar 
     return TRUE;
 }
 
-/* EN: Suppress only the SIGSTOP requested by session's SSH pause before the next resume or detach from record.
- * RU: Подавляет только SIGSTOP собственной SSH-паузы session из record перед продолжением или отсоединением. */
+/* EN: Consume record's owned pause/release signals for session; unrelated stops remain visible.
+ * RU: Обрабатывает собственные сигналы паузы/снятия из record для session; чужие остановки сохраняются. */
 static void native_attach_stopped(NativeDebug *session, const gchar *record)
 {
     NativeRemote *remote = session->remote;
-    if (!remote || !remote->attached_pid || !remote->pause_requested)
+    if (!remote || !remote->attached_pid)
         return;
-    remote->interrupt_pending = FALSE;
     gchar *signal = native_debug_field(record, "signal-name");
-    if (!g_strcmp0(signal, "SIGSTOP"))
+    if (remote->own_continue_pending)
     {
-        remote->pause_requested = FALSE;
-        remote->clear_stop_signal = TRUE;
-        native_attach_release(session);
-        if (!remote->busy)
-            gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Remote process paused."));
+        remote->own_continue_pending = FALSE;
+        if (!g_strcmp0(signal, "SIGCONT"))
+        {
+            remote->clear_stop_signal = TRUE;
+            session->resume = TRUE;
+            g_free(signal);
+            return;
+        }
+    }
+    if (remote->pause_requested)
+    {
+        remote->interrupt_pending = FALSE;
+        if (!g_strcmp0(signal, "SIGSTOP"))
+        {
+            remote->pause_requested = FALSE;
+            remote->clear_stop_signal = TRUE;
+            native_attach_release(session);
+            if (!remote->busy)
+                gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Remote process paused."));
+        }
     }
     g_free(signal);
 }

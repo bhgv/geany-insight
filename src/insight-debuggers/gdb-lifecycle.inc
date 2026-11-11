@@ -10,7 +10,7 @@ static void native_target_clear(NativeDebug *session)
     {
         session->remote->attached_pid = 0;
         session->remote->interrupt_pending = FALSE;
-        session->remote->pause_requested = session->remote->clear_stop_signal = session->remote->release_pending = FALSE;
+        session->remote->pause_requested = session->remote->clear_stop_signal = session->remote->release_pending = remote->own_continue_pending = FALSE;
     }
     session->running = session->stopped = session->resume = FALSE;
     session->stop_requested = FALSE;
