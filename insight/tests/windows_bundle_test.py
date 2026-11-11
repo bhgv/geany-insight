@@ -48,6 +48,19 @@ class OfflineBundle(unittest.TestCase):
                            if byte < 32 and byte not in (9, 10, 13)]
                 self.assertEqual(invalid, [])
 
+    # EN: Ignore any native tar earlier in PATH and pair MSYS tar with POSIX filenames.
+    # RU: Выбирает MSYS tar независимо от PATH и передаёт ему имена в формате POSIX.
+    def test_windows_archive_selects_matching_tar_and_paths(self):
+        converter = 'C:/tools/msys64/usr/bin/cygpath.exe'
+        expected_tar = 'C:/tools/msys64/usr/bin/tar.exe'
+        with patch.object(bundle.shutil, 'which', return_value=converter), patch.object(
+                bundle.subprocess, 'check_output',
+                side_effect=[expected_tar, '/c/transfer/source.tar.gz', '/tmp/source']), patch.object(
+                bundle, 'run') as run:
+            bundle.archive_sources(Path('C:/temporary/source'), Path('C:/transfer/source.tar.gz'))
+            run.assert_called_once_with([
+                expected_tar, '-czf', '/c/transfer/source.tar.gz', '-C', '/tmp/source', '.'])
+
     # EN: Prove an exported nested repo still works after the original checkout disappears.
     # RU: Проверяет вложенный репозиторий после удаления исходного рабочего дерева.
     def test_git_export_survives_relocation(self):

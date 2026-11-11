@@ -141,12 +141,12 @@ snapshot_options=(
     --exclude=var/cache --exclude=var/log --exclude=var/run
     --exclude=var/lib/pacman/db.lck --exclude='*/S.gpg-agent*'
 )
-tar "${snapshot_options[@]}" -cf "$bundle/msys2.tar" -C / usr ucrt64 etc var
+/usr/bin/tar "${snapshot_options[@]}" -cf "$bundle/msys2.tar" -C / usr ucrt64 etc var
 # EN: Add launchers that are present in this pinned MSYS2 distribution.
 # RU: Добавляем программы запуска, присутствующие в этом выпуске MSYS2.
 for launcher in msys2_shell.cmd msys2.exe msys2.ini ucrt64.exe ucrt64.ini; do
     if [ -f "/$launcher" ]; then
-        tar -rf "$bundle/msys2.tar" -C / "$launcher"
+        /usr/bin/tar -rf "$bundle/msys2.tar" -C / "$launcher"
     fi
 done
 pacman -Q > "$bundle/packages.txt"

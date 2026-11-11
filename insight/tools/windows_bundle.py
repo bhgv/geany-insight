@@ -127,6 +127,25 @@ def simulator_archive(cache):
     return archive
 
 
+# EN: Archive source with MSYS tar and POSIX paths, or native tar on a POSIX host.
+# RU: Упаковывает source через MSYS tar с POSIX-путями либо через tar системы POSIX.
+def archive_sources(source, archive):
+    converter = shutil.which('cygpath')
+    if converter:
+        tar = subprocess.check_output(
+            [converter, '-w', '/usr/bin/tar.exe'], text=True).strip()
+        paths = [subprocess.check_output([converter, '-u', str(path)], text=True).strip()
+                 for path in (archive, source)]
+    else:
+        if os.name == 'nt':
+            raise ValueError('MSYS2 cygpath is required to archive the portable sources.')
+        tar = shutil.which('tar')
+        if not tar:
+            raise ValueError('tar is required to archive the portable sources.')
+        paths = [str(archive), str(source)]
+    run([tar, '-czf', paths[0], '-C', paths[1], '.'])
+
+
 # EN: Collect downloads into bundle; export source repos with no absolute submodule links.
 # RU: Собирает загрузки в bundle, экспортируя репозитории без абсолютных ссылок подмодулей.
 def prepare(bundle, cache, provider):
@@ -148,15 +167,7 @@ def prepare(bundle, cache, provider):
             clone(ROOT / relative, exported / relative)
             snapshot_changes(ROOT / relative, exported / relative)
         validate(exported, cache, provider)
-        # EN: MSYS tar expects POSIX paths when launched by native UCRT Python.
-        # RU: MSYS tar ожидает POSIX-пути при запуске из родного UCRT Python.
-        paths = []
-        for path in (bundle / 'sources.tar.gz', exported):
-            if shutil.which('cygpath'):
-                paths.append(subprocess.check_output(['cygpath', '-u', str(path)], text=True).strip())
-            else:
-                paths.append(str(path))
-        run(['tar', '-czf', paths[0], '-C', paths[1], '.'])
+        archive_sources(exported, bundle / 'sources.tar.gz')
 
 
 # EN: Parse argv and prepare or validate a bundle, returning a shell exit status.
