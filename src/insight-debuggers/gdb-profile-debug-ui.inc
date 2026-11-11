@@ -129,8 +129,6 @@ static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
     {
         gchar *number = NULL, *kind = NULL;
         gtk_tree_model_get(model, &row, 1, &number, 8, &kind, -1);
-        if (native_context_id(number))
-            current = NULL;
         if (native_context_id(number) && !g_strcmp0(kind, "breakpoint"))
             g_queue_push_tail(&session->launch_commands, g_strdup_printf("-break-delete %s", number));
         g_free(kind);
