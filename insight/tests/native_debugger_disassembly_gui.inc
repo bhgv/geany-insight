@@ -195,6 +195,11 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
         if (phase == 81 && count == points_before + 1 && native_assembly_gui_text(window, "● "))
         {
             GtkWidget *view = find(window, "insight-gdb-instructions");
+            GtkTextTagTable *tags = gtk_text_buffer_get_tag_table(
+                gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)));
+            GtkTextTag *point = gtk_text_tag_table_lookup(tags, "instruction-point");
+            GtkTextTag *current = gtk_text_tag_table_lookup(tags, "instruction-current");
+            g_assert_cmpint(gtk_text_tag_get_priority(point), >, gtk_text_tag_get_priority(current));
             GdkEventKey key = {0};
             key.type = GDK_KEY_PRESS;
             key.keyval = GDK_KEY_F2;

@@ -38,9 +38,9 @@ static void native_instruction_refresh(NativeDebug *session)
     GtkTextTagTable *tags = gtk_text_buffer_get_tag_table(buffer);
     if (!gtk_text_tag_table_lookup(tags, "instruction-point"))
     {
+        gtk_text_buffer_create_tag(buffer, "instruction-current", "background", "#fff2ad", "foreground", "#202020", NULL);
         gtk_text_buffer_create_tag(buffer, "instruction-point", "foreground", "#c62828", NULL);
         gtk_text_buffer_create_tag(buffer, "instruction-disabled", "foreground", "#777777", NULL);
-        gtk_text_buffer_create_tag(buffer, "instruction-current", "background", "#fff2ad", "foreground", "#202020", NULL);
     }
     gtk_text_buffer_get_start_iter(buffer, &cursor);
     do
