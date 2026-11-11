@@ -144,6 +144,54 @@ int main(int argc, char **argv)
     }
     g_free(assembly.function);
     assembly.function = NULL;
+    assembly.function = g_strdup("worker");
+    NativeAssemblyWork automatic = {.action = 3};
+    guint before = assembly.collected;
+    native_assembly_metadata(&assembly, &automatic, "^done,variables=[{name=\"input\",arg=\"1\"}]");
+    assert(assembly.collected == before + 1 && assembly.work.length == 3);
+    for (NativeAssemblyWork *item; (item = g_queue_pop_head(&assembly.work));)
+    {
+        assert(!item->manual && !strcmp(item->scope, "worker") && !strcmp(item->label, "arg: input"));
+        native_assembly_work_free(item);
+    }
+    automatic.action = 6;
+    automatic.label = "arg: input";
+    automatic.scope = "worker";
+    native_assembly_metadata(&assembly, &automatic, "^done,name=\"auto_pointer\",type=\"struct Packet *\",numchild=\"1\"");
+    assert(!assembly.work.length);
+    native_assembly_metadata(&assembly, &automatic, "^done,name=\"auto_struct\",type=\"struct Packet\",numchild=\"1\"");
+    NativeAssemblyWork *children = g_queue_pop_head(&assembly.work);
+    assert(children && !children->manual && children->action == 7);
+    native_assembly_fields(&assembly, children,
+        "^done,children=[child={name=\"auto_struct.count\",exp=\"count\",type=\"int\",numchild=\"0\"}]");
+    native_assembly_work_free(children);
+    NativeAssemblyWork *field = g_queue_pop_head(&assembly.work);
+    assert(field && !field->manual && !strcmp(field->label, "arg: input.count"));
+    native_assembly_metadata(&assembly, field, "^done,path_expr=\"(input).count\"");
+    native_assembly_work_free(field);
+    for (NativeAssemblyWork *item; (item = g_queue_pop_head(&assembly.work));)
+    {
+        assert(!item->manual);
+        native_assembly_work_free(item);
+    }
+    automatic.action = 6;
+    native_assembly_metadata(&assembly, &automatic, "^done,name=\"auto_dynamic\",type=\"Container\",numchild=\"0\",dynamic=\"1\"");
+    NativeAssemblyWork *physical = g_queue_pop_head(&assembly.work);
+    assert(physical && physical->action == 15 && strstr(physical->command, "None") && !physical->manual);
+    native_assembly_metadata(&assembly, physical, "^done");
+    native_assembly_work_free(physical);
+    children = g_queue_pop_head(&assembly.work);
+    assert(children && children->action == 7 && !children->manual);
+    native_assembly_work_free(children);
+    assembly.collected = 128;
+    automatic.action = 3;
+    native_assembly_metadata(&assembly, &automatic, "^done,variables=[{name=\"input\"}]");
+    assert(!assembly.work.length && assembly.collected == 128);
+    assembly.collected = 0;
+    g_free(assembly.function);
+    assembly.function = NULL;
+    native_assembly_metadata(&assembly, &automatic, "^done,variables=[{name=\"input\"}]");
+    assert(!assembly.work.length);
     GKeyFile *profile = g_key_file_new();
     native_name_profile_store(&session, profile);
     GError *error = NULL;

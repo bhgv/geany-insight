@@ -61,13 +61,14 @@ static gboolean native_assembly_number(const gchar *value, guint64 *number)
     return valid;
 }
 
-/* EN: Queue paired address/size evaluations for expression and its display label/scope in assembly, at most 128 objects.
- * RU: Ставит парные запросы адреса/размера expression с label/scope в assembly, не более 128 объектов. */
-static void native_assembly_range_request(NativeAssembly *assembly, const gchar *expression,
+/* EN: Queue paired address/size evaluations for expression and label/scope in assembly; return FALSE at the 128-location limit.
+ * RU: Ставит парные запросы адреса/размера expression с label/scope в assembly; возвращает FALSE при лимите 128 адресов. */
+static gboolean native_assembly_range_request(NativeAssembly *assembly, const gchar *expression,
     const gchar *label, const gchar *scope, gboolean manual)
 {
-    if (assembly->collected++ >= 128 || !native_name_text(expression, 2048, FALSE))
-        return;
+    if (assembly->collected >= 128 || !native_name_text(expression, 2048, FALSE))
+        return FALSE;
+    assembly->collected++;
     gchar *address = g_strdup_printf("(void*)&(%s)", expression);
     gchar *size = g_strdup_printf("sizeof(%s)", expression);
     native_assembly_queue(assembly, native_assembly_expression("-data-evaluate-expression", address),
@@ -76,18 +77,30 @@ static void native_assembly_range_request(NativeAssembly *assembly, const gchar 
         5, expression, label, scope, NULL, 0, manual);
     g_free(address);
     g_free(size);
+    return TRUE;
 }
 
-/* EN: Request a bounded list of fields for object with label/scope/depth, retaining GDB's actual type layout.
- * RU: Запрашивает ограниченный список полей object с label/scope/depth, используя настоящую раскладку типа GDB. */
+/* EN: Request bounded fields for object with label/scope/depth/manual priority, retaining GDB's actual type layout.
+ * RU: Запрашивает ограниченный список полей object с label/scope/depth/приоритетом manual по настоящему типу GDB. */
 static void native_assembly_children(NativeAssembly *assembly, const gchar *object,
-    const gchar *label, const gchar *scope, guint depth)
+    const gchar *label, const gchar *scope, guint depth, gboolean manual)
 {
     if (!native_name_text(object, 512, FALSE) || assembly->work.length > 512)
         return;
     gchar *quoted = g_strescape(object, NULL);
     gchar *command = g_strdup_printf("-var-list-children --no-values \"%s\" 0 64", quoted);
-    native_assembly_queue(assembly, command, 7, NULL, label, scope, object, depth, TRUE);
+    native_assembly_queue(assembly, command, 7, NULL, label, scope, object, depth, manual);
+    g_free(quoted);
+}
+
+/* EN: Disable a dynamic pretty-printer on object before reading its physical fields for label/scope/depth/manual.
+ * RU: Отключает динамический pretty-printer object перед чтением физических полей label/scope/depth/manual. */
+static void native_assembly_physical_fields(NativeAssembly *assembly, const gchar *object,
+    const gchar *label, const gchar *scope, guint depth, gboolean manual)
+{
+    gchar *quoted = g_strescape(object, NULL);
+    gchar *command = g_strdup_printf("-var-set-visualizer \"%s\" None", quoted);
+    native_assembly_queue(assembly, command, 15, NULL, label, scope, object, depth, manual);
     g_free(quoted);
 }
 
@@ -107,6 +120,7 @@ static void native_assembly_fields(NativeAssembly *assembly, const NativeAssembl
         gchar *field = native_debug_field(tuple, "exp");
         gchar *type = native_debug_field(tuple, "type");
         gchar *children = native_debug_field(tuple, "numchild");
+        gchar *dynamic = native_debug_field(tuple, "dynamic");
         gboolean group = !g_strcmp0(field, "public") || !g_strcmp0(field, "private") || !g_strcmp0(field, "protected");
         if (native_name_text(object, 512, FALSE) && native_name_text(field, 128, FALSE))
         {
@@ -114,11 +128,18 @@ static void native_assembly_fields(NativeAssembly *assembly, const NativeAssembl
                 g_strdup_printf("%s[%s]", parent->label, field) : g_strdup_printf("%s.%s", parent->label, field);
             if (!group)
                 native_assembly_queue(assembly, native_assembly_expression("-var-info-path-expression", object),
-                    8, NULL, label, parent->scope, object, parent->depth, TRUE);
-            if (children && strcmp(children, "0") && parent->depth < 3 && (!type || !strchr(type, '*')))
-                native_assembly_children(assembly, object, label, parent->scope, parent->depth + 1);
+                    8, NULL, label, parent->scope, object, parent->depth, parent->manual);
+            if (parent->depth < 3 && (!type || !strchr(type, '*')))
+            {
+                guint depth = parent->depth + (group ? 0 : 1);
+                if (!g_strcmp0(dynamic, "1"))
+                    native_assembly_physical_fields(assembly, object, label, parent->scope, depth, parent->manual);
+                else if (children && strcmp(children, "0"))
+                    native_assembly_children(assembly, object, label, parent->scope, depth, parent->manual);
+            }
             g_free(label);
         }
+        g_free(dynamic);
         g_free(children);
         g_free(type);
         g_free(field);
@@ -252,7 +273,7 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
         *stored = number;
         g_hash_table_replace(assembly->registers, g_strdup(work->expression), stored);
     }
-    else if (work->action == 3)
+    else if (work->action == 3 && native_name_text(assembly->function, 512, FALSE))
     {
         const gchar *cursor = strstr(record, "variables=["), *start, *end;
         guint count = 0;
@@ -266,7 +287,9 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
             if (native_name_text(name, 512, FALSE))
             {
                 gchar *label = g_strdup_printf("%s: %s", arg && !strcmp(arg, "1") ? "arg" : "local", name);
-                native_assembly_range_request(assembly, name, label, assembly->function, FALSE);
+                if (native_assembly_range_request(assembly, name, label, assembly->function, FALSE))
+                    native_assembly_queue(assembly, native_assembly_expression("-var-create - *", name),
+                        6, NULL, label, assembly->function, NULL, 0, FALSE);
                 g_free(label);
             }
             g_free(arg);
@@ -296,12 +319,26 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
         if (native_name_text(object, 512, FALSE))
         {
             g_ptr_array_add(assembly->objects, g_strdup(object));
-            native_assembly_children(assembly, object, work->label, work->scope, 0);
+            gchar *type = native_debug_field(record, "type");
+            gchar *children = native_debug_field(record, "numchild");
+            gchar *dynamic = native_debug_field(record, "dynamic");
+            if (work->manual || !type || !strchr(type, '*'))
+            {
+                if (!g_strcmp0(dynamic, "1"))
+                    native_assembly_physical_fields(assembly, object, work->label, work->scope, 0, work->manual);
+                else if (children && strcmp(children, "0"))
+                    native_assembly_children(assembly, object, work->label, work->scope, 0, work->manual);
+            }
+            g_free(dynamic);
+            g_free(children);
+            g_free(type);
         }
         g_free(object);
     }
     else if (work->action == 7)
         native_assembly_fields(assembly, work, record);
+    else if (work->action == 15 && g_str_has_prefix(record, "^done"))
+        native_assembly_children(assembly, work->object, work->label, work->scope, work->depth, work->manual);
     else if (work->action == 13)
         native_assembly_register_names(assembly, record);
     else if (work->action == 14)
@@ -310,7 +347,7 @@ static void native_assembly_metadata(NativeAssembly *assembly, NativeAssemblyWor
     {
         gchar *expression = native_debug_field(record, "path_expr");
         if (expression)
-            native_assembly_range_request(assembly, expression, work->label, work->scope, TRUE);
+            native_assembly_range_request(assembly, expression, work->label, work->scope, work->manual);
         g_free(expression);
     }
     g_free(value);

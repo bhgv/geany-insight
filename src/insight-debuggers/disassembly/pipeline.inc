@@ -61,7 +61,6 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
         g_free(expression);
     }
     native_assembly_queue(assembly, g_strdup("-stack-list-variables --no-values"), 3, NULL, NULL, NULL, NULL, 0, FALSE);
-
 }
 
 /* EN: Send the next owned work item for session; TRUE keeps the normal request scheduler behind this bounded pipeline.

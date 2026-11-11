@@ -40,6 +40,15 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
         return G_SOURCE_CONTINUE;
     if (phase == 70)
     {
+        GtkWidget *watch = find(window, "GDB watch expression");
+        if (!watch || !gtk_widget_is_sensitive(watch))
+            return G_SOURCE_CONTINUE;
+        gtk_entry_set_text(GTK_ENTRY(watch), "&local_child.code");
+        if (click(window, "Add Watch"))
+            phase = 75;
+    }
+    else if (phase == 75)
+    {
         GtkWidget *page = values_page(entry, tabs);
         gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
         gtk_entry_set_text(GTK_ENTRY(entry), "main");
@@ -49,7 +58,8 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_timeout_add(100, native_assembly_gui_name, "entry_alias");
         click(window, "Address name…");
     }
-    else if (phase == 71 && native_assembly_gui_text(window, "entry_alias"))
+    else if (phase == 71 && native_assembly_gui_text(window, "entry_alias") &&
+             find(window, "local: local_child.code"))
     {
         GtkWidget *view = find(window, "insight-gdb-address-names");
         GtkTreePath *path = gtk_tree_path_new_first();

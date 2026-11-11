@@ -20,6 +20,9 @@ char debug_memory[64] = "GDB memory";
  * RU: Сохраняет marker на время двух записей для проверки точек по данным и присваивания. */
 int main(void)
 {
+    /* EN: Keep addressable aggregate storage for automatic field-name discovery without reading its contents.
+     * RU: Сохраняет адресуемый агрегат для автоматических имён полей без чтения его содержимого программой. */
+    volatile struct NativeChild local_child;
     volatile int marker = 41;
     marker++;
     marker += 2;

@@ -391,8 +391,10 @@ Open **Names, frame offsets and data types**:
 
 Applying, renaming or deleting a rule refreshes the names automatically while
 paused. **Read instructions** resolves them again on demand. GDB also supplies addressable
-parameters and locals in the selected frame; optimized-out/register-only values
-are left unnamed. Frame references are recognized in x86 Intel, ARM/ARM64 bracket
+parameters and locals in the selected frame, including nested fields and array
+elements when their types and addresses are available. Automatic pointer values
+are named without following their pointees. Manual names retain priority.
+Optimized-out/register-only values and unknown function scopes are left unnamed. Frame references are recognized in x86 Intel, ARM/ARM64 bracket
 forms and RISC-V `offset(base)` forms. Simple base+offset references through other general-purpose registers also use
 their values at this stop, so `[rax+8]`, `[x0,#8]` and `8(a0)` can show structure
 fields. This is a stop snapshot, not symbolic execution of future instructions.
