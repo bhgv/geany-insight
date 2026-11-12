@@ -64,15 +64,17 @@ static void native_assembly_context(NativeDebug *session)
     native_name_refresh_views(session);
 }
 
-/* EN: Display the completed disassembly of session and refresh other address views, keeping final errors visible.
- * RU: Показывает готовый дизассемблер session и обновляет адреса в других представлениях, сохраняя видимость ошибок. */
+/* EN: Display completed disassembly of session without resetting the cursor before repaint; refresh address views and retain final errors.
+ * RU: Показывает готовый дизассемблер session без сброса курсора перед перерисовкой; обновляет адреса и сохраняет ошибки. */
 static void native_assembly_finish(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
     gchar *text = assembly->record ? native_assembly_render(session, assembly->record) : NULL;
     gchar *error = text || !assembly->record ? NULL : native_debug_field(assembly->record, "msg");
-    debug_set_text(assembly->text, text ? text : "");
-    native_instruction_refresh(session);
+    if (text)
+        native_instruction_refresh(session);
+    else
+        debug_set_text(assembly->text, "");
     gtk_label_set_text(GTK_LABEL(assembly->status), text ?
         insight_tr("Intel on x86/x64; native syntax on ARM/RISC-V. Names annotate original addresses. Up to 128 data locations, 64 symbols, 3 field levels. Refresh after stepping or changing frames.") :
         error ? error : insight_tr("No readable machine instructions at this address."));

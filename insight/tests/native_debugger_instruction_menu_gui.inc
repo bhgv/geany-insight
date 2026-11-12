@@ -157,8 +157,11 @@ static gboolean instruction_menu_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 90 && native_assembly_gui_text(window, "cursor_entry_name"))
     {
-        if (instruction_menu_choose(window, "Run to instruction", FALSE))
-            phase = 91;
+        GtkTextIter cursor;
+        gtk_text_buffer_get_iter_at_mark(buffer, &cursor, gtk_text_buffer_get_insert(buffer));
+        g_assert_cmpint(gtk_text_iter_get_line(&cursor), ==, 0);
+        g_assert_true(instruction_menu_choose(window, "Run to instruction", FALSE));
+        phase = 91;
     }
     else if (phase == 91 && !g_strcmp0(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-instruction-status"))),
         "The selected frame is already at this instruction."))
