@@ -301,7 +301,7 @@ EXTRA_DIST += insight/tools/build_i18n.py insight/tests/languages_gui_test.c ins
 	insight/tests/i18n_gui_test.c
 
 EXTRA_DIST += insight/tests/snippet_test.c insight/tests/snippet_gui_test.c
-EXTRA_DIST += insight/tests/panels_gui_test.c
+EXTRA_DIST += insight/tests/panels_gui_test.c insight/tests/panels_geometry_diagnostics.inc
 EXTRA_DIST += insight/tests/symbol_types_gui_test.c
 EXTRA_DIST += insight/tests/symbol_menu_gui_test.c
 EXTRA_DIST += insight/tests/symbol_paging_gui_test.c

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Verify real editor shelf geometry across collapse and process restart.
+ * RU: Проверяет геометрию полок редактора при сжатии и перезапуске процесса. */
 #include "geany.h"
 #include "document.h"
 #include "editor.h"
@@ -24,11 +26,88 @@ static gboolean step(gpointer data) {
  GKeyFile *key=g_key_file_new();for(guint i=0;i<3;i++) { gchar *name=g_strdup_printf("p%u",i);g_key_file_set_integer(key,"positions",name,gtk_paned_get_position(GTK_PANED(panes[i])));g_free(name); }g_assert_true(g_key_file_save_to_file(key,expected_path,NULL));g_key_file_unref(key);gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window,"menu_quit1")));return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Panel geometry timeout");return G_SOURCE_REMOVE; }
-int main(int argc,char **argv) {
- if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
- if(argc==1) { gchar *directory=g_dir_make_tmp("panel-geometry-XXXXXX",NULL);g_assert_nonnull(directory);gchar *profile=g_build_filename(directory,"profile",NULL);g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
-  for(guint i=0;i<2;i++) { gchar *child[]={argv[0],profile,i ? "restore" : "fresh",NULL};gint status=0;GError *error=NULL;g_assert_true(g_spawn_sync(NULL,child,NULL,0,NULL,NULL,NULL,NULL,&status,&error));g_assert_no_error(error);g_assert_true(g_spawn_check_wait_status(status,&error));g_assert_no_error(error); }
-  g_free(profile);g_free(config);g_free(directory);g_print("Panel geometry GUI: first-run widths/quarter Context, collapse, drag positions and full process restart restoration passed\n");return 0;
- }
- restore=!g_strcmp0(argv[2],"restore");expected_path=g_build_filename(argv[1],"expected.ini",NULL);gchar *args[]={"geometry-gui","--new-instance","--no-session","--config",argv[1],NULL};g_timeout_add(350,step,NULL);g_timeout_add_seconds(25,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);gint result=main_lib(5,args);g_free(expected_path);return result;
+/* EN: Print notebook allocations from widget before a fatal GTK geometry error.
+ * RU: Показывает размещение notebook внутри widget перед фатальной ошибкой GTK.
+ */
+static void notebook_diagnostic(GtkWidget *widget)
+{
+    if (GTK_IS_NOTEBOOK(widget))
+    {
+        GtkAllocation allocation;
+        gtk_widget_get_allocation(widget, &allocation);
+        gint width, height;
+        gtk_widget_get_preferred_width(widget, &width, NULL);
+        gtk_widget_get_preferred_height(widget, &height, NULL);
+        g_printerr("GEOMETRY NOTEBOOK %s mapped=%d phase=%u allocation=%dx%d minimum=%dx%d tabs=%d\n",
+            gtk_widget_get_name(widget), gtk_widget_get_mapped(widget), phase, allocation.width, allocation.height,
+            width, height, gtk_notebook_get_show_tabs(GTK_NOTEBOOK(widget)));
+    }
+    if (GTK_IS_CONTAINER(widget))
+    {
+        GList *children = gtk_container_get_children(GTK_CONTAINER(widget));
+        for (GList *item = children; item; item = item->next)
+            notebook_diagnostic(item->data);
+        g_list_free(children);
+    }
+}
+
+/* EN: Log real windows before critical errors; level, fields and count are forwarded, data is unused.
+ * RU: Показывает настоящие окна перед critical; level, fields и count передаются дальше, data не используется.
+ */
+static GLogWriterOutput geometry_failure(GLogLevelFlags level, const GLogField *fields, gsize count, gpointer data)
+{
+    (void)data;
+    if (level & G_LOG_LEVEL_CRITICAL)
+    {
+        GList *windows = gtk_window_list_toplevels();
+        for (GList *item = windows; item; item = item->next)
+            notebook_diagnostic(item->data);
+        g_list_free(windows);
+    }
+    return g_log_writer_default(level, fields, count, NULL);
+}
+
+/* EN: Run fresh and restored editor processes; argc/argv select the isolated child profile and restore mode.
+ * RU: Запускает новый и восстановленный редактор; argc/argv выбирают профиль дочернего процесса и режим восстановления.
+ */
+int
+main (int argc, char **argv)
+{
+    if (!g_getenv ("GEANY_RUN_GUI_TESTS") || !g_getenv ("DISPLAY"))
+        return 77;
+    if (argc == 1)
+    {
+        gchar *directory = g_dir_make_tmp ("panel-geometry-XXXXXX", NULL);
+        g_assert_nonnull (directory);
+        gchar *profile = g_build_filename (directory, "profile", NULL);
+        g_assert_cmpint (g_mkdir_with_parents (profile, 0700), ==, 0);
+        gchar *config = g_build_filename (profile, "geany.conf", NULL);
+        g_assert_true (g_file_set_contents (config, "[geany]\nconfirm_exit=false\n", -1, NULL));
+        for (guint i = 0; i < 2; i++)
+        {
+            gchar *child[] = { argv[0], profile, i ? "restore" : "fresh", NULL };
+            gint status = 0;
+            GError *error = NULL;
+            g_assert_true (g_spawn_sync (NULL, child, NULL, 0, NULL, NULL, NULL, NULL, &status, &error));
+            g_assert_no_error (error);
+            g_assert_true (g_spawn_check_wait_status (status, &error));
+            g_assert_no_error (error);
+        }
+        g_free (profile);
+        g_free (config);
+        g_free (directory);
+        g_print ("Panel geometry GUI: first-run widths/quarter Context, collapse, drag positions and full "
+                 "process restart restoration passed\n");
+        return 0;
+    }
+    restore = !g_strcmp0 (argv[2], "restore");
+    expected_path = g_build_filename (argv[1], "expected.ini", NULL);
+    gchar *args[] = { "geometry-gui", "--new-instance", "--no-session", "--config", argv[1], NULL };
+    g_timeout_add (350, step, NULL);
+    g_timeout_add_seconds (25, timeout, NULL);
+    g_log_set_always_fatal (G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL);
+    g_log_set_writer_func (geometry_failure, NULL, NULL);
+    gint result = main_lib (5, args);
+    g_free (expected_path);
+    return result;
 }

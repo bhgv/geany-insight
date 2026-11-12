@@ -78,97 +78,309 @@ g_assert_true(gtk_widget_get_mapped(control));gint x,y;g_assert_true(gtk_widget_
  gtk_paned_set_position(GTK_PANED(horizontal),16);gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_width(split)-16);g_timeout_add(250,collapsed,NULL);return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Panels GUI timeout at phase %u",phase);return G_SOURCE_REMOVE; }
-static gboolean step(gpointer data) {
- (void)data;GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;if(!window) { window=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));book=named(window,"insight-project-notebook");split=named(window,"insight-project-split");g_assert_nonnull(book);g_assert_nonnull(split);if(valid_split) g_assert_cmpint(gtk_paned_get_position(GTK_PANED(split)),==,500);gtk_window_resize(GTK_WINDOW(window),760,850);return G_SOURCE_CONTINUE; }
- if(!geometry_ready) { g_assert_true(gtk_widget_get_mapped(book));g_assert_cmpint(gtk_widget_get_allocated_width(book),>=,120);g_assert_cmpint(gtk_widget_get_allocated_width(book),<,gtk_widget_get_allocated_width(split));geometry_ready=TRUE; }
- if(phase==0) { document_open_file(source,FALSE,NULL,NULL);phase++; }
- else if(phase==1) {
-  local=named(window,"insight-local-symbols");project=named(window,"insight-project-symbols");book=named(window,"insight-project-notebook");split=named(window,"insight-project-split");g_assert_nonnull(local);GtkTreeModel *m=gtk_tree_view_get_model(GTK_TREE_VIEW(local));GtkTreeIter it;if(!find_row(m,"sample_function",&it) || !find_row(m,"sample_variable",&it) || !find_row(m,"SampleStruct",&it)) return G_SOURCE_CONTINUE;
-  if(!gtk_widget_get_sensitive(project) || !find_row(gtk_tree_view_get_model(GTK_TREE_VIEW(project)),"sample_function",&it)) return G_SOURCE_CONTINUE;
-  base=GTK_LIST_STORE(g_object_ref(g_object_get_data(G_OBJECT(project),"insight-symbol-source-model")));gtk_list_store_clear(base);GtkTreeIter row;const gchar *names[]={"sample_function","sample_variable","SampleStruct"},*kinds[]={"f","v","s"};for(guint i=0;i<3;i++) {gtk_list_store_append(base,&row);gtk_list_store_set(base,&row,0,names[i],2,source,3,(gulong)i+1,4,kinds[i],-1);}
-  GdkRGBA f=color(local,names[0]),v=color(local,names[1]),s=color(local,names[2]),p=color(project,names[0]);g_assert_false(gdk_rgba_equal(&f,&v));g_assert_false(gdk_rgba_equal(&f,&s));g_assert_true(gdk_rgba_equal(&f,&p));
-  for(gint i=0;i<8;i++) { GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),i),*help=named(page,"insight-panel-help");g_assert_nonnull(help);g_assert_null(gtk_button_get_label(GTK_BUTTON(help)));g_assert_true(GTK_IS_IMAGE(gtk_button_get_image(GTK_BUTTON(help))));g_assert_nonnull(g_object_get_data(G_OBJECT(help),"insight-help-topic")); }
-  g_assert_nonnull(named(window,"insight-diff-tool"));GtkWidget *context=named(window,"insight-context");g_assert_nonnull(named(context,"insight-panel-help"));g_assert_true(gtk_label_get_selectable(GTK_LABEL(named(context,"insight-context-title"))));GtkWidget *location_menu=gtk_menu_new();g_signal_emit_by_name(named(context,"insight-context-title"),"populate-popup",location_menu);g_assert_nonnull(named(location_menu,"insight-context-location-reveal"));gtk_widget_destroy(location_menu);
-  g_assert_true(gtk_widget_is_ancestor(named(context,"insight-panel-toggle-dock"),named(context,"insight-context-tools")));
-  g_assert_null(named(context,"insight-panel-controls-header"));
-  g_assert_false(gtk_widget_get_visible(gtk_widget_get_parent(named(window,"insight-overview-markers")))) ;
-g_assert_null(named(context,"insight-diff-tool"));
-  for(gint i=0;i<8;i++) panel_controls(gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),i),book);
-  GtkWidget *local_page=local;while(gtk_widget_get_parent(local_page) && !GTK_IS_NOTEBOOK(gtk_widget_get_parent(local_page))) local_page=gtk_widget_get_parent(local_page);
-  panel_controls(local_page,gtk_widget_get_parent(local_page));panel_controls(context,gtk_widget_get_parent(context));
-  gboolean shrink=FALSE;gtk_container_child_get(GTK_CONTAINER(split),named(window,"insight-project-width-host"),"shrink",&shrink,NULL);g_assert_true(shrink);gtk_container_child_get(GTK_CONTAINER(split),gtk_paned_get_child1(GTK_PANED(split)),"shrink",&shrink,NULL);g_assert_true(shrink);gtk_paned_set_position(GTK_PANED(split),gtk_widget_get_allocated_width(split)-180);
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-local-group-types")),TRUE);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-project-group-types")),TRUE);phase++;
- } else if(phase==2) {
-  GtkTreeModel *m=gtk_tree_view_get_model(GTK_TREE_VIEW(project)),*l=gtk_tree_view_get_model(GTK_TREE_VIEW(local));if(!GTK_IS_TREE_STORE(m) || !GTK_IS_TREE_STORE(l) || !gtk_widget_get_sensitive(project)) return G_SOURCE_CONTINUE;
-  GtkWidget *context=named(window,"insight-context"),*preview=named(window,"insight-context-code"),*rail=named(window,"insight-context-tools");gint x=0,y=0;g_assert_true(gtk_widget_translate_coordinates(context,window,0,0,&x,&y));g_assert_cmpint(x,>=,0);g_assert_true(gtk_widget_translate_coordinates(preview,window,0,0,&x,&y));g_assert_cmpint(x,>=,0);g_assert_true(gtk_widget_is_ancestor(named(context,"insight-context-definitions"),gtk_widget_get_parent(preview)));g_assert_false(gtk_widget_is_ancestor(named(context,"insight-context-definitions"),rail));
-  GtkWidget *width_host=named(window,"insight-editor-width-host");g_assert_nonnull(width_host);g_assert_cmpint(gtk_widget_get_allocated_width(ui_lookup_widget(window,"vpaned1")),<=,gtk_widget_get_allocated_width(width_host));g_assert_cmpint(gtk_widget_get_allocated_width(context),<=,gtk_widget_get_allocated_width(width_host));g_assert_true(gtk_widget_translate_coordinates(ui_lookup_widget(window,"notebook3"),window,0,0,&x,&y));g_assert_cmpint(x,>=,0);
+/* EN: Advance asynchronous editor checks; data is unused. Continue until models and allocations settle.
+ * RU: Продвигает асинхронные проверки; data не используется. Ожидает готовности моделей и размещения. */
+static gboolean
+step (gpointer data)
+{
+    (void)data;
+    GeanyDocument *doc = document_get_current ();
+    if (!doc)
+        return G_SOURCE_CONTINUE;
+    if (!window)
+    {
+        window = gtk_widget_get_toplevel (GTK_WIDGET (doc->editor->sci));
+        book = named (window, "insight-project-notebook");
+        split = named (window, "insight-project-split");
+        g_assert_nonnull (book);
+        g_assert_nonnull (split);
+        if (valid_split)
+            g_assert_cmpint (gtk_paned_get_position (GTK_PANED (split)), ==, 500);
+        gtk_window_resize (GTK_WINDOW (window), 760, 850);
+        return G_SOURCE_CONTINUE;
+    }
+    if (!geometry_ready)
+    {
+        g_assert_true (gtk_widget_get_mapped (book));
+        g_assert_cmpint (gtk_widget_get_allocated_width (book), >=, 120);
+        g_assert_cmpint (gtk_widget_get_allocated_width (book), <, gtk_widget_get_allocated_width (split));
+        geometry_ready = TRUE;
+    }
+    if (phase == 0)
+    {
+        document_open_file (source, FALSE, NULL, NULL);
+        phase++;
+    }
+    else if (phase == 1)
+    {
+        local = named (window, "insight-local-symbols");
+        project = named (window, "insight-project-symbols");
+        book = named (window, "insight-project-notebook");
+        split = named (window, "insight-project-split");
+        g_assert_nonnull (local);
+        GtkTreeModel *m = gtk_tree_view_get_model (GTK_TREE_VIEW (local));
+        GtkTreeIter it;
+        if (!find_row (m, "sample_function", &it) || !find_row (m, "sample_variable", &it)
+            || !find_row (m, "SampleStruct", &it))
+            return G_SOURCE_CONTINUE;
+        if (!gtk_widget_get_sensitive (project)
+            || !find_row (gtk_tree_view_get_model (GTK_TREE_VIEW (project)), "sample_function", &it))
+            return G_SOURCE_CONTINUE;
+        base = GTK_LIST_STORE (
+            g_object_ref (g_object_get_data (G_OBJECT (project), "insight-symbol-source-model")));
+        gtk_list_store_clear (base);
+        GtkTreeIter row;
+        const gchar *names[] = { "sample_function", "sample_variable", "SampleStruct" },
+                    *kinds[] = { "f", "v", "s" };
+        for (guint i = 0; i < 3; i++)
+        {
+            gtk_list_store_append (base, &row);
+            gtk_list_store_set (base, &row, 0, names[i], 2, source, 3, (gulong)i + 1, 4, kinds[i], -1);
+        }
+        GdkRGBA f = color (local, names[0]), v = color (local, names[1]), s = color (local, names[2]),
+                p = color (project, names[0]);
+        g_assert_false (gdk_rgba_equal (&f, &v));
+        g_assert_false (gdk_rgba_equal (&f, &s));
+        g_assert_true (gdk_rgba_equal (&f, &p));
+        for (gint i = 0; i < 8; i++)
+        {
+            GtkWidget *page = gtk_notebook_get_nth_page (GTK_NOTEBOOK (book), i),
+                      *help = named (page, "insight-panel-help");
+            g_assert_nonnull (help);
+            g_assert_null (gtk_button_get_label (GTK_BUTTON (help)));
+            g_assert_true (GTK_IS_IMAGE (gtk_button_get_image (GTK_BUTTON (help))));
+            g_assert_nonnull (g_object_get_data (G_OBJECT (help), "insight-help-topic"));
+        }
+        g_assert_nonnull (named (window, "insight-diff-tool"));
+        GtkWidget *context = named (window, "insight-context");
+        g_assert_nonnull (named (context, "insight-panel-help"));
+        g_assert_true (gtk_label_get_selectable (GTK_LABEL (named (context, "insight-context-title"))));
+        GtkWidget *location_menu = gtk_menu_new ();
+        g_signal_emit_by_name (named (context, "insight-context-title"), "populate-popup", location_menu);
+        g_assert_nonnull (named (location_menu, "insight-context-location-reveal"));
+        gtk_widget_destroy (location_menu);
+        g_assert_true (gtk_widget_is_ancestor (named (context, "insight-panel-toggle-dock"),
+                                               named (context, "insight-context-tools")));
+        g_assert_null (named (context, "insight-panel-controls-header"));
+        g_assert_false (
+            gtk_widget_get_visible (gtk_widget_get_parent (named (window, "insight-overview-markers"))));
+        g_assert_null (named (context, "insight-diff-tool"));
+        for (gint i = 0; i < 8; i++)
+            panel_controls (gtk_notebook_get_nth_page (GTK_NOTEBOOK (book), i), book);
+        GtkWidget *local_page = local;
+        while (gtk_widget_get_parent (local_page) && !GTK_IS_NOTEBOOK (gtk_widget_get_parent (local_page)))
+            local_page = gtk_widget_get_parent (local_page);
+        panel_controls (local_page, gtk_widget_get_parent (local_page));
+        panel_controls (context, gtk_widget_get_parent (context));
+        gboolean shrink = FALSE;
+        gtk_container_child_get (GTK_CONTAINER (split), named (window, "insight-project-width-host"),
+                                 "shrink", &shrink, NULL);
+        g_assert_true (shrink);
+        gtk_container_child_get (GTK_CONTAINER (split), gtk_paned_get_child1 (GTK_PANED (split)), "shrink",
+                                 &shrink, NULL);
+        g_assert_true (shrink);
+        gtk_paned_set_position (GTK_PANED (split), gtk_widget_get_allocated_width (split) - 180);
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (named (window, "insight-local-group-types")), TRUE);
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (named (window, "insight-project-group-types")),
+                                      TRUE);
+        phase++;
+    }
+    else if (phase == 2)
+    {
+        if (!panel_allocations_settled ())
+            return G_SOURCE_CONTINUE;
+        panel_geometry_diagnostics (NULL);
+        GtkTreeModel *m = gtk_tree_view_get_model (GTK_TREE_VIEW (project)),
+                     *l = gtk_tree_view_get_model (GTK_TREE_VIEW (local));
+        if (!GTK_IS_TREE_STORE (m) || !GTK_IS_TREE_STORE (l) || !gtk_widget_get_sensitive (project))
+            return G_SOURCE_CONTINUE;
+        GtkWidget *context = named (window, "insight-context"),
+                  *preview = named (window, "insight-context-code"),
+                  *rail = named (window, "insight-context-tools");
+        gint x = 0, y = 0;
+        g_assert_true (gtk_widget_translate_coordinates (context, window, 0, 0, &x, &y));
+        g_assert_cmpint (x, >=, 0);
+        g_assert_true (gtk_widget_translate_coordinates (preview, window, 0, 0, &x, &y));
+        g_assert_cmpint (x, >=, 0);
+        g_assert_true (gtk_widget_is_ancestor (named (context, "insight-context-definitions"),
+                                               gtk_widget_get_parent (preview)));
+        g_assert_false (gtk_widget_is_ancestor (named (context, "insight-context-definitions"), rail));
+        GtkWidget *width_host = named (window, "insight-editor-width-host");
+        g_assert_nonnull (width_host);
+        g_assert_cmpint (gtk_widget_get_allocated_width (ui_lookup_widget (window, "vpaned1")), <=,
+                         gtk_widget_get_allocated_width (width_host));
+        g_assert_cmpint (gtk_widget_get_allocated_width (context), <=,
+                         gtk_widget_get_allocated_width (width_host));
+        g_assert_true (
+            gtk_widget_translate_coordinates (ui_lookup_widget (window, "notebook3"), window, 0, 0, &x, &y));
+        g_assert_cmpint (x, >=, 0);
 
-  g_printerr("split width=%d position=%d book=%d\n",gtk_widget_get_allocated_width(split),gtk_paned_get_position(GTK_PANED(split)),gtk_widget_get_allocated_width(book));g_assert_cmpint(gtk_widget_get_allocated_width(book),<,250);g_assert_cmpint(gtk_widget_get_allocated_width(book),>,100);g_assert_cmpint(gtk_tree_model_iter_n_children(m,NULL),==,3);GtkTreeIter root;g_assert_true(gtk_tree_model_get_iter_first(m,&root));gulong line=99;gtk_tree_model_get(m,&root,3,&line,-1);g_assert_cmpuint(line,==,0);g_assert_cmpint(gtk_tree_model_iter_n_children(m,&root),==,1);
-  GtkTreePath *path=gtk_tree_model_get_path(m,&root);guint id=doc->id;gtk_tree_view_row_activated(GTK_TREE_VIEW(project),path,gtk_tree_view_get_column(GTK_TREE_VIEW(project),0));g_assert_cmpuint(document_get_current()->id,==,id);gtk_tree_view_expand_row(GTK_TREE_VIEW(project),path,FALSE);gtk_tree_path_free(path);GtkTreeIter structure;g_assert_true(find_row(m,"Structures",&structure));GtkTreePath *collapsed=gtk_tree_model_get_path(m,&structure);gtk_tree_view_collapse_row(GTK_TREE_VIEW(project),collapsed);gtk_tree_path_free(collapsed);
+        GtkWidget *project_host = named (window, "insight-project-width-host");
+        g_assert_cmpint (gtk_widget_get_allocated_width (project_host), <, 250);
+        g_assert_cmpint (gtk_widget_get_allocated_width (project_host), >, 100);
+        GtkWidget *active_page = gtk_notebook_get_nth_page (
+            GTK_NOTEBOOK (book), gtk_notebook_get_current_page (GTK_NOTEBOOK (book)));
+        panel_control_inside (project_host, named (active_page, "insight-panel-toggle-dock"));
+        panel_control_inside (project_host, named (active_page, "insight-panel-help"));
+        g_assert_cmpint (gtk_tree_model_iter_n_children (m, NULL), ==, 3);
+        GtkTreeIter root;
+        g_assert_true (gtk_tree_model_get_iter_first (m, &root));
+        gulong line = 99;
+        gtk_tree_model_get (m, &root, 3, &line, -1);
+        g_assert_cmpuint (line, ==, 0);
+        g_assert_cmpint (gtk_tree_model_iter_n_children (m, &root), ==, 1);
+        GtkTreePath *path = gtk_tree_model_get_path (m, &root);
+        guint id = doc->id;
+        gtk_tree_view_row_activated (GTK_TREE_VIEW (project), path,
+                                     gtk_tree_view_get_column (GTK_TREE_VIEW (project), 0));
+        g_assert_cmpuint (document_get_current ()->id, ==, id);
+        gtk_tree_view_expand_row (GTK_TREE_VIEW (project), path, FALSE);
+        gtk_tree_path_free (path);
+        GtkTreeIter structure;
+        g_assert_true (find_row (m, "Structures", &structure));
+        GtkTreePath *collapsed = gtk_tree_model_get_path (m, &structure);
+        gtk_tree_view_collapse_row (GTK_TREE_VIEW (project), collapsed);
+        gtk_tree_path_free (collapsed);
 
-  for(guint i=0;i<600;i++) { GtkTreeIter row;gchar *name=g_strdup_printf("extra_%03u",i);gtk_list_store_append(base,&row);gtk_list_store_set(base,&row,0,name,2,source,3,(gulong)i+5,4,"f",-1);g_free(name); }
-  phase++;
- } else if(phase==3) {
-  if(!gtk_widget_get_sensitive(project)) return G_SOURCE_CONTINUE;
-  GtkTreeModel *m=gtk_tree_view_get_model(GTK_TREE_VIEW(project));GtkTreeIter it;if(!find_row(m,"extra_599",&it)) return G_SOURCE_CONTINUE;gint count=0;for(gboolean valid=gtk_tree_model_get_iter_first(m,&it);valid;valid=gtk_tree_model_iter_next(m,&it)) count+=gtk_tree_model_iter_n_children(m,&it);g_assert_cmpint(count,==,603);
-  g_assert_true(find_row(m,"Structures",&it));GtkTreePath *root_path=gtk_tree_model_get_path(m,&it);g_assert_false(gtk_tree_view_row_expanded(GTK_TREE_VIEW(project),root_path));gtk_tree_path_free(root_path);
-  GtkWidget *page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(book),1);g_signal_emit_by_name(named(page,"insight-panel-help"),"clicked");g_assert_nonnull(viewer());g_assert_true(contains(viewer(),"Project symbols"));g_assert_true(contains(viewer(),"Short tutorial"));gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(named(window,"insight-interface-ru")),TRUE);g_assert_true(contains(viewer(),"Символы проекта"));g_assert_true(contains(viewer(),"Короткий урок"));gtk_widget_destroy(viewer());
-  gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-project-group-types")),FALSE);phase++;
- } else if(phase==4) { if(!gtk_widget_get_sensitive(project)) return G_SOURCE_CONTINUE;GtkTreeModel *flat=gtk_tree_view_get_model(GTK_TREE_VIEW(project));g_assert_cmpint(gtk_tree_model_iter_n_children(flat,NULL),==,603);GtkTreeIter iter;g_assert_true(find_row(flat,"extra_599",&iter));g_assert_false(gtk_tree_model_iter_has_child(flat,&iter));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window,"insight-project-group-types")),TRUE);phase++;
- } else { if(!gtk_widget_get_sensitive(project)) return G_SOURCE_CONTINUE;GtkTreeIter group;if(!find_row(gtk_tree_view_get_model(GTK_TREE_VIEW(project)),"Функции",&group)) return G_SOURCE_CONTINUE;  g_assert_cmpint(scintilla_send_message(doc->editor->sci,SCI_GETMARGINWIDTHN,3,0),==,4);
-  scintilla_send_message(doc->editor->sci,SCI_INSERTTEXT,0,(sptr_t)"/* changed */\n");
-  g_assert_true(((guint)scintilla_send_message(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_MODIFIED))!=0);
-  g_assert_true(document_save_file(doc,FALSE));
-  g_assert_true(((guint)scintilla_send_message(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_SAVED))!=0);
-g_object_unref(base);saved_split=gtk_paned_get_position(GTK_PANED(split));g_print("Panels GUI passed: offscreen startup split recovery, valid saved split preservation, native C tags, shared type colors/icons, grouped local/project trees, safe header activation, 603-row asynchronous regroup, flat restoration, 180px project resize, icon-only main Diff and panel-specific offline help/tutorial\n");gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-file-symbol-mode")),1);gtk_paned_set_position(GTK_PANED(ui_lookup_widget(window,"hpaned1")),180);gtk_window_present(GTK_WINDOW(window));gdk_window_invalidate_rect(gtk_widget_get_window(window),NULL,TRUE);g_timeout_add(250,finish,NULL);return G_SOURCE_REMOVE; }return G_SOURCE_CONTINUE;
+        for (guint i = 0; i < 600; i++)
+        {
+            GtkTreeIter row;
+            gchar *name = g_strdup_printf ("extra_%03u", i);
+            gtk_list_store_append (base, &row);
+            gtk_list_store_set (base, &row, 0, name, 2, source, 3, (gulong)i + 5, 4, "f", -1);
+            g_free (name);
+        }
+        phase++;
+    }
+    else if (phase == 3)
+    {
+        if (!gtk_widget_get_sensitive (project))
+            return G_SOURCE_CONTINUE;
+        GtkTreeModel *m = gtk_tree_view_get_model (GTK_TREE_VIEW (project));
+        GtkTreeIter it;
+        if (!find_row (m, "extra_599", &it))
+            return G_SOURCE_CONTINUE;
+        gint count = 0;
+        for (gboolean valid = gtk_tree_model_get_iter_first (m, &it); valid;
+             valid = gtk_tree_model_iter_next (m, &it))
+            count += gtk_tree_model_iter_n_children (m, &it);
+        g_assert_cmpint (count, ==, 603);
+        g_assert_true (find_row (m, "Structures", &it));
+        GtkTreePath *root_path = gtk_tree_model_get_path (m, &it);
+        g_assert_false (gtk_tree_view_row_expanded (GTK_TREE_VIEW (project), root_path));
+        gtk_tree_path_free (root_path);
+        GtkWidget *page = gtk_notebook_get_nth_page (GTK_NOTEBOOK (book), 1);
+        g_signal_emit_by_name (named (page, "insight-panel-help"), "clicked");
+        g_assert_nonnull (viewer ());
+        g_assert_true (contains (viewer (), "Project symbols"));
+        g_assert_true (contains (viewer (), "Short tutorial"));
+        gtk_widget_destroy (viewer ());
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (named (window, "insight-project-group-types")),
+                                      FALSE);
+        phase++;
+    }
+    else if (phase == 4)
+    {
+        if (!gtk_widget_get_sensitive (project))
+            return G_SOURCE_CONTINUE;
+        GtkTreeModel *flat = gtk_tree_view_get_model (GTK_TREE_VIEW (project));
+        g_assert_cmpint (gtk_tree_model_iter_n_children (flat, NULL), ==, 603);
+        GtkTreeIter iter;
+        g_assert_true (find_row (flat, "extra_599", &iter));
+        g_assert_false (gtk_tree_model_iter_has_child (flat, &iter));
+        gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (named (window, "insight-project-group-types")),
+                                      TRUE);
+        phase++;
+    }
+    else
+    {
+        if (!gtk_widget_get_sensitive (project))
+            return G_SOURCE_CONTINUE;
+        GtkTreeIter group;
+        if (!find_row (gtk_tree_view_get_model (GTK_TREE_VIEW (project)), "Functions", &group))
+            return G_SOURCE_CONTINUE;
+        g_assert_cmpint (scintilla_send_message (doc->editor->sci, SCI_GETMARGINWIDTHN, 3, 0), ==, 4);
+        GtkWidget *help_page = gtk_notebook_get_nth_page (GTK_NOTEBOOK (book), 1);
+        g_signal_emit_by_name (named (help_page, "insight-panel-help"), "clicked");
+        gtk_check_menu_item_set_active (GTK_CHECK_MENU_ITEM (named (window, "insight-interface-ru")), TRUE);
+        g_assert_true (contains (viewer (), "Символы проекта"));
+        g_assert_true (contains (viewer (), "Короткий урок"));
+        gtk_widget_destroy (viewer ());
+        scintilla_send_message (doc->editor->sci, SCI_INSERTTEXT, 0, (sptr_t) "/* changed */\n");
+        g_assert_true (((guint)scintilla_send_message (doc->editor->sci, SCI_MARKERGET, 0, 0)
+                        & (1u << SC_MARKNUM_HISTORY_MODIFIED))
+                       != 0);
+        g_assert_true (document_save_file (doc, FALSE));
+        g_assert_true (((guint)scintilla_send_message (doc->editor->sci, SCI_MARKERGET, 0, 0)
+                        & (1u << SC_MARKNUM_HISTORY_SAVED))
+                       != 0);
+        g_object_unref (base);
+        saved_split = gtk_paned_get_position (GTK_PANED (split));
+        g_print ("Panels GUI passed: offscreen startup split recovery, valid saved split preservation, "
+                 "native C tags, shared type colors/icons, grouped local/project trees, safe header "
+                 "activation, 603-row asynchronous regroup, flat restoration, 180px project resize, "
+                 "icon-only main Diff and panel-specific offline help/tutorial\n");
+        gtk_combo_box_set_active (GTK_COMBO_BOX (named (window, "insight-file-symbol-mode")), 1);
+        gtk_paned_set_position (GTK_PANED (ui_lookup_widget (window, "hpaned1")), 180);
+        gtk_window_present (GTK_WINDOW (window));
+        gdk_window_invalidate_rect (gtk_widget_get_window (window), NULL, TRUE);
+        g_timeout_add (250, finish, NULL);
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
 }
 /* EN: Run the real editor against an isolated profile and verify persisted panel settings.
  * RU: Запускает редактор с отдельным профилем и проверяет сохранённые настройки панелей. */
-int main(void)
+int
+main (void)
 {
-    if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
-    valid_split=!g_strcmp0(g_getenv("GEANY_TEST_VALID_PROJECT_SPLIT"),"1");
-    gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("panels-gui-%u",g_random_int());
-    directory=g_build_filename(cwd,name,NULL);
-    profile=g_build_filename(directory,"profile",NULL);
-    source=g_build_filename(directory,"sample.c",NULL);
-    g_free(cwd);
-    g_free(name);
-    g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);
-    g_assert_true(g_file_set_contents(source,
-        "int sample_function(void) { return 1; }\n"
-        "int sample_variable;\n"
-        "struct SampleStruct { int member; };\n"
-        "#define SAMPLE_MACRO 1\n", -1, NULL));
-    gchar *config=g_build_filename(profile,"geany.conf",NULL);
-    g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
-    g_free(config);
-    gchar *settings_dir=g_build_filename(profile,"insight",NULL),*settings_file=g_build_filename(settings_dir,"workbench.conf",NULL);
-    g_assert_cmpint(g_mkdir_with_parents(settings_dir,0700),==,0);
-    gchar *seed=g_strdup_printf("[workbench]\nversion=1\noverview-visible=true\nright-split=%d\nproject-visible=true\n",valid_split ? 500 : 5000);
-    g_assert_true(g_file_set_contents(settings_file,seed,-1,NULL));
-    g_free(seed);
-    g_free(settings_dir);
-    g_free(settings_file);
-    gchar *argv[]={"panels-gui","--new-instance","--no-session","--config",profile,NULL};
-    g_timeout_add(200,step,NULL);
-    g_timeout_add(100,panel_geometry_diagnostics,NULL);
-    g_timeout_add_seconds(30,timeout,NULL);
-    g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
-    g_log_set_writer_func(gtk_failure,NULL,NULL);
-    gint result=main_lib(5,argv);
-    gchar *settings=g_build_filename(profile,"insight","workbench.conf",NULL);
-    GKeyFile *key=g_key_file_new();
-    g_assert_true(g_key_file_load_from_file(key,settings,G_KEY_FILE_NONE,NULL));
-    g_assert_cmpint(g_key_file_get_integer(key,"workbench","overview-visibility-policy",NULL),==,1);
-    g_assert_false(g_key_file_get_boolean(key,"workbench","overview-visible",NULL));
-    g_assert_true(g_key_file_get_boolean(key,"workbench","file-symbols-grouped",NULL));
-    g_assert_true(g_key_file_get_boolean(key,"workbench","project-symbols-grouped",NULL));
-    g_assert_cmpint(g_key_file_get_integer(key,"workbench","right-split",NULL),==,saved_split);
-    g_key_file_unref(key);
-    g_free(settings);
-    g_free(source);
-    g_free(profile);
-    g_free(directory);
+    if (!g_getenv ("GEANY_RUN_GUI_TESTS") || !g_getenv ("DISPLAY"))
+        return 77;
+    valid_split = !g_strcmp0 (g_getenv ("GEANY_TEST_VALID_PROJECT_SPLIT"), "1");
+    gchar *cwd = g_get_current_dir (), *name = g_strdup_printf ("panels-gui-%u", g_random_int ());
+    directory = g_build_filename (cwd, name, NULL);
+    profile = g_build_filename (directory, "profile", NULL);
+    source = g_build_filename (directory, "sample.c", NULL);
+    g_free (cwd);
+    g_free (name);
+    g_assert_cmpint (g_mkdir_with_parents (profile, 0700), ==, 0);
+    g_assert_true (g_file_set_contents (source,
+                                        "int sample_function(void) { return 1; }\n"
+                                        "int sample_variable;\n"
+                                        "struct SampleStruct { int member; };\n"
+                                        "#define SAMPLE_MACRO 1\n",
+                                        -1, NULL));
+    gchar *config = g_build_filename (profile, "geany.conf", NULL);
+    g_assert_true (g_file_set_contents (config, "[geany]\nconfirm_exit=false\n", -1, NULL));
+    g_free (config);
+    gchar *settings_dir = g_build_filename (profile, "insight", NULL),
+          *settings_file = g_build_filename (settings_dir, "workbench.conf", NULL);
+    g_assert_cmpint (g_mkdir_with_parents (settings_dir, 0700), ==, 0);
+    gchar *seed = g_strdup_printf (
+        "[workbench]\nversion=1\noverview-visible=true\nright-split=%d\nproject-visible=true\n",
+        valid_split ? 500 : 5000);
+    g_assert_true (g_file_set_contents (settings_file, seed, -1, NULL));
+    g_free (seed);
+    g_free (settings_dir);
+    g_free (settings_file);
+    gchar *argv[] = { "panels-gui", "--new-instance", "--no-session", "--config", profile, NULL };
+    g_timeout_add (200, step, NULL);
+    g_timeout_add_seconds (30, timeout, NULL);
+    g_log_set_always_fatal (G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL);
+    g_log_set_writer_func (gtk_failure, NULL, NULL);
+    gint result = main_lib (5, argv);
+    gchar *settings = g_build_filename (profile, "insight", "workbench.conf", NULL);
+    GKeyFile *key = g_key_file_new ();
+    g_assert_true (g_key_file_load_from_file (key, settings, G_KEY_FILE_NONE, NULL));
+    g_assert_cmpint (g_key_file_get_integer (key, "workbench", "overview-visibility-policy", NULL), ==, 1);
+    g_assert_false (g_key_file_get_boolean (key, "workbench", "overview-visible", NULL));
+    g_assert_true (g_key_file_get_boolean (key, "workbench", "file-symbols-grouped", NULL));
+    g_assert_true (g_key_file_get_boolean (key, "workbench", "project-symbols-grouped", NULL));
+    g_assert_cmpint (g_key_file_get_integer (key, "workbench", "right-split", NULL), ==, saved_split);
+    g_key_file_unref (key);
+    g_free (settings);
+    g_free (source);
+    g_free (profile);
+    g_free (directory);
     return result;
 }

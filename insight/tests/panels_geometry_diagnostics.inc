@@ -60,3 +60,34 @@ static gboolean panel_geometry_diagnostics(gpointer data)
     panel_diagnostic_capture();
     return G_SOURCE_REMOVE;
 }
+
+/* EN: Wait for three equal geometry samples before assertions; the global timeout bounds waiting.
+ * RU: Ожидает трёх одинаковых снимков геометрии перед проверками; ожидание ограничено общим таймером.
+ */
+static gboolean panel_allocations_settled(void)
+{
+    static gint previous[4];
+    static guint stable;
+    GtkWidget *host = named(window, "insight-project-width-host");
+    gint current[] = {gtk_widget_get_allocated_width(split), gtk_paned_get_position(GTK_PANED(split)),
+        gtk_widget_get_allocated_width(host), gtk_widget_get_allocated_width(book)};
+    if (memcmp(previous, current, sizeof current))
+    {
+        memcpy(previous, current, sizeof current);
+        stable = 0;
+    }
+    return ++stable >= 3;
+}
+
+/* EN: Require a mapped control to fit horizontally within the visible host, including clipping ancestors.
+ * RU: Требует, чтобы отображаемый control помещался по горизонтали в видимый host с учётом обрезки.
+ */
+static void panel_control_inside(GtkWidget *host, GtkWidget *control)
+{
+    g_assert_nonnull(control);
+    g_assert_true(gtk_widget_get_mapped(control));
+    gint x, y;
+    g_assert_true(gtk_widget_translate_coordinates(control, host, 0, 0, &x, &y));
+    g_assert_cmpint(x, >=, 0);
+    g_assert_cmpint(x + gtk_widget_get_allocated_width(control), <=, gtk_widget_get_allocated_width(host));
+}
