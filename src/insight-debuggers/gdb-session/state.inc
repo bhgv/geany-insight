@@ -83,6 +83,7 @@ typedef struct {
     gchar *all_stack_thread, *requested_frame, *selected_thread, *selected_frame;
     gboolean threads_needed, stack_needed, filling_context;
     gboolean locals_needed, locals_pending;
+    guint frame_pending_generation;
     ScriptDebugWindow *graph_view;
     InsightLuaWatchGraph *graph;
     guint watch_next;

@@ -89,6 +89,10 @@ conditions, watches and the Lua observer stay configured. Variables, thread
 stacks and the stopped-line highlight are cleared when the process exits.
 The main editor toolbar also provides **Stop** for the active C/C++ session.
 
+Locals, watches and stack replies belong to the stop at which they were requested.
+Late replies after execution, exit or a context change do not replace a newer
+snapshot or repopulate the cleared views.
+
 ## Manage source breakpoints
 
 **C/C++ breakpoints** lists the GDB snapshot, including points added with
@@ -200,6 +204,8 @@ hexadecimal bytes and printable ASCII. Byte order stays as stored in memory.
 expression as an address. For a scalar, change it to `&variable` in Memory.
 **Next block** and **Previous block** navigate by the currently selected byte
 count from the last successful address. They do not reevaluate pointer expressions.
+The navigation base is the first displayed address of the complete snapshot,
+even if GDB returns its memory fragments in a different order.
 
 Snapshots clear on execution, target exit and thread/frame changes. Enable
 **Refresh memory at each stop** to reevaluate the current address expression

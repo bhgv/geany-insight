@@ -44,8 +44,10 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
     g_free(function);
 }
 
-/* EN: Process a GDB line from stream and result for the dialog in data.
- * RU: Обрабатывает строку GDB из stream и result для диалога из data. */
+/* EN: Complete the GDB read from stream/result for dialog in data, update execution state and schedule its next read.
+ * EOF or read failure clears the target and disables the session; frame data is delegated to its reply handler.
+ * RU: Завершает чтение GDB из stream/result для окна data, обновляет исполнение и запрашивает следующую строку.
+ * EOF либо ошибка чтения очищает цель и отключает сеанс; данные кадра передаются обработчику ответов. */
 static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer data)
 {
     GtkWidget *dialog = data;
@@ -146,27 +148,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                     session->watch_next = 0;
                 }
             }
-            if (session->context_pending != NATIVE_CONTEXT_NONE)
-                native_context_reply(session, line);
-            if (session->locals_pending)
-            {
-                session->locals_pending = FALSE;
-                native_debug_locals(session, line);
-                if (!session->expressions->len)
-                    native_watch_refresh(session, TRUE);
-            }
-            if (session->watch_pending)
-            {
-                NativeWatch *watch = session->watch_pending;
-                g_free(watch->value);
-                watch->value = native_debug_field(line,
-                    g_str_has_prefix(line, "^done") ? "value" : "msg");
-                if (!watch->value)
-                    watch->value = g_strdup("Unavailable");
-                session->watch_pending = NULL;
-                if (session->watch_next == session->expressions->len)
-                    native_watch_refresh(session, TRUE);
-            }
+            native_context_data_reply(session, line);
         }
         if ((*line == '~' || *line == '@' || *line == '&') &&
             line[1] == '"' && g_str_has_suffix(line, "\""))

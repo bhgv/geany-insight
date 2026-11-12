@@ -39,8 +39,12 @@ static gchar *native_memory_next(NativeDebug *session)
     return command;
 }
 
-/* EN: Consume record for session's pending memory read; discard replies from an obsolete frame.
- * RU: Принимает record ожидающего чтения session; отбрасывает ответы устаревшего кадра. */
+/* EN: Consume record for session's memory read; discard obsolete frame replies and clear invalid snapshots.
+ * Navigation uses the validated snapshot's first displayed address, regardless of MI fragment order.
+ * Return TRUE when the memory request consumed the reply, otherwise FALSE.
+ * RU: Принимает record чтения памяти session; отбрасывает устаревшие кадры и очищает неверные снимки.
+ * Навигация использует первый адрес проверенного снимка независимо от порядка фрагментов MI.
+ * Возвращает TRUE, если ответ принадлежал запросу памяти, иначе FALSE. */
 static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
 {
     if (!session->memory_pending)
@@ -60,7 +64,7 @@ static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
         insight_tr("Memory unavailable or incomplete. Try a smaller block or another address."));
     g_clear_pointer(&session->memory_address, g_free);
     if (text)
-        session->memory_address = native_debug_field(record, "begin");
+        session->memory_address = g_strndup(text, strcspn(text, " \n"));
     g_free(valid);
     g_free(message);
     g_free(text);

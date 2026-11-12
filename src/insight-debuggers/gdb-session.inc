@@ -332,8 +332,10 @@ static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
     return result;
 }
 
-/* EN: Queue command for the GDB session attached to dialog.
- * RU: Ставит command в очередь GDB, связанного с dialog. */
+/* EN: Send command to dialog's GDB session and record its frame generation before the asynchronous write.
+ * Busy/closed sessions ignore the request; the write callback reports transport errors.
+ * RU: Отправляет command сеансу GDB окна dialog и запоминает поколение кадра перед асинхронной записью.
+ * Занятый/закрытый сеанс игнорирует запрос; обработчик записи сообщает ошибки транспорта. */
 static void native_debug_send(GtkWidget *dialog, const gchar *command)
 {
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
@@ -349,6 +351,7 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command)
     gchar *scoped = native_debug_scoped(session, command);
     gchar *line = g_strconcat(scoped, "\n", NULL);
     g_free(scoped);
+    session->frame_pending_generation = session->value_generation;
     session->pending = session->writing = TRUE;
     native_debug_update(session);
     g_object_set_data_full(G_OBJECT(dialog), "native-debug-command", line, g_free);

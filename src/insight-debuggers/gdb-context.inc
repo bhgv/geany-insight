@@ -403,6 +403,42 @@ static void native_debug_locals(NativeDebug *session, const gchar *record)
     }
 }
 
+/* EN: Consume record for session's pending frame data only in its original stopped generation.
+ * Stale replies clear borrowed request pointers without publishing data; current errors remain visible.
+ * RU: Обрабатывает record ожидающих данных кадра session только в исходном поколении остановки.
+ * Поздние ответы снимают заимствованные указатели запросов без публикации данных; текущие ошибки остаются видимыми. */
+static void native_context_data_reply(NativeDebug *session, const gchar *record)
+{
+    if (!session->stopped || session->frame_pending_generation != session->value_generation)
+    {
+        session->context_pending = NATIVE_CONTEXT_NONE;
+        session->locals_pending = FALSE;
+        session->watch_pending = NULL;
+        return;
+    }
+    if (session->context_pending != NATIVE_CONTEXT_NONE)
+        native_context_reply(session, record);
+    if (session->locals_pending)
+    {
+        session->locals_pending = FALSE;
+        native_debug_locals(session, record);
+        if (!session->expressions->len)
+            native_watch_refresh(session, TRUE);
+    }
+    if (session->watch_pending)
+    {
+        NativeWatch *watch = session->watch_pending;
+        g_free(watch->value);
+        watch->value = native_debug_field(record,
+            g_str_has_prefix(record, "^done") ? "value" : "msg");
+        if (!watch->value)
+            watch->value = g_strdup(insight_tr("Unavailable"));
+        session->watch_pending = NULL;
+        if (session->watch_next == session->expressions->len)
+            native_watch_refresh(session, TRUE);
+    }
+}
+
 /* EN: Return a frame-local hover tooltip for filename and name in the active GDB session.
  * RU: Возвращает подсказку для имени name из текущего кадра GDB в файле filename. */
 gchar *insight_debug_value_tooltip(const gchar *filename, const gchar *name)
