@@ -178,8 +178,45 @@ static gchar *native_selected_frame(NativeDebug *session, gchar **filename, gcha
     return level;
 }
 
-/* EN: Refresh the stack or values after a context reply from GDB in record.
- * RU: Обновляет стек или значения после ответа GDB о контексте в record. */
+/* EN: Restore session's confirmed selection after failed request without emitting another GDB command.
+ * Missing thread/frame rows leave the picker unselected; request chooses the affected picker.
+ * RU: Восстанавливает подтверждённый выбор session после ошибки request без новой команды GDB.
+ * Если строки потока/кадра нет, выбор снимается; request определяет нужный список. */
+static void native_context_restore(NativeDebug *session, NativeContextRequest request)
+{
+    session->filling_context = TRUE;
+    if (request == NATIVE_CONTEXT_SELECT_THREAD)
+    {
+        if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), session->selected_thread))
+            gtk_combo_box_set_active(GTK_COMBO_BOX(session->threads), -1);
+    }
+    else if (request == NATIVE_CONTEXT_SELECT_FRAME)
+    {
+        GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(session->stack));
+        GtkTreeModel *model = GTK_TREE_MODEL(session->stack_rows);
+        gtk_tree_selection_unselect_all(selection);
+        GtkTreeIter row;
+        for (gboolean valid = gtk_tree_model_get_iter_first(model, &row); valid;
+             valid = gtk_tree_model_iter_next(model, &row))
+        {
+            gchar *level = NULL;
+            gtk_tree_model_get(model, &row, 0, &level, -1);
+            gboolean matches = session->selected_frame && !g_strcmp0(level, session->selected_frame);
+            g_free(level);
+            if (matches)
+            {
+                gtk_tree_selection_select_iter(selection, &row);
+                break;
+            }
+        }
+    }
+    session->filling_context = FALSE;
+}
+
+/* EN: Apply GDB context result record to session's stack/values; failed selections restore the confirmed picker.
+ * Only successful selections invalidate values and schedule source/watch refreshes; returns no value.
+ * RU: Применяет ответ контекста GDB record к стеку/значениям session; ошибка выбора возвращает подтверждённую строку.
+ * Только успешный выбор сбрасывает значения и запрашивает обновление исходника/наблюдений; ничего не возвращает. */
 static void native_context_reply(NativeDebug *session, const gchar *record)
 {
     NativeContextRequest request = session->context_pending;
@@ -195,12 +232,8 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
     {
         g_clear_pointer(&session->requested_frame, g_free);
         session->frame_select_needed = FALSE;
-        if (request == NATIVE_CONTEXT_SELECT_THREAD)
-        {
-            session->filling_context = TRUE;
-            gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), session->selected_thread);
-            session->filling_context = FALSE;
-        }
+        if (request == NATIVE_CONTEXT_SELECT_THREAD || request == NATIVE_CONTEXT_SELECT_FRAME)
+            native_context_restore(session, request);
         return;
     }
     if (request == NATIVE_CONTEXT_SELECT_THREAD || request == NATIVE_CONTEXT_SELECT_FRAME)
@@ -241,7 +274,7 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         g_free(line);
     }
     if ((request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_STACK) &&
-        session->stop_file && !session->stop_requested)
+        !session->stop_requested)
         native_source_stopped(session);
     if (request == NATIVE_CONTEXT_SELECT_FRAME)
         g_clear_pointer(&session->requested_frame, g_free);

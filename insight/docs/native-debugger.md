@@ -5,6 +5,11 @@ The table shows up to 64 frames in the selected thread. Selecting a frame
 updates variables and watches. Double-click a frame to open its source when
 GDB provides a full path and line number.
 
+If GDB rejects a thread or frame selection, the picker returns to its last
+confirmed selection and values keep that context. If the confirmed row has
+disappeared, the picker clears its selection instead of highlighting a different context.
+Selecting a frame without source coordinates clears the previous source-line highlight.
+
 At each stop, **Variables** shows the locals and arguments of GDB's
 selected frame. The same values appear in **Watch graph**. Hover over a
 name in the source file where execution stopped to see its frame value.

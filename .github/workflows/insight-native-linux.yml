@@ -182,6 +182,8 @@ jobs:
           python3 insight/tests/c_operator_tokens_test.py
           python3 insight/tests/hdl_instance_models_test.py
           python3 insight/tests/native_debugger_models_test.py
+          python3 insight/tests/native_debugger_context_requests_test.py
+          python3 insight/tests/native_debugger_lifecycle_test.py
           python3 insight/tests/native_debugger_controls_test.py
           python3 insight/tests/native_debugger_catchpoints_test.py
           python3 insight/tests/native_debugger_values_test.py

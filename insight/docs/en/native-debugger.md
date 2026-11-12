@@ -54,6 +54,12 @@ Manual pauses and stepping stops stay available for inspection.
 
 ## All thread stacks
 
+Use **Threads and stack** while paused to select a thread or frame. If GDB
+rejects the selection, the picker returns to its last confirmed selection and
+values keep that context. If the confirmed row has disappeared, the picker
+clears its selection instead of highlighting a different context.
+Selecting a frame without source coordinates clears the previous source-line highlight.
+
 While paused, open **All thread stacks** to collect a collapsible tree:
 threads at the top, their frames underneath. **Expand all** and **Collapse all**
 control the branches. Frame numbers, function names and source lines use distinct
