@@ -150,3 +150,5 @@ static void native_instruction_point(NativeDebug *session, const gchar *tuple, c
 
 static void native_instruction_points_reset(NativeDebug *session);
 static void native_instruction_source_reply(NativeDebug *session, NativeAssemblyWork *work, const gchar *record);
+static void native_navigation_controls(NativeDebug *session);
+static void native_navigation_clear(NativeAssembly *assembly);

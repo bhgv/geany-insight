@@ -11,6 +11,8 @@ static void native_assembly_free(NativeAssembly *assembly)
     insight_queue_clear_full(&assembly->work, native_assembly_work_free);
     if (assembly->pending)
         native_assembly_work_free(assembly->pending);
+    if (assembly->history)
+        g_ptr_array_unref(assembly->history);
     g_ptr_array_unref(assembly->rules);
     g_ptr_array_unref(assembly->ranges);
     g_ptr_array_unref(assembly->objects);
@@ -42,6 +44,7 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
     NativeAssembly *assembly = session->assembly;
     assembly->active = TRUE;
     assembly->source_only = FALSE;
+    assembly->history_replaying = FALSE;
     assembly->follow_needed = FALSE;
     g_free(assembly->context_thread);
     g_free(assembly->context_frame);

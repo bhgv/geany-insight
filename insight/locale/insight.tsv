@@ -3381,3 +3381,9 @@ Looking up instruction source…	Поиск исходника инструкц�
 Instruction source opened. The execution stop has not changed.	Исходник инструкции открыт. Позиция остановки не изменилась.
 Source file is unavailable locally. Check GDB source directories or SSH source mapping.	Исходник недоступен локально. Проверьте каталоги исходников GDB или сопоставление путей SSH.
 GDB has no source line for this instruction.	В GDB нет строки исходника для этой инструкции.
+
+Code history back	Назад по истории кода
+Code history forward	Вперёд по истории кода
+Return to program counter	Вернуться к счётчику команд
+Open selected address as code	Открыть выделенный адрес как код
+Select one hexadecimal address to open as code.	Выделите один шестнадцатеричный адрес для просмотра кода.

@@ -14,6 +14,7 @@ static void native_target_clear(NativeDebug *session)
     }
     if (session->assembly)
     {
+        native_navigation_clear(session->assembly);
         session->assembly->instruction_pc_valid = FALSE;
         native_instruction_refresh(session);
     }

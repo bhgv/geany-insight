@@ -1182,7 +1182,7 @@ endif
 install_data(
   'insight/docs/project-database.md', 'insight/docs/guide.md', 'insight/docs/tutorials.md', 'insight/docs/languages.md',
   'insight/docs/scripting.md', 'insight/docs/markup-viewer.rst',
-  'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/lua-debugger.md', 'insight/docs/python-debugger.md', 'insight/docs/native-debugger.md', 'insight/docs/verilog-debugger.md', 'insight/docs/verilog-lua-spi.md', 'insight/docs/verilog-lua-i2c.md', 'insight/docs/verilog-sdram.md', 'insight/docs/internal-diff.md',
+  'insight/docs/directory-compare.md', 'insight/docs/lua-api.md', 'insight/docs/lua-debugger.md', 'insight/docs/python-debugger.md', 'insight/docs/native-debugger.md', 'insight/docs/native-disassembly.md', 'insight/docs/verilog-debugger.md', 'insight/docs/verilog-lua-spi.md', 'insight/docs/verilog-lua-i2c.md', 'insight/docs/verilog-sdram.md', 'insight/docs/internal-diff.md',
   'insight/docs/desktop-check-builds.md',
   'insight/docs/context-bookmarks.md', 'insight/docs/relations-calls.md',
   'insight/docs/window-layouts.md', 'insight/docs/window-list.md', 'insight/docs/symbol-info.md',
@@ -1274,7 +1274,7 @@ install_data('insight/docs/media/windows-build.svg', install_dir: cdata.get('GEA
 install_data('insight/docs/slang.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 
 install_data('insight/docs/media/slang-compat.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
-install_data('insight/docs/media/hdl-synchronous-stop.svg', 'insight/docs/media/hdl-interface-flow.svg', 'insight/docs/media/hdl-bit-mapping.svg', 'insight/docs/media/native-debugger.svg', 'insight/docs/media/native-disassembly-names.svg', 'insight/docs/media/hdl-instruments.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+install_data('insight/docs/media/hdl-synchronous-stop.svg', 'insight/docs/media/hdl-interface-flow.svg', 'insight/docs/media/hdl-bit-mapping.svg', 'insight/docs/media/native-debugger.svg', 'insight/docs/media/native-disassembly-names.svg', 'insight/docs/media/native-code-navigation.svg', 'insight/docs/media/hdl-instruments.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/media/windows-build-locations.jpg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 

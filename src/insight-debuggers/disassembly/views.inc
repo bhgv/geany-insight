@@ -70,6 +70,7 @@ static void native_assembly_finish(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
     gchar *text = assembly->record ? native_assembly_render(session, assembly->record) : NULL;
+    native_navigation_record(assembly, text ? assembly->record : NULL);
     gchar *error = text || !assembly->record ? NULL : native_debug_field(assembly->record, "msg");
     if (text)
         native_instruction_refresh(session);

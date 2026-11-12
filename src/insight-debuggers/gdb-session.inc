@@ -20,6 +20,7 @@ static void native_debug_update(NativeDebug *session)
     g_free(status);
     for (guint i = 0; i < session->paused_controls->len; i++)
         gtk_widget_set_sensitive(session->paused_controls->pdata[i], idle && session->stopped);
+    native_navigation_controls(session);
     for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
         gtk_widget_set_sensitive(session->buttons[i], idle &&
             (i == NATIVE_PAUSE ? session->running :

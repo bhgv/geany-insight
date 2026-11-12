@@ -243,6 +243,32 @@ int main(int argc, char **argv)
     assert(!native_name_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_unref(profile);
+    native_navigation_record(&assembly, "^done,asm_insns=[{address=\"0x1000\"}]");
+    native_navigation_record(&assembly, "^done,asm_insns=[{address=\"0x2000\"}]");
+    assert(assembly.history->len == 2 && assembly.history_position == 1);
+    assembly.history_replaying = TRUE;
+    assembly.history_requested = 0;
+    native_navigation_record(&assembly, "^error,msg=\"unreadable\"");
+    assert(assembly.history_position == 1 && !assembly.history_replaying);
+    assembly.history_replaying = TRUE;
+    native_navigation_record(&assembly, "^done,asm_insns=[{address=\"0x1000\"}]");
+    assert(assembly.history_position == 0 && assembly.history->len == 2);
+    native_navigation_record(&assembly, "^done,asm_insns=[{address=\"0x3000\"}]");
+    assert(assembly.history_position == 1 && assembly.history->len == 2);
+    assert(!strcmp(assembly.history->pdata[1], "0x3000"));
+    native_navigation_record(&assembly, "^done,asm_insns=[{address=\"0x3000\"}]");
+    assert(assembly.history->len == 2);
+    for (guint i = 0; i < 80; i++)
+    {
+        gchar *record = g_strdup_printf("^done,asm_insns=[{address=\"0x%x\"}]", 0x4000 + i);
+        native_navigation_record(&assembly, record);
+        g_free(record);
+    }
+    assert(assembly.history->len == 64 && assembly.history_position == 63);
+    native_navigation_clear(&assembly);
+    assert(!assembly.history->len && !assembly.history_position);
+    g_ptr_array_unref(assembly.history);
+    assembly.history = NULL;
     guint source_line = 0;
     const char *mixed = "^done,asm_insns=[src_and_asm_line={line=\"12\",fullname=\"/tmp/a.c\",line_asm_insn=[{address=\"0x4010\"}]}]";
     char *source = native_instruction_source_location(mixed, "0x00004010", &source_line);
@@ -314,6 +340,7 @@ class NativeNames(unittest.TestCase):
         for name in ('rules.inc', 'resolve.inc', 'annotations.inc'):
             code += (directory / name).read_text()
         code += (directory / 'instruction-model.inc').read_text()
+        code += (directory / 'navigation-model.inc').read_text()
         code += (directory / 'source-model.inc').read_text()
         code += function(str(directory / 'names-ui.inc'), 'native_name_profile_store') + MAIN
         with tempfile.TemporaryDirectory() as temporary:

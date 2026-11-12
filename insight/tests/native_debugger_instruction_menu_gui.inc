@@ -187,7 +187,7 @@ static gboolean instruction_menu_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_free(expected);
         g_assert_true(source_markers());
         g_print("C/C++ GTK: exact instruction-to-source navigation preserved execution markers.\n");
-        phase = 16;
+        phase = 93;
     }
     return G_SOURCE_CONTINUE;
 }
