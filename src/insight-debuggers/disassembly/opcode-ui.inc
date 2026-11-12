@@ -2,17 +2,20 @@
 /* EN: Show and copy GDB-provided instruction bytes from an existing snapshot without querying or running the target.
  * RU: Показывает и копирует байты инструкций GDB из готового снимка без запросов к цели и её исполнения. */
 
-/* EN: Return owned validated opcode bytes at exact address in assembly's cached record, or NULL when unavailable.
- * RU: Возвращает проверенные байты точного address из сохранённого record assembly либо NULL при отсутствии. */
+/* EN: Return owned opcode bytes at exact address only from assembly's complete validated snapshot; NULL means unavailable.
+ * Reject truncated, malformed or over-limit snapshots before looking up a matching tuple.
+ * RU: Возвращает байты точного address только из полного проверенного снимка assembly; NULL означает отсутствие.
+ * Отклоняет обрезанные, неверные и превышающие лимит снимки до поиска совпадающего кортежа. */
 static gchar *native_opcode_at(NativeAssembly *assembly, const gchar *address)
 {
     guint64 wanted = 0;
     if (!assembly->record || !native_assembly_number(address, &wanted))
         return NULL;
-    const gchar *cursor = strstr(assembly->record, "asm_insns=["), *start, *end;
-    if (!cursor)
+    gchar *validated = native_assembly_format(assembly->record);
+    if (!validated)
         return NULL;
-    cursor += strlen("asm_insns=[");
+    g_free(validated);
+    const gchar *cursor = assembly->record + strlen("^done,asm_insns=["), *start, *end;
     guint count = 0;
     while (count++ < 256 && (end = native_next_tuple(&cursor, &start)))
     {

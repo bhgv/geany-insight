@@ -193,7 +193,9 @@ The row menu offers **Copy instruction bytes** and **Copy instruction line**.
 It captures the row when the menu opens, so moving the cursor afterward does
 not change what is copied. A copied line includes the address, names, visible
 bytes and annotations, but no stop markers. Byte copying is disabled when
-valid bytes are absent.
+valid bytes are absent. The complete cached instruction snapshot is validated before
+byte lookup; truncated, failed or over-limit responses cannot supply copyable bytes,
+even if their first instruction contains a matching address.
 
 ## Register search and actions
 

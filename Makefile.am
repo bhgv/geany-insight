@@ -874,3 +874,5 @@ EXTRA_DIST += insight/tests/native_debugger_register_tools_gui.inc
 EXTRA_DIST += insight/tests/native_debugger_assembly_context_test.py
 
 EXTRA_DIST += insight/tests/native_debugger_register_context_test.py
+
+EXTRA_DIST += insight/tests/native_debugger_opcode_test.py
