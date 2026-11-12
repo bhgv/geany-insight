@@ -144,8 +144,10 @@ static void native_value_children(NativeDebug *session, GtkTreeIter *parent, con
     g_free(more);
 }
 
-/* EN: Consume session's variable-object reply; return TRUE only for quiet cleanup replies.
- * RU: Обрабатывает ответ объектов переменных session; TRUE возвращается только для тихого удаления. */
+/* EN: Consume record for session's variable-object request; return TRUE only for quiet cleanup.
+ * Failed child pages keep both loaded rows and their expansion state so retries use the same offset.
+ * RU: Обрабатывает record запроса объектов переменных session; TRUE возвращает только для тихого удаления.
+ * Ошибка страницы сохраняет строки и состояние раскрытия, чтобы повтор использовал прежнее смещение. */
 static gboolean native_values_reply(NativeDebug *session, const gchar *record)
 {
     NativeValueRequest request = session->value_request;
@@ -179,8 +181,6 @@ static gboolean native_values_reply(NativeDebug *session, const gchar *record)
         {
             if (success)
                 native_value_children(session, &row, record);
-            else
-                gtk_tree_store_set(session->value_rows, &row, 4, FALSE, -1);
         }
         if (path)
             gtk_tree_path_free(path);

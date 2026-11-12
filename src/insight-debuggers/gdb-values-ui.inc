@@ -147,8 +147,10 @@ static void native_value_action(GtkButton *button, gpointer data)
     g_free(expression);
 }
 
-/* EN: Load pagination rows or edit scalar values activated at path in view for session data.
- * RU: Загружает дополнительные страницы или редактирует скаляр по path из view для сеанса data. */
+/* EN: Activate path in view for session data; retry placeholder/page rows or edit a scalar.
+ * column is unused; requests obey the current paused/idle context and leave errors to GDB.
+ * RU: Активирует path из view для сеанса data; повторяет загрузку заполнителя/страницы либо редактирует скаляр.
+ * column не используется; запросы учитывают текущую паузу и простой, ошибки обрабатывает GDB. */
 static void native_value_activated(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *column, gpointer data)
 {
     (void)column;
@@ -159,7 +161,7 @@ static void native_value_activated(GtkTreeView *view, GtkTreePath *path, GtkTree
         return;
     guint mode = 0, offset = 0, children = 0;
     gtk_tree_model_get(model, &row, 7, &mode, 6, &offset, 5, &children, -1);
-    if (mode == NATIVE_VALUE_MORE)
+    if (mode == NATIVE_VALUE_MORE || mode == NATIVE_VALUE_PLACEHOLDER)
     {
         GtkTreeIter parent;
         if (gtk_tree_model_iter_parent(model, &parent, &row))

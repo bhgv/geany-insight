@@ -149,6 +149,10 @@ for another page. A tree is limited to 4096 entries and depth 64; inspect a
 sub-expression to narrow a large object. **Add selected watch** adds the
 selected member's full expression to the regular watches and watch graph.
 
+If a later page fails, loaded members stay in place. Retry with **Load next
+128 members…**; collapsing and reopening the node does not reload earlier pages.
+If the first page fails, double-click **Expand to load members** to retry it.
+
 Double-click a scalar in the tree, use **Change Value**, or select a local
 and use **Change selected value**. Enter a C/C++ value expression and apply
 it. This modifies the paused program in the selected thread/frame. On success,

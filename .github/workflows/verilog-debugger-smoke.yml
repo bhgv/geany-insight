@@ -79,6 +79,7 @@ jobs:
           python3 insight/tests/native_debugger_catchpoints_test.py
           python3 insight/tests/native_debugger_values_test.py
           python3 insight/tests/native_debugger_pretty_values_test.py
+          python3 insight/tests/native_debugger_value_requests_test.py
           python3 insight/tests/native_debugger_memory_test.py
           python3 insight/tests/native_debugger_disassembly_test.py
           python3 insight/tests/native_debugger_names_test.py
