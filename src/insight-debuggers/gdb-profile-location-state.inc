@@ -13,12 +13,12 @@ typedef struct
     guint point_index;
     gchar *parent_number;
     NativeSavedLocation *location;
-    gboolean applied;
+    gboolean applied, queued;
 } NativeLocationOverride;
 
 typedef struct
 {
     gchar *number;
     guint matches;
-    gboolean enabled;
+    gboolean enabled, queued;
 } NativeLocationCandidate;

@@ -52,8 +52,12 @@ static void native_location_candidate_add(GHashTable *candidates, const gchar *t
     g_free(number);
 }
 
-/* EN: Queue uniquely matched disabled selectors in session from record; return the number still awaiting symbols.
- * RU: Ставит однозначные выключения session из record в очередь; возвращает число правил, ожидающих символов. */
+/* EN: Match session's saved disables to record and queue each unique location once.
+ * Only a disabled snapshot confirms application; failed restoration suspends retries but preserves selectors.
+ * Return the number awaiting symbols or an explicit restoration retry.
+ * RU: Сопоставляет сохранённые выключения session с record и однократно ставит каждую подпозицию в очередь.
+ * Применение подтверждает только выключенная подпозиция в снимке; ошибка останавливает повторы, сохраняя селекторы.
+ * Возвращает число правил, ожидающих символов либо явного повтора восстановления. */
 static guint native_profile_locations_apply(NativeDebug *session, const gchar *record)
 {
     const gchar *body = strstr(record, "body=[");
@@ -86,16 +90,30 @@ static guint native_profile_locations_apply(NativeDebug *session, const gchar *r
         NativeLocationOverride *override = session->profile_disabled_pending->pdata[i];
         if (override->applied)
             continue;
-        gchar *key = override->parent_number ? native_profile_location_key(override->parent_number, override->location) : NULL;
+        if (session->profile_restore_failed)
+            override->queued = FALSE;
+
+        gchar *key = override->parent_number ?
+            native_profile_location_key(override->parent_number, override->location) : NULL;
         NativeLocationCandidate *candidate = key ? g_hash_table_lookup(candidates, key) : NULL;
         if (candidate && candidate->matches == 1)
         {
-            override->applied = TRUE;
-            if (candidate->enabled)
+            if (!candidate->enabled)
             {
-                g_queue_push_tail(&session->launch_commands, g_strdup_printf("-break-disable %s", candidate->number));
-                candidate->enabled = FALSE;
-                session->profile_restoring = session->points_needed = TRUE;
+                override->applied = TRUE;
+                override->queued = FALSE;
+            }
+            else if (session->profile_restore_failed)
+                pending++;
+            else
+            {
+                if (!override->queued && !candidate->queued)
+                {
+                    g_queue_push_tail(&session->launch_commands,
+                        g_strdup_printf("-break-disable %s", candidate->number));
+                    session->profile_restoring = session->points_needed = TRUE;
+                }
+                override->queued = candidate->queued = TRUE;
             }
         }
         else

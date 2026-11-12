@@ -359,6 +359,11 @@ locations remain pending, with a status message, until a later breakpoint refres
 can match them uniquely. Changing these settings manually after restoration takes
 precedence. Save retains unresolved selectors for parents that still exist.
 
+A queued disable is confirmed only when GDB's next breakpoint snapshot shows
+that location disabled. Save retains unconfirmed selectors, including after a
+rejected command. After an error, automatic retries stop; use **Restore debugger
+profile** to retry explicitly. Repeated snapshots do not enqueue duplicate commands.
+
 Data watchpoints and temporary/absolute-address breakpoints remain session-only.
 Versions one through three are readable; Save upgrades to version four. The existing
 256 KiB profile limit also includes C++ location metadata. Missing source coordinates

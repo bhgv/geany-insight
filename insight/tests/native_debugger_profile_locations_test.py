@@ -75,11 +75,13 @@ typedef struct {
 '''
 
 MAIN = r'''
-/* EN: Validate restoration using record argv[1], fresh parent IDs and safe ambiguity handling.
- * RU: Проверяет восстановление по записи argv[1], новым ID родителей и обработку неоднозначности. */
+/* EN: Validate restoration using enabled record argv[1] and optional confirmed record argv[2]; argc is two or three.
+ * Preserve queued selectors until the real GDB snapshot confirms the disable.
+ * RU: Проверяет восстановление по включённому снимку argv[1] и необязательному подтверждению argv[2]; argc равен двум либо трём.
+ * Сохраняет ожидающие селекторы до подтверждения выключения настоящим снимком GDB. */
 int main(int argc, char **argv)
 {
-    assert(argc == 2);
+    assert(argc == 2 || argc == 3);
     GKeyFile *profile = g_key_file_new();
     g_key_file_set_integer(profile, "debugger", "version", 3);
     g_key_file_set_integer(profile, "breakpoint-0", "disabled-count", 1);
@@ -113,8 +115,13 @@ int main(int argc, char **argv)
     g_free(command);
     assert(native_profile_locations_apply(&session, argv[1]) == 0);
     assert(!session.launch_commands.length);
-    native_profile_location_capture(&point,
-        "{number=\"2.1\",enabled=\"n\",file=\"sample.cpp\",func=\"sample<int>(int)\",line=\"1\"}");
+    assert(!override->applied && override->queued);
+    if (argc == 3)
+    {
+        assert(native_profile_locations_apply(&session, argv[2]) == 0 && override->applied);
+        native_profile_location_capture(&point,
+            "{number=\"2.1\",enabled=\"n\",file=\"sample.cpp\",func=\"sample<int>(int)\",line=\"1\"}");
+    }
     native_profile_locations_store(&session, profile, &point, 0);
     GError *error = NULL;
     assert(native_profile_locations_validate(profile, 1, &error) && !error);
@@ -128,8 +135,8 @@ int main(int argc, char **argv)
 
 
 class NativeProfileLocations(unittest.TestCase):
-    # EN: Compile production helpers and replay disabled template locations with changing GDB identifiers.
-    # RU: Компилирует производственные функции и восстанавливает подпозиции шаблонов с меняющимися ID GDB.
+    # EN: Compile production helpers for self, send their disable to real GDB and confirm it from the returned snapshot.
+    # RU: Компилирует обработчики self, отправляет выключение настоящему GDB и подтверждает его ответным снимком.
     def test_template_location_roundtrip(self):
         gdb = os.environ.get('GDB', shutil.which('gdb'))
         libraries = [ctypes.util.find_library(name) for name in ('gio-2.0', 'glib-2.0')]
@@ -164,6 +171,10 @@ class NativeProfileLocations(unittest.TestCase):
             self.assertNotIn('^error', result.stdout)
             self.assertIn('number="2.1",enabled="n"', result.stdout)
             self.assertIn('number="2.2",enabled="y"', result.stdout)
+            confirmed = next(line for line in result.stdout.splitlines()
+                             if line.startswith('^done,BreakpointTable='))
+            replay = subprocess.check_output([str(root / 'fixture'), record, confirmed], text=True)
+            self.assertEqual(replay, command)
 
 
 if __name__ == '__main__':

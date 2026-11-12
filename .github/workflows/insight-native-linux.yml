@@ -181,27 +181,8 @@ jobs:
           python3 insight/tests/editor_build_driver_test.py
           python3 insight/tests/c_operator_tokens_test.py
           python3 insight/tests/hdl_instance_models_test.py
-          python3 insight/tests/native_debugger_models_test.py
-          python3 insight/tests/native_debugger_context_requests_test.py
-          python3 insight/tests/native_debugger_frame_replies_test.py
-          python3 insight/tests/native_debugger_lifecycle_test.py
-          python3 insight/tests/native_debugger_controls_test.py
-          python3 insight/tests/native_debugger_catchpoints_test.py
-          python3 insight/tests/native_debugger_values_test.py
-          python3 insight/tests/native_debugger_pretty_values_test.py
-          python3 insight/tests/native_debugger_value_requests_test.py
-          python3 insight/tests/native_debugger_memory_test.py
-          python3 insight/tests/native_debugger_memory_requests_test.py
-          python3 insight/tests/native_debugger_disassembly_test.py
-          python3 insight/tests/native_debugger_names_test.py
-          python3 insight/tests/native_debugger_registers_test.py
+          python3 -m unittest discover -s insight/tests -p 'native_debugger*_test.py' -v
           python3 insight/tests/install_fonts_test.py
-          python3 insight/tests/native_debugger_assembly_pipeline_test.py
-          python3 insight/tests/native_debugger_remote_test.py
-          python3 insight/tests/native_debugger_profile_test.py
-          python3 insight/tests/native_debugger_profile_locations_test.py
-          python3 insight/tests/native_debugger_profile_catchpoints_test.py
-          python3 insight/tests/native_debugger_compile_test.py
           if meson setup _missing-internal -Dclang-bootstrap=false -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
             echo 'Default configuration silently used system Clang'
             exit 1
