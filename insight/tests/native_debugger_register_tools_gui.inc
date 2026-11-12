@@ -102,7 +102,7 @@ static gboolean register_tools_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(search)), ==, "r");
         gint sort_column = 0;
         gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(model), &sort_column, NULL);
-        g_assert_cmpint(sort_column, ==, GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID);
+        g_assert_cmpint(sort_column, ==, GTK_TREE_SORTABLE_DEFAULT_SORT_COLUMN_ID);
         gtk_entry_set_text(GTK_ENTRY(search), "");
         g_assert_true(has_local(window, "marker", "41"));
         g_print("C/C++ GTK: register search/change filter, sorted selection, clipboard fields and code address passed.\n");

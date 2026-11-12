@@ -86,8 +86,9 @@ static void native_register_definition_order(GtkWidget *button, gpointer data)
     if (session->closed || !session->assembly->register_view)
         return;
     GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(session->assembly->register_view));
+    gtk_tree_model_sort_reset_default_sort_func(GTK_TREE_MODEL_SORT(model));
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model),
-        GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, GTK_SORT_ASCENDING);
+        GTK_TREE_SORTABLE_DEFAULT_SORT_COLUMN_ID, GTK_SORT_ASCENDING);
 }
 
 /* EN: Copy the currently filtered/sorted register table in session data; item is unused and no target command is sent.
