@@ -63,7 +63,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
         native_debug_point_reply(session, line);
         if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
         {
-            native_assembly_running(session);
+            native_assembly_invalidate(session);
             session->running = TRUE;
             session->stopped = FALSE;
             native_values_reset(session);

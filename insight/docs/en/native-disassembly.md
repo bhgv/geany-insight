@@ -65,7 +65,13 @@ hover tooltips and memory addresses. Raw values and program bytes do not change.
 Names and cached register resolutions are cleared before the instruction snapshot
 is repainted on execution, starting with the first running event. The raw
 instructions and manual naming rules remain available; names are resolved again
-on the next read. Switching
+on the next read. Target exit and disconnect also discard all runtime address
+resolutions before repainting, so a subsequent paused attachment cannot reuse
+the previous process's aliases. Raw instruction snapshots and manual naming rules
+remain available. Execution, target exit and disconnect cancel queued instruction
+work. Replies to cancelled requests cannot restore old names, instructions or
+source navigation. A late-created GDB variable object remains tracked for later
+deletion. Switching
 threads/frames drops local resolutions while retaining global names in the same process. Cached register values and the current-instruction marker are cleared before repainting,
 including when GDB has no function name. Indirect operands are not annotated from
 the previous frame's registers; explicit global addresses keep their names. **Save names

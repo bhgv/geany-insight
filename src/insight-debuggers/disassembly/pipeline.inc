@@ -119,14 +119,29 @@ static gboolean native_assembly_next(NativeDebug *session)
     return TRUE;
 }
 
-/* EN: Consume session's pending assembly record, hiding optional metadata errors but displaying the final disassembly error.
- * RU: Обрабатывает ожидающий record session, скрывая ошибки необязательных метаданных и показывая ошибку дизассемблера. */
+/* EN: Consume session's pending record; cancelled replies cannot restore metadata, instructions or source navigation.
+ * Track a late-created variable object for later deletion. Return FALSE only for an unrelated reply.
+ * RU: Принимает ожидающий record session; отменённые ответы не восстанавливают метаданные, инструкции и переходы к исходнику.
+ * Учитывает поздно созданный объект переменной для удаления. Возвращает FALSE только для постороннего ответа. */
 static gboolean native_assembly_reply(NativeDebug *session, const gchar *record)
 {
     NativeAssembly *assembly = session->assembly;
     if (!assembly || !assembly->pending)
         return FALSE;
     NativeAssemblyWork *work = g_steal_pointer(&assembly->pending);
+    if (assembly->discard_pending)
+    {
+        assembly->discard_pending = FALSE;
+        if (work->action == 6 && g_str_has_prefix(record, "^done"))
+        {
+            gchar *object = native_debug_field(record, "name");
+            if (native_name_text(object, 512, FALSE))
+                g_ptr_array_add(assembly->objects, g_strdup(object));
+            g_free(object);
+        }
+        native_assembly_work_free(work);
+        return TRUE;
+    }
     if (work->action == 10)
     {
         g_free(assembly->record);

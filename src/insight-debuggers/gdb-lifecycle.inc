@@ -2,8 +2,10 @@
 /* EN: Run, stop and restart a native target with explicit arguments and working directory.
  * RU: Запускает, останавливает и перезапускает программу с аргументами и рабочим каталогом. */
 
-/* EN: Clear session's stopped-context values and source highlight after target exit.
- * RU: Удаляет значения контекста и подсветку session после завершения программы. */
+/* EN: Clear session's stopped-context values, runtime address names and highlights after exit or disconnect.
+ * Preserve raw instruction snapshots and manual naming rules for later inspection/reconnection.
+ * RU: Удаляет значения контекста, временные имена адресов и подсветку session после выхода или отключения.
+ * Сохраняет исходные снимки инструкций и ручные правила для просмотра и повторного подключения. */
 static void native_target_clear(NativeDebug *session)
 {
     if (session->remote)
@@ -15,8 +17,7 @@ static void native_target_clear(NativeDebug *session)
     if (session->assembly)
     {
         native_navigation_clear(session->assembly);
-        session->assembly->instruction_pc_valid = FALSE;
-        native_instruction_refresh(session);
+        native_assembly_invalidate(session);
     }
     if (session->assembly && session->assembly->previous_registers)
     {

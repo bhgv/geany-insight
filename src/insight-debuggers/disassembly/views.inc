@@ -82,13 +82,22 @@ static void native_assembly_context(NativeDebug *session)
     native_name_refresh_views(session);
 }
 
-/* EN: Invalidate session's execution-bound instruction annotations while preserving its raw snapshot and manual rules.
- * RU: Сбрасывает привязанные к остановке подписи инструкций session, сохраняя исходный снимок и ручные правила. */
-static void native_assembly_running(NativeDebug *session)
+/* EN: Cancel session's instruction queue and runtime resolutions, marking any in-flight reply for disposal.
+ * Preserve the raw snapshot, manual rules and tracked GDB objects awaiting later cleanup.
+ * RU: Отменяет очередь инструкций и временные разрешения session, помечая уже отправленный ответ для отбрасывания.
+ * Сохраняет исходный снимок, ручные правила и учтённые объекты GDB до последующей очистки. */
+static void native_assembly_invalidate(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
     if (!assembly)
         return;
+    assembly->discard_pending = assembly->pending != NULL;
+    NativeAssemblyWork *queued;
+    while ((queued = g_queue_pop_head(&assembly->work)))
+        native_assembly_work_free(queued);
+    g_clear_pointer(&assembly->request, g_free);
+    assembly->active = assembly->source_only = assembly->history_replaying = FALSE;
+    assembly->temporary_valid = FALSE;
     assembly->instruction_pc_valid = FALSE;
     g_ptr_array_set_size(assembly->ranges, 0);
     g_hash_table_remove_all(assembly->registers);

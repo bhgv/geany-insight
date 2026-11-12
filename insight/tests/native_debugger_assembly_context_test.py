@@ -115,9 +115,9 @@ int main(int argc, char **argv)
     gboolean running = !strcmp(argv[1], "running") || !strcmp(argv[1], "running-twice");
     if (running)
     {
-        native_assembly_running(&session);
+        native_assembly_invalidate(&session);
         if (!strcmp(argv[1], "running-twice"))
-            native_assembly_running(&session);
+            native_assembly_invalidate(&session);
         assert(refreshed == (!strcmp(argv[1], "running-twice") ? 2u : 1u));
         assert(!rows_cleared && !views_refreshed);
         assert(!assembly.ranges->len && !g_hash_table_size(assembly.registers));
@@ -166,7 +166,7 @@ class NativeAssemblyContext(unittest.TestCase):
             self.skipTest('Needs cc and GLib runtime.')
         code = model_source(SESSION) + FIXTURE
         code += function('src/insight-debuggers/disassembly/views.inc', 'native_assembly_context')
-        code += function('src/insight-debuggers/disassembly/views.inc', 'native_assembly_running') + MAIN
+        code += function('src/insight-debuggers/disassembly/views.inc', 'native_assembly_invalidate') + MAIN
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / 'context.c'
