@@ -319,6 +319,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/disassembly/annotations.inc"
 #include "insight-debuggers/disassembly/symbols.inc"
 #include "insight-debuggers/disassembly/register-filter-model.inc"
+#include "insight-debuggers/disassembly/register-export-model.inc"
 #include "insight-debuggers/disassembly/register-tools.inc"
 #include "insight-debuggers/disassembly/registers-ui.inc"
 #include "insight-debuggers/disassembly/navigation-model.inc"

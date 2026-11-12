@@ -57,6 +57,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/disassembly/annotations.inc"
 #include "insight-debuggers/disassembly/symbols.inc"
 #include "insight-debuggers/disassembly/register-filter-model.inc"
+#include "insight-debuggers/disassembly/register-export-model.inc"
 #include "insight-debuggers/disassembly/register-tools.inc"
 #include "insight-debuggers/disassembly/registers-ui.inc"
 #include "insight-debuggers/disassembly/navigation-model.inc"

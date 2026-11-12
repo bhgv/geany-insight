@@ -3400,3 +3400,8 @@ Copy register decimal value	Копировать десятичное значе
 Copy register row	Копировать строку регистра
 Copy register…	Копировать регистр…
 View register address as code	Открыть адрес регистра как код
+
+Register definition order	Порядок определения регистров
+Copy visible register table	Копировать видимую таблицу регистров
+Register table copied partially (128 rows / 128 KiB limit).	Таблица регистров скопирована частично (ограничение: 128 строк / 128 КиБ).
+Visible register table copied.	Видимая таблица регистров скопирована.

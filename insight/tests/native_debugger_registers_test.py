@@ -14,6 +14,7 @@ from native_debugger_models_test import function
 
 SESSION = '\ntypedef struct {NativeAssembly *assembly; char *selected_thread, *selected_frame;} NativeDebug;\n'
 EXTRA = r'''
+extern void g_string_append_printf(GString *, const char *, ...);
 extern char *g_utf8_casefold(const char *, long);
 typedef void GtkTreeModel;
 typedef struct {gint stamp; void *user_data, *user_data2, *user_data3;} GtkTreeIter;
@@ -25,6 +26,7 @@ extern int g_hash_table_iter_next(GHashTableIter *, void **, void **);
 extern void *gtk_list_store_new(int, ...);
 extern void gtk_list_store_clear(void *);
 extern void gtk_list_store_insert_with_values(void *, GtkTreeIter *, int, ...);
+extern int gtk_tree_model_iter_next(void *, GtkTreeIter *);
 extern int gtk_tree_model_get_iter_first(void *, GtkTreeIter *);
 extern void gtk_tree_model_get(void *, GtkTreeIter *, ...);
 extern int gtk_tree_model_iter_n_children(void *, GtkTreeIter *);
@@ -67,6 +69,12 @@ int main(void)
     assert(!native_register_matches("rax", "0x0042", "", FALSE, "", TRUE));
     assert(!native_register_matches("rax", "0x0042", "", TRUE, "pc", FALSE));
     assert(native_name_register("pc") && native_name_register("rip") && native_name_register("eip"));
+    assert(native_register_matches("rax", "0x0000000000000042", "", TRUE, "0X42", FALSE));
+    assert(!native_register_matches("rax", "0x0042", "", TRUE, "0x4", FALSE));
+    assert(!native_register_matches("rax", "0x0042", "", FALSE, "0x42", TRUE));
+    gchar *escaped = native_register_tsv_cell("Поле\t\n\r\\");
+    assert(!strcmp(escaped, "Поле\\t\\n\\r\\\\"));
+    g_free(escaped);
     NativeAssembly assembly = {0};
     assembly.ranges = g_ptr_array_new_with_free_func(native_name_range_free);
     assembly.register_names = g_ptr_array_new_with_free_func(g_free);
@@ -102,6 +110,29 @@ int main(void)
     fixture_register(&assembly, "rax", 0x4009);
     native_assembly_register_rows(&session);
     fixture_row(&assembly, "0x0000000000004009", "packet.count+0x1", FALSE);
+    gboolean limited = FALSE;
+    gchar *table = native_register_export(assembly.register_rows, &limited);
+    assert(!limited && g_str_has_prefix(table, "Register\tHex\t"));
+    assert(strstr(table, "rax\t0x0000000000004009\t16393\tpacket.count+0x1\t\n"));
+    g_free(table);
+    gtk_list_store_clear(assembly.register_rows);
+    for (guint i = 0; i < 129; i++)
+        gtk_list_store_insert_with_values(assembly.register_rows, NULL, -1, 0, "rax", -1);
+    table = native_register_export(assembly.register_rows, &limited);
+    assert(limited);
+    guint lines = 0;
+    for (const char *p = table; *p; p++)
+        lines += *p == '\n';
+    assert(lines == 129);
+    g_free(table);
+    gtk_list_store_clear(assembly.register_rows);
+    char large[131073];
+    memset(large, 'a', sizeof(large) - 1);
+    large[sizeof(large) - 1] = 0;
+    gtk_list_store_insert_with_values(assembly.register_rows, NULL, -1, 0, "rax", 3, large, -1);
+    table = native_register_export(assembly.register_rows, &limited);
+    assert(limited && strlen(table) < 1024 && !strstr(table, "rax"));
+    g_free(table);
     g_object_unref(assembly.register_rows);
     g_hash_table_unref(assembly.previous_registers);
     g_hash_table_unref(assembly.registers);
@@ -123,6 +154,7 @@ class NativeRegisters(unittest.TestCase):
             self.skipTest('Needs cc and GTK/GLib runtime libraries.')
         code = model_source(SESSION) + EXTRA
         code += Path('src/insight-debuggers/disassembly/register-filter-model.inc').read_text()
+        code += Path('src/insight-debuggers/disassembly/register-export-model.inc').read_text()
         code += function('src/insight-debuggers/disassembly/registers-ui.inc', 'native_assembly_register_rows') + MAIN
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

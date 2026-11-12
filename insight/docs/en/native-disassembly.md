@@ -204,3 +204,11 @@ by the target GDB).
 
 PC-relative operands are not resolved using the selected frame PC: they need
 the individual instruction address and bias. PC is also rejected as a frame-name base.
+
+A complete hex search such as `0x42` matches the numeric value, including
+`0x0000000000000042`. Other searches match text without case sensitivity.
+**Register definition order** restores target/GDB order and keeps both filters.
+**Copy visible register table** exports the filtered, sorted snapshot as UTF-8 TSV
+with column headers, without reading or running the target. Tabs, line breaks and
+backslashes inside cells are escaped. Export keeps whole rows, up to 128 rows
+and 128 KiB; a status message reports truncation.

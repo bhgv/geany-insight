@@ -77,6 +77,36 @@ static void native_register_tool(GtkWidget *button, gpointer data)
     g_free(name);
 }
 
+/* EN: Restore GDB definition order in session data without changing search/changed filters; button is unused.
+ * RU: Возвращает порядок определения GDB в session data без изменения фильтров; button не используется. */
+static void native_register_definition_order(GtkWidget *button, gpointer data)
+{
+    (void)button;
+    NativeDebug *session = data;
+    if (session->closed || !session->assembly->register_view)
+        return;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(session->assembly->register_view));
+    gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model),
+        GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, GTK_SORT_ASCENDING);
+}
+
+/* EN: Copy the currently filtered/sorted register table in session data; item is unused and no target command is sent.
+ * RU: Копирует текущую фильтрованную/сортированную таблицу регистров session data; item не используется, команд цели нет. */
+static void native_register_copy_table(GtkWidget *item, gpointer data)
+{
+    (void)item;
+    NativeDebug *session = data;
+    if (session->closed)
+        return;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(session->assembly->register_view));
+    gboolean limited = FALSE;
+    gchar *text = native_register_export(model, &limited);
+    gtk_clipboard_set_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), text, -1);
+    ui_set_statusbar(FALSE, "%s", insight_tr(limited ?
+        "Register table copied partially (128 rows / 128 KiB limit)." : "Visible register table copied."));
+    g_free(text);
+}
+
 /* EN: Add search controls to box for session before model construction; returned fields belong to GTK.
  * RU: Добавляет поиск в box для session до создания модели; поля принадлежат GTK. */
 static void native_register_search_widget(NativeDebug *session, GtkWidget *box)
@@ -91,7 +121,12 @@ static void native_register_search_widget(NativeDebug *session, GtkWidget *box)
     assembly->register_changed = gtk_check_button_new_with_label(insight_tr("Only changed registers"));
     gtk_widget_set_name(assembly->register_changed, "insight-gdb-register-changed");
     g_signal_connect(assembly->register_changed, "toggled", G_CALLBACK(native_register_filter_changed), session);
-    gtk_box_pack_start(GTK_BOX(box), assembly->register_changed, FALSE, FALSE, 0);
+    GtkWidget *options = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_box_pack_start(GTK_BOX(options), assembly->register_changed, FALSE, FALSE, 0);
+    GtkWidget *order = gtk_button_new_with_label(insight_tr("Register definition order"));
+    g_signal_connect(order, "clicked", G_CALLBACK(native_register_definition_order), session);
+    gtk_box_pack_start(GTK_BOX(options), order, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), options, FALSE, FALSE, 0);
 }
 
 /* EN: Append session's register copy/code actions to bar; only code inspection requires an idle paused target.
@@ -107,6 +142,9 @@ static void native_register_tools_widget(NativeDebug *session, GtkWidget *bar)
         g_signal_connect(item, "activate", G_CALLBACK(native_register_tool), session);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
     }
+    GtkWidget *table = gtk_menu_item_new_with_label(insight_tr("Copy visible register table"));
+    g_signal_connect(table, "activate", G_CALLBACK(native_register_copy_table), session);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), table);
     gtk_widget_show_all(menu);
     GtkWidget *copy = gtk_menu_button_new();
     gtk_button_set_label(GTK_BUTTON(copy), insight_tr("Copy register…"));

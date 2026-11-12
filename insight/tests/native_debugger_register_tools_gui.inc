@@ -41,6 +41,16 @@ static gboolean register_tools_gui_step(GtkWidget *window, GtkWidget *tabs)
         gchar *hex = NULL, *decimal = NULL;
         gtk_tree_model_get(selected, &row, 1, &hex, 2, &decimal, -1);
         expected_code = g_strdup_printf("0x%" G_GINT64_MODIFIER "x", g_ascii_strtoull(hex, NULL, 16));
+        gtk_entry_set_text(GTK_ENTRY(search), expected_code);
+        g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), >=, 1);
+        gtk_entry_set_text(GTK_ENTRY(search), "RiP");
+        g_assert_true(native_assembly_gui_select_register(window, "rip"));
+        g_assert_true(register_tools_copy(window, "Copy visible register table"));
+        gchar *table = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+        g_assert_true(g_str_has_prefix(table, "Register\tHex\t"));
+        g_assert_nonnull(strstr(table, "\nrip\t"));
+        g_assert_null(strstr(table, "\nrax\t"));
+        g_free(table);
         const gchar *labels[] = {"Copy register expression", "Copy register hex value", "Copy register decimal value", "Copy register row"};
         for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
         {
@@ -87,7 +97,13 @@ static gboolean register_tools_gui_step(GtkWidget *window, GtkWidget *tabs)
             previous = name;
         }
         g_free(previous);
-        gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model), GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, GTK_SORT_ASCENDING);
+        gtk_entry_set_text(GTK_ENTRY(search), "r");
+        g_assert_true(click(window, "Register definition order"));
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(search)), ==, "r");
+        gint sort_column = 0;
+        gtk_tree_sortable_get_sort_column_id(GTK_TREE_SORTABLE(model), &sort_column, NULL);
+        g_assert_cmpint(sort_column, ==, GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID);
+        gtk_entry_set_text(GTK_ENTRY(search), "");
         g_assert_true(has_local(window, "marker", "41"));
         g_print("C/C++ GTK: register search/change filter, sorted selection, clipboard fields and code address passed.\n");
         phase = 16;
