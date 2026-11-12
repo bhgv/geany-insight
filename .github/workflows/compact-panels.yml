@@ -55,6 +55,7 @@ jobs:
             valid=0
             if test "$mode" = saved; then valid=1; fi
             GEANY_TEST_VALID_PROJECT_SPLIT="$valid" \
+              INSIGHT_COMPACT_CAPTURE="$PWD/panel-diagnostics/$mode-final.jpg" \
               INSIGHT_PANEL_DIAGNOSTIC_CAPTURE="$PWD/panel-diagnostics/$mode.jpg" \
               xvfb-run -a -s '-screen 0 1600x1200x24' \
               _panel-build/tests/test_insight_panels_gui >"panel-diagnostics/$mode.log" 2>&1 || result=1

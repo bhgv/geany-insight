@@ -208,4 +208,4 @@ Drag the divider above the bottom shelf down to collapse it almost to a thin str
 
 **Navigate → Lock Context Window** mirrors the Context Follow button: locking disables tracking and cancels the pending definition update while retaining the displayed source. Unlocking resumes tracking. Locking Context does not cancel the shared refresh queue used by other panels.
 
-Collapsing the central column also clips the editor notebook at its native minimum. Even an empty profile can reduce both side dividers to narrow strips without invalid GTK tab allocations; expanding restores the editor normally.
+The central editor/Context column can be collapsed to a narrow strip even in a new empty profile. Drag the dividers back to restore the workspace and its tabs.

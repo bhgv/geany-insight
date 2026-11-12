@@ -79,8 +79,18 @@ step (gpointer data)
         gtk_widget_get_preferred_height (editor, &minimum_height, NULL);
         g_assert_cmpint (gtk_widget_get_allocated_width (editor), >=, minimum_width);
         g_assert_cmpint (gtk_widget_get_allocated_height (editor), >=, minimum_height);
+        /* EN: Nested panes share the 16px central column; the handle can reduce the legal maximum below 16.
+         * RU: Вложенные панели делят центральную колонку 16px; разделитель может уменьшить допустимый максимум. */
         for (guint i = 0; i < 3; i++)
-            g_assert_cmpint (abs (gtk_paned_get_position (GTK_PANED (panes[i])) - 16), <=, 2);
+        {
+            gint minimum, maximum;
+            g_object_get(panes[i], "min-position", &minimum, "max-position", &maximum, NULL);
+            gint expected = CLAMP(16, minimum, maximum);
+            gint actual = gtk_paned_get_position(GTK_PANED(panes[i]));
+            g_printerr("Collapsed pane %u position=%d bounds=%d..%d expected=%d\n", i, actual, minimum, maximum, expected);
+            g_assert_cmpint(abs(actual - expected), <=, 2);
+        }
+        g_assert_cmpint(gtk_widget_get_allocated_width(host), <=, 24);
         gtk_paned_set_position (GTK_PANED (panes[0]), 147);
         gtk_paned_set_position (GTK_PANED (panes[1]),
                                 MAX (0, gtk_widget_get_allocated_width (panes[1]) - 173));
