@@ -68,6 +68,62 @@ int main(int argc, char **argv)
     text = native_assembly_format_bytes("^done,asm_insns=[{address=\"0x10\",opcodes=\"bad!\",inst=\"ret\"}]");
     assert(text && strstr(text, "[??]  ret"));
     g_free(text);
+    /* EN: A final oversized tuple invalidates the whole snapshot, even after a valid instruction.
+     * RU: Слишком большой последний кортеж отменяет весь снимок, даже после корректной инструкции. */
+    char huge_instruction[8193];
+    memset(huge_instruction, 'x', sizeof huge_instruction - 1);
+    huge_instruction[sizeof huge_instruction - 1] = '\0';
+    const char *prefixes[] = {"", "{address=\"0x10\",inst=\"nop\"},"};
+    for (unsigned i = 0; i < sizeof prefixes / sizeof *prefixes; i++)
+    {
+        char *record = g_strdup_printf("^done,asm_insns=[%s{address=\"0x11\",inst=\"%s\"}]",
+            prefixes[i], huge_instruction);
+        assert(!native_assembly_format(record));
+        assert(!native_assembly_format_bytes(record));
+        g_free(record);
+    }
+    huge_instruction[8192 - strlen("{address=\"0x11\",inst=\"\"}")] = '\0';
+    char *boundary = g_strdup_printf("^done,asm_insns=[{address=\"0x11\",inst=\"%s\"}]", huge_instruction);
+    text = native_assembly_format(boundary);
+    assert(text && strstr(text, "0x11"));
+    g_free(text);
+    text = native_assembly_format_bytes(boundary);
+    assert(text && strstr(text, "[??]"));
+    g_free(text);
+    g_free(boundary);
+
+    /* EN: Keep valid row/size boundaries readable while rejecting a complete-looking over-limit snapshot.
+     * RU: Сохраняет допустимые границы строк/размера и отклоняет кажущийся полным снимок сверх лимита. */
+    for (unsigned rows = 256; rows <= 257; rows++)
+    {
+        GString *record = g_string_new("^done,asm_insns=[");
+        for (unsigned row = 0; row < rows; row++)
+            g_string_append_printf(record, "%s{address=\"0x%x\",inst=\"nop\"}", row ? "," : "", row);
+        g_string_append(record, "]");
+        text = native_assembly_format(record->str);
+        assert((text != NULL) == (rows == 256));
+        g_free(text);
+        text = native_assembly_format_bytes(record->str);
+        assert((text != NULL) == (rows == 256));
+        g_free(text);
+        g_string_free(record, TRUE);
+    }
+    huge_instruction[8000] = '\0';
+    for (unsigned rows = 8; rows <= 9; rows++)
+    {
+        GString *record = g_string_new("^done,asm_insns=[");
+        for (unsigned row = 0; row < rows; row++)
+            g_string_append_printf(record, "%s{address=\"0x%x\",inst=\"%s\"}",
+                row ? "," : "", row, huge_instruction);
+        g_string_append(record, "]");
+        text = native_assembly_format(record->str);
+        assert((text != NULL) == (rows == 8));
+        g_free(text);
+        text = native_assembly_format_bytes(record->str);
+        assert((text != NULL) == (rows == 8));
+        g_free(text);
+        g_string_free(record, TRUE);
+    }
     assert(!native_assembly_format("^error,msg=\"bad address\""));
     assert(!native_assembly_format("^done,asm_insns=[]"));
     assert(!native_assembly_format("^done,asm_insns=[{address=\"0x10\"}]"));

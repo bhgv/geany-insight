@@ -53,8 +53,8 @@ static gchar *native_assembly_bytes(const gchar *raw)
     return total ? g_strdup(raw) : NULL;
 }
 
-/* EN: Return owned instructions from record, optionally showing bytes, capped at 256 rows/64 KiB; NULL denotes malformed/error output.
- * RU: Возвращает инструкции record с необязательными bytes до 256 строк/64 КиБ; NULL означает повреждение или ошибку. */
+/* EN: Return owned instructions from record, optionally showing bytes, capped at 256 rows/64 KiB; NULL denotes malformed/error output, including an oversized final tuple.
+ * RU: Возвращает инструкции record с необязательными bytes до 256 строк/64 КиБ; NULL означает повреждение, ошибку или слишком большой последний кортеж. */
 static gchar *native_assembly_format_mode(const gchar *record, gboolean bytes)
 {
     const gchar *prefix = "^done,asm_insns=[";
@@ -67,7 +67,10 @@ static gchar *native_assembly_format_mode(const gchar *record, gboolean bytes)
     while ((end = native_next_tuple(&cursor, &start)))
     {
         if (++count > 256 || end - start > 8192)
+        {
+            complete = FALSE;
             break;
+        }
         gchar *tuple = g_strndup(start, end - start);
         gchar *address = native_debug_field(tuple, "address");
         gchar *instruction = native_debug_field(tuple, "inst");

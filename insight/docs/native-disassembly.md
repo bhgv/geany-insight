@@ -7,6 +7,11 @@ offsets and assembly. Near unreadable code boundaries, the window is reduced
 with at most seven retries instead of discarding a readable short function. This is a snapshot: refresh after stepping, changing frames
 or restarting. Invalid/unreadable addresses show GDB's error without resuming.
 
+Responses are accepted as complete snapshots: up to 256 instructions, 8192 bytes
+per MI tuple and 64 KiB of formatted text. A response beyond these limits is
+rejected as a whole, including an oversized final instruction. A partial list
+is not presented as a successful read and does not advance address history.
+
 **Step instruction** executes one machine instruction, entering calls.
 **Next instruction** steps over a call. Both act on GDB's selected thread and
 require a paused target; ordinary breakpoints still apply. These controls also
