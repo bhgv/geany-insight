@@ -138,6 +138,8 @@ int main(int argc, char **argv)
         record = "^error,msg=\"Cannot access memory\"";
     else if (!strcmp(argv[1], "incomplete"))
         record = "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"41\"}]";
+    else if (!strcmp(argv[1], "truncated"))
+        record = "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"414243\"}";
     else if (!strcmp(argv[1], "fragmented"))
         record = "^done,memory=[{begin=\"0x1002\",offset=\"0x2\",contents=\"43\"},"
             "{begin=\"0x1000\",offset=\"0x0\",contents=\"4142\"}]";
@@ -150,7 +152,7 @@ int main(int argc, char **argv)
         assert(!strcmp(displayed, "previous display") && !strcmp(raw, "previous raw"));
         assert(!strcmp(status, "previous status") && !strcmp(session.memory_address, "0x2000"));
     }
-    else if (!strcmp(argv[1], "error") || !strcmp(argv[1], "incomplete"))
+    else if (!strcmp(argv[1], "error") || !strcmp(argv[1], "incomplete") || !strcmp(argv[1], "truncated"))
     {
         assert(!*displayed && !raw && !session.memory_address);
         assert(strstr(status, !strcmp(argv[1], "error") ? "Cannot access memory" : "incomplete"));
@@ -239,6 +241,11 @@ class NativeMemoryRequests(unittest.TestCase):
     # RU: Проверяет запрет использования неполного снимка self как базы дальнейшей навигации.
     def test_incomplete_snapshot(self):
         self.exercise('incomplete')
+
+    # EN: Verify self's unterminated MI list clears complete-looking bytes and their navigation anchor.
+    # RU: Проверяет очистку кажущихся полными байтов self и адреса навигации при незакрытом списке MI.
+    def test_truncated_snapshot(self):
+        self.exercise('truncated')
 
 
 if __name__ == '__main__':

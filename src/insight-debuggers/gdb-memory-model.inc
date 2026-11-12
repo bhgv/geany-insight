@@ -13,8 +13,8 @@ static gboolean native_memory_address(const gchar *text, guint64 *value)
     return g_ascii_string_to_unsigned(text, 16, 0, G_MAXUINT64, value, NULL);
 }
 
-/* EN: Format record for count requested bytes; return allocated text or NULL for invalid/gapped blocks.
- * RU: Форматирует record для count запрошенных байтов; возвращает текст либо NULL при неверных блоках/пропусках. */
+/* EN: Format record for count requested bytes; return allocated text or NULL for invalid/gapped blocks or an unterminated list.
+ * RU: Форматирует record для count запрошенных байтов; возвращает текст либо NULL при неверных блоках, пропусках или незакрытом списке. */
 static gchar *native_memory_format(const gchar *record, guint count)
 {
     const gchar *body = strstr(record, "memory=[");
@@ -64,7 +64,7 @@ static gchar *native_memory_format(const gchar *record, guint count)
         if (!valid)
             return NULL;
     }
-    if (total != count || count - 1 > G_MAXUINT64 - base)
+    if (*cursor != ']' || total != count || count - 1 > G_MAXUINT64 - base)
         return NULL;
     GString *text = g_string_new(NULL);
     for (guint row = 0; row < count; row += 16)

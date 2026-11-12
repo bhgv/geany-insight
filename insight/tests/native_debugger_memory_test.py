@@ -62,6 +62,11 @@ int main(void)
     const char *invalid[] = {
         "^error,msg=\"Cannot access memory\"",
         "^done,memory=[]",
+        "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"4142\"}",
+        "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"4142\"},",
+        "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"4142\"},"
+            "{begin=\"0x1002\",offset=\"0x2\",contents=\"",
+
         "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"0\"}]",
         "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"gg\"}]",
         "^done,memory=[{begin=\"0x1000\",offset=\"0x0\",contents=\"00\"}]",

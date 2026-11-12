@@ -206,13 +206,14 @@ expression as an address. For a scalar, change it to `&variable` in Memory.
 count from the last successful address. They do not reevaluate pointer expressions.
 The navigation base is the first displayed address of the complete snapshot,
 even if GDB returns its memory fragments in a different order.
+A truncated reply cannot supply an address for subsequent block navigation.
 
 Snapshots clear on execution, target exit and thread/frame changes. Enable
 **Refresh memory at each stop** to reevaluate the current address expression
 in the selected frame at each new stop or frame change. Otherwise, read manually.
 Expression evaluation follows GDB semantics and can execute target code if you
-enter function calls. An inaccessible address or incomplete block clears the
-snapshot and shows an error; choose a smaller block or another address.
+enter function calls. An inaccessible address, incomplete block or truncated GDB reply clears
+the snapshot and shows an error; choose a smaller block or another address.
 
 ## Remote gdbserver over SSH
 
