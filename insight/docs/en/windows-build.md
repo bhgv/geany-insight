@@ -232,3 +232,16 @@ On Linux, `./build.sh` with no arguments builds with Meson and installs to
 an editor install. On Linux the simulator build needs Bash, curl, tar, make,
 autoconf, bison, flex, gperf, rsync and either sha256sum or shasum. Linux logs
 are saved under `_editor-build/logs`. `--plan` and `--help` do not write logs.
+
+## Font installation failures during an update
+
+The Meson installer compares bundled fonts by content and skips identical files,
+including files loaded by a running editor. Changed files are copied to a sibling
+temporary file and replaced atomically. A failed replacement preserves the old
+font and reports source/destination paths and the underlying OS error.
+Close all Geany Insight instances before updating changed fonts, then rerun the
+same build command. Check destination permissions and free space if it still
+fails. The bootstrap prints an **Install diagnostic** when it finds a Python
+installation exception in the build log. Keep the complete log named in the
+console: Meson's generic `Unhandled python OSError` alone does not identify the
+cause. Staged packaging through `DESTDIR` is supported.

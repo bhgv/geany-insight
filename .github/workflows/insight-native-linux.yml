@@ -142,6 +142,7 @@ on:
       - insight/desktop/folder_tree.*
       - insight/desktop/project_files.*
       - build.sh
+      - insight/tools/install_fonts.py
       - insight/tools/build_editor.py
       - insight/tools/prepare_clang_sdk.py
       - src/insight-debuggers/**
@@ -188,6 +189,7 @@ jobs:
           python3 insight/tests/native_debugger_disassembly_test.py
           python3 insight/tests/native_debugger_names_test.py
           python3 insight/tests/native_debugger_registers_test.py
+          python3 insight/tests/install_fonts_test.py
           python3 insight/tests/native_debugger_assembly_pipeline_test.py
           python3 insight/tests/native_debugger_remote_test.py
           python3 insight/tests/native_debugger_profile_test.py

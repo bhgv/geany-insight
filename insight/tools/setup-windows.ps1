@@ -432,6 +432,11 @@ exit "${statuses[1]}"
                     Select-Object -First 1
                 if ($firstFailure) { Write-Host "[First failed command] $($firstFailure.Line.Trim())" }
                 if ($firstError) { Write-Host "[First build error] $($firstError.Line.Trim())" }
+                # EN: Include the underlying install exception, not just Meson's generic OSError summary.
+                # RU: Показываем исходное исключение установки, а не только общее сообщение OSError от Meson.
+                $installError = Select-String -LiteralPath $buildLog -Pattern '(?:PermissionError:|FileNotFoundError:|OSError:|\[WinError \d+\]|\[Errno \d+\]|Font installation failed:)' |
+                    Select-Object -First 1
+                if ($installError) { Write-Host "[Install diagnostic] $($installError.Line.Trim())" }
             }
             throw "Build failed. Build log: $buildLog. $($_.Exception.Message)"
         }

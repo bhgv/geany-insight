@@ -226,3 +226,16 @@ On Linux, `./build.sh` with no arguments builds with Meson and installs to
 an editor install. On Linux the simulator build needs Bash, curl, tar, make,
 autoconf, bison, flex, gperf, rsync and either sha256sum or shasum. Linux logs
 are saved under `_editor-build/logs`. `--plan` and `--help` do not write logs.
+
+## Ошибка установки шрифтов при обновлении
+
+Установщик Meson сравнивает шрифты по содержимому и пропускает одинаковые файлы,
+в том числе загруженные работающим редактором. Изменённые файлы копируются во
+временный файл рядом с назначением и заменяются атомарно. При ошибке замены
+прежний шрифт сохраняется; сообщение содержит пути и исходную ошибку ОС.
+Перед обновлением изменённых шрифтов закройте все экземпляры Geany Insight и
+повторите ту же команду сборки. Если ошибка остаётся, проверьте права назначения
+и свободное место. Сборщик выводит **Install diagnostic**, если находит исходное
+исключение Python в журнале. Сохраните полный журнал по пути из консоли:
+одного сообщения Meson `Unhandled python OSError` недостаточно для определения
+причины. Поддерживается промежуточная установка через `DESTDIR`.
