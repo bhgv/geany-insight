@@ -169,6 +169,11 @@ file and line; navigating leaves the execution stop unchanged. Missing debug
 information or unavailable local files produce a status message. For SSH,
 configure GDB source directories or source-path mapping before navigating.
 
+When a relative source name needs resolution, the fallback accepts only a complete
+GDB file catalog of at most 4096 entries and 4 MiB. Exactly 4096 entries are
+supported. Truncated catalogs, conflicting full paths and basename-only matches
+do not select a file.
+
 [Back to debugger guide](native-debugger.md)
 
 ## Address history and explicit selection
