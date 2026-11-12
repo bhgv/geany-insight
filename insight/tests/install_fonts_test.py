@@ -5,8 +5,12 @@
 import contextlib
 import importlib.util
 import io
+import os
 from pathlib import Path
 import tempfile
+import shutil
+import subprocess
+import sys
 import unittest
 from unittest.mock import patch
 
@@ -39,6 +43,46 @@ class FontInstall(unittest.TestCase):
             self.assertFalse(list(destination.rglob('.insight-font-*')))
             FONTS.install(source, destination)
             self.assertEqual(target.read_bytes(), b'font-two')
+
+    # EN: Run the production Meson declaration out of tree, twice and with DESTDIR, to catch relative script paths and needless writes.
+    # RU: Выполняет настоящее объявление Meson вне дерева исходников, повторно и с DESTDIR, проверяя путь скрипта и лишнюю перезапись.
+    def test_meson_out_of_tree(self):
+        binary = shutil.which('meson')
+        script = os.environ.get('INSIGHT_TEST_MESON_SCRIPT')
+        if not binary and not script:
+            self.skipTest('Needs Meson executable or INSIGHT_TEST_MESON_SCRIPT.')
+        command = [binary] if binary else [sys.executable, script]
+        production = Path('meson.build').read_text()
+        start = production.index('meson.add_install_script(python, ')
+        declaration = production[start:production.index('\n\n', start)]
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            source = root / 'source'
+            tools = source / 'insight' / 'tools'
+            tools.mkdir(parents=True)
+            shutil.copyfile('insight/tools/install_fonts.py', tools / 'install_fonts.py')
+            fonts = source / 'fonts' / 'NotoSans'
+            fonts.mkdir(parents=True)
+            (fonts / 'font.ttf').write_bytes(b'font-fixture')
+            (source / 'meson.build').write_text(
+                "project('font-install-test')\n"
+                "python = import('python').find_installation('python3')\n"
+                "cdata = configuration_data()\n"
+                "cdata.set('GEANY_DATA_DIR', get_option('prefix') / 'data')\n" + declaration + '\n')
+            prefix = root / 'installed'
+            build = root / 'build'
+            subprocess.run(command + ['setup', '--backend=none', str(build), str(source),
+                                     '--prefix=' + str(prefix)], check=True, capture_output=True)
+            install = command + ['install', '-C', str(build), '--no-rebuild']
+            subprocess.run(install, check=True, capture_output=True)
+            target = prefix / 'data' / 'fonts' / 'NotoSans' / 'font.ttf'
+            stamp = target.stat().st_mtime_ns
+            subprocess.run(install, check=True, capture_output=True)
+            self.assertEqual(target.stat().st_mtime_ns, stamp)
+            stage = root / 'stage'
+            subprocess.run(install, check=True, capture_output=True,
+                           env=dict(os.environ, DESTDIR=str(stage)))
+            self.assertEqual((stage / target.relative_to(target.anchor)).read_bytes(), b'font-fixture')
 
     # EN: Keep staging inside its root and reject relative installation paths before writing files.
     # RU: Сохраняет установку внутри промежуточного корня и отклоняет относительные пути до записи файлов.

@@ -1223,7 +1223,7 @@ install_subdir('insight/docs/ru', install_dir: cdata.get('GEANY_DATA_DIR') / 'in
 install_subdir('styles', install_dir: cdata.get('GEANY_DATA_DIR'))
 # EN: Skip identical fonts: loaded Windows fonts may reject an otherwise needless overwrite.
 # RU: Пропускаем одинаковые шрифты: Windows может блокировать ненужную перезапись загруженного файла.
-meson.add_install_script(python, 'insight/tools/install_fonts.py',
+meson.add_install_script(python, meson.project_source_root() / 'insight/tools/install_fonts.py',
   '--source', meson.project_source_root() / 'fonts',
   '--destination', cdata.get('GEANY_DATA_DIR') / 'fonts')
 
