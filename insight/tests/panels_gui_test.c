@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Exercise production panel controls, compact allocations and persisted editor shelf geometry.
+ * RU: Проверяет настоящие панели, компактное размещение и сохранение геометрии полок редактора. */
 #include "geany.h"
 #include "document.h"
 #include "editor.h"
@@ -52,6 +54,7 @@ static gboolean collapsed(gpointer data) {
 static void width_diagnostics(GtkWidget *widget,gint depth) {
  gint minimum,natural;gtk_widget_get_preferred_width(widget,&minimum,&natural);if(minimum>160 || depth<3) g_printerr("WIDTH depth=%d %s type=%s minimum=%d natural=%d allocated=%d\n",depth,gtk_widget_get_name(widget),G_OBJECT_TYPE_NAME(widget),minimum,natural,gtk_widget_get_allocated_width(widget));if(GTK_IS_CONTAINER(widget)) { GList *children=gtk_container_get_children(GTK_CONTAINER(widget));for(GList *p=children;p;p=p->next) width_diagnostics(p->data,depth+1);g_list_free(children); }
 }
+#include "panels_geometry_diagnostics.inc"
 static gboolean finish(gpointer data) {
  (void)data;
  GtkWidget *left=ui_lookup_widget(window,"notebook3"),*horizontal=ui_lookup_widget(window,"hpaned1"),*vertical=ui_lookup_widget(window,"vpaned1"),*editors=ui_lookup_widget(window,"notebook1");
@@ -119,4 +122,53 @@ g_assert_null(named(context,"insight-diff-tool"));
   g_assert_true(((guint)scintilla_send_message(doc->editor->sci,SCI_MARKERGET,0,0)&(1u<<SC_MARKNUM_HISTORY_SAVED))!=0);
 g_object_unref(base);saved_split=gtk_paned_get_position(GTK_PANED(split));g_print("Panels GUI passed: offscreen startup split recovery, valid saved split preservation, native C tags, shared type colors/icons, grouped local/project trees, safe header activation, 603-row asynchronous regroup, flat restoration, 180px project resize, icon-only main Diff and panel-specific offline help/tutorial\n");gtk_combo_box_set_active(GTK_COMBO_BOX(named(window,"insight-file-symbol-mode")),1);gtk_paned_set_position(GTK_PANED(ui_lookup_widget(window,"hpaned1")),180);gtk_window_present(GTK_WINDOW(window));gdk_window_invalidate_rect(gtk_widget_get_window(window),NULL,TRUE);g_timeout_add(250,finish,NULL);return G_SOURCE_REMOVE; }return G_SOURCE_CONTINUE;
 }
-int main(void) { if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;valid_split=!g_strcmp0(g_getenv("GEANY_TEST_VALID_PROJECT_SPLIT"),"1");gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("panels-gui-%u",g_random_int());directory=g_build_filename(cwd,name,NULL);profile=g_build_filename(directory,"profile",NULL);source=g_build_filename(directory,"sample.c",NULL);g_free(cwd);g_free(name);g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);g_assert_true(g_file_set_contents(source,"int sample_function(void) { return 1; }\nint sample_variable;\nstruct SampleStruct { int member; };\n#define SAMPLE_MACRO 1\n",-1,NULL));gchar *config=g_build_filename(profile,"geany.conf",NULL);g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));g_free(config);gchar *settings_dir=g_build_filename(profile,"insight",NULL),*settings_file=g_build_filename(settings_dir,"workbench.conf",NULL);g_assert_cmpint(g_mkdir_with_parents(settings_dir,0700),==,0);gchar *seed=g_strdup_printf("[workbench]\nversion=1\noverview-visible=true\nright-split=%d\nproject-visible=true\n",valid_split ? 500 : 5000);g_assert_true(g_file_set_contents(settings_file,seed,-1,NULL));g_free(seed);g_free(settings_dir);g_free(settings_file);gchar *argv[]={"panels-gui","--new-instance","--no-session","--config",profile,NULL};g_timeout_add(200,step,NULL);g_timeout_add_seconds(30,timeout,NULL);g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);g_log_set_writer_func(gtk_failure,NULL,NULL);gint result=main_lib(5,argv);gchar *settings=g_build_filename(profile,"insight","workbench.conf",NULL);GKeyFile *key=g_key_file_new();g_assert_true(g_key_file_load_from_file(key,settings,G_KEY_FILE_NONE,NULL));g_assert_cmpint(g_key_file_get_integer(key,"workbench","overview-visibility-policy",NULL),==,1);g_assert_false(g_key_file_get_boolean(key,"workbench","overview-visible",NULL));g_assert_true(g_key_file_get_boolean(key,"workbench","file-symbols-grouped",NULL));g_assert_true(g_key_file_get_boolean(key,"workbench","project-symbols-grouped",NULL));g_assert_cmpint(g_key_file_get_integer(key,"workbench","right-split",NULL),==,saved_split);g_key_file_unref(key);g_free(settings);g_free(source);g_free(profile);g_free(directory);return result; }
+/* EN: Run the real editor against an isolated profile and verify persisted panel settings.
+ * RU: Запускает редактор с отдельным профилем и проверяет сохранённые настройки панелей. */
+int main(void)
+{
+    if(!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY")) return 77;
+    valid_split=!g_strcmp0(g_getenv("GEANY_TEST_VALID_PROJECT_SPLIT"),"1");
+    gchar *cwd=g_get_current_dir(),*name=g_strdup_printf("panels-gui-%u",g_random_int());
+    directory=g_build_filename(cwd,name,NULL);
+    profile=g_build_filename(directory,"profile",NULL);
+    source=g_build_filename(directory,"sample.c",NULL);
+    g_free(cwd);
+    g_free(name);
+    g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);
+    g_assert_true(g_file_set_contents(source,"int sample_function(void) { return 1;
+     }\nint sample_variable;
+    \nstruct SampleStruct { int member;
+     };
+    \n#define SAMPLE_MACRO 1\n",-1,NULL));
+    gchar *config=g_build_filename(profile,"geany.conf",NULL);
+    g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
+    g_free(config);
+    gchar *settings_dir=g_build_filename(profile,"insight",NULL),*settings_file=g_build_filename(settings_dir,"workbench.conf",NULL);
+    g_assert_cmpint(g_mkdir_with_parents(settings_dir,0700),==,0);
+    gchar *seed=g_strdup_printf("[workbench]\nversion=1\noverview-visible=true\nright-split=%d\nproject-visible=true\n",valid_split ? 500 : 5000);
+    g_assert_true(g_file_set_contents(settings_file,seed,-1,NULL));
+    g_free(seed);
+    g_free(settings_dir);
+    g_free(settings_file);
+    gchar *argv[]={"panels-gui","--new-instance","--no-session","--config",profile,NULL};
+    g_timeout_add(200,step,NULL);
+    g_timeout_add(100,panel_geometry_diagnostics,NULL);
+    g_timeout_add_seconds(30,timeout,NULL);
+    g_log_set_always_fatal(G_LOG_FATAL_MASK|G_LOG_LEVEL_CRITICAL);
+    g_log_set_writer_func(gtk_failure,NULL,NULL);
+    gint result=main_lib(5,argv);
+    gchar *settings=g_build_filename(profile,"insight","workbench.conf",NULL);
+    GKeyFile *key=g_key_file_new();
+    g_assert_true(g_key_file_load_from_file(key,settings,G_KEY_FILE_NONE,NULL));
+    g_assert_cmpint(g_key_file_get_integer(key,"workbench","overview-visibility-policy",NULL),==,1);
+    g_assert_false(g_key_file_get_boolean(key,"workbench","overview-visible",NULL));
+    g_assert_true(g_key_file_get_boolean(key,"workbench","file-symbols-grouped",NULL));
+    g_assert_true(g_key_file_get_boolean(key,"workbench","project-symbols-grouped",NULL));
+    g_assert_cmpint(g_key_file_get_integer(key,"workbench","right-split",NULL),==,saved_split);
+    g_key_file_unref(key);
+    g_free(settings);
+    g_free(source);
+    g_free(profile);
+    g_free(directory);
+    return result;
+}

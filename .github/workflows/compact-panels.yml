@@ -1,0 +1,75 @@
+# EN: Validate compact panel geometry quickly with the real Linux editor and no optional compiler SDKs.
+# RU: Быстро проверяет геометрию компактных панелей настоящего редактора Linux без необязательных SDK компиляторов.
+name: Compact panel geometry
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/compact-panels.yml'
+      - 'src/insight-workbench/panels/**'
+      - 'src/insight-workbench/search/search-and-toolbar.inc'
+      - 'src/insight-side-tabs.*'
+      - 'insight/tests/panels_gui_test.c'
+      - 'insight/tests/panels_geometry_diagnostics.inc'
+      - 'insight/tests/panel_geometry_gui_test.c'
+      - 'insight/tests/side_tabs_gui_test.c'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compact-panel-geometry-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  geometry:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      LANG: C.UTF-8
+      GEANY_RUN_GUI_TESTS: '1'
+      GSETTINGS_BACKEND: memory
+      NO_AT_BRIDGE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends build-essential libgtk-3-dev \
+            meson ninja-build gettext python3-docutils xvfb xauth
+      - name: Build and install the minimal native editor
+        run: |
+          meson setup _panel-build --prefix "$PWD/_panel-install" \
+            -Dclang=disabled -Dhtml-docs=disabled -Dpdf-docs=disabled \
+            -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+          meson compile -C _panel-build -j 4
+          meson install -C _panel-build --no-rebuild
+      - name: Check actual panel allocations and restart geometry
+        run: |
+          mkdir -p panel-diagnostics
+          export GEANY_INSIGHT_PREFIX="$PWD/_panel-install"
+          result=0
+          for mode in recovery saved; do
+            valid=0
+            if test "$mode" = saved; then valid=1; fi
+            GEANY_TEST_VALID_PROJECT_SPLIT="$valid" \
+              INSIGHT_PANEL_DIAGNOSTIC_CAPTURE="$PWD/panel-diagnostics/$mode.jpg" \
+              xvfb-run -a -s '-screen 0 1600x1200x24' \
+              _panel-build/tests/test_insight_panels_gui >"panel-diagnostics/$mode.log" 2>&1 || result=1
+          done
+          for probe in panel_geometry side_tabs; do
+            xvfb-run -a -s '-screen 0 1600x1200x24' \
+              "_panel-build/tests/test_insight_${probe}_gui" >"panel-diagnostics/$probe.log" 2>&1 || result=1
+          done
+          cat panel-diagnostics/*.log
+          exit "$result"
+      - name: Preserve real application diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compact-panel-geometry
+          path: |
+            panel-diagnostics/
+            _panel-build/meson-logs/
