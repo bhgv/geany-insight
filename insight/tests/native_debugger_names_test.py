@@ -4,6 +4,7 @@
 # RU: Проверяет единые имена, области кадра и настоящие раскладки типов GDB на инструкциях разных архитектур.
 import ctypes.util
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -339,7 +340,7 @@ class NativeNames(unittest.TestCase):
         subprocess.run(['cc', '-g', '-O0', str(source), '-o', str(target)], check=True)
         commands = ('-gdb-set disassembly-flavor intel\n'
                     '-data-disassemble -s main -e main+8 -- 0\n'
-                    '-data-disassemble -s main -e main+1 -- 1\n'
+                    '-data-disassemble -s main -e main+1 -- 5\n'
                     '-break-insert *main\n'
                     '-var-create typed * "*(struct Packet*)&object"\n'
                     '-var-list-children --no-values typed 0 64\n'
@@ -354,6 +355,17 @@ class NativeNames(unittest.TestCase):
         mixed = next(line for line in records if line.startswith('^done,asm_insns=[src_and_asm_line='))
         mapped = subprocess.check_output([str(helper), 'source', mixed], text=True)
         self.assertIn(str(source), mapped)
+        addresses = re.findall(r'address="([^"]+)"', assembly)
+        self.assertGreaterEqual(len(addresses), 2)
+        interior = int(addresses[1], 16)
+        command = f'-data-disassemble -s "0x{interior:x}" -e "0x{interior + 1:x}" -- 5\n-gdb-exit\n'
+        result = subprocess.run([gdb, '-q', '-nx', '--interpreter=mi2', str(target)],
+                                input=command, text=True, capture_output=True, check=True)
+        mixed = next(line for line in result.stdout.splitlines()
+                     if line.startswith('^done,asm_insns=[src_and_asm_line='))
+        mapped = subprocess.check_output([str(helper), 'source', mixed], text=True)
+        self.assertIn(str(source), mapped)
+        self.assertEqual(int(re.findall(r'address="([^"]+)"', mixed)[0], 16), interior)
         point = next(line for line in records if line.startswith('^done,bkpt='))
         subprocess.run([str(helper), 'point', point], check=True)
         fields = next(line for line in records if 'children=[' in line and line.startswith('^done'))

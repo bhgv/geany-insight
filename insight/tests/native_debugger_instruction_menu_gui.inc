@@ -74,8 +74,8 @@ static gboolean instruction_menu_name(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Advance window through phases 84..91 of real menu edits and double-click deletion, then restore the legacy value tests in tabs.
- * RU: Продвигает window по фазам 84..91 настоящих меню и удаления двойным щелчком, затем возвращает проверки значений в tabs. */
+/* EN: Advance window through phases 84..92 of real menu edits and double-click deletion, then restore the legacy value tests in tabs.
+ * RU: Продвигает window по фазам 84..92 настоящих меню и удаления двойным щелчком, затем возвращает проверки значений в tabs. */
 static gboolean instruction_menu_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     GtkWidget *view = find(window, "insight-gdb-instructions");

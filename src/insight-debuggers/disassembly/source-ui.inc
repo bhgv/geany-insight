@@ -46,8 +46,8 @@ static void native_instruction_source_reply(NativeDebug *session, NativeAssembly
     g_free(file);
 }
 
-/* EN: Queue an exact mixed-source lookup for item's captured address in session data; only an idle paused session may query GDB.
- * RU: Ставит точный запрос исходника сохранённого адреса item в session data; GDB запрашивается только на свободной паузе. */
+/* EN: Queue an address-ordered mixed-source lookup for item's captured address in session data; only an idle paused session may query GDB.
+ * RU: Ставит запрос исходника в порядке адресов сохранённого адреса item в session data; GDB запрашивается только на свободной паузе. */
 static void native_instruction_source(GtkWidget *item, gpointer data)
 {
     NativeDebug *session = data;
@@ -57,7 +57,7 @@ static void native_instruction_source(GtkWidget *item, gpointer data)
     guint64 number = 0;
     if (!native_assembly_number(address, &number) || number == G_MAXUINT64)
         return;
-    gchar *command = g_strdup_printf("-data-disassemble -s \"%s\" -e \"(%s)+1\" -- 1", address, address);
+    gchar *command = g_strdup_printf("-data-disassemble -s \"%s\" -e \"(%s)+1\" -- 5", address, address);
     session->assembly->source_only = TRUE;
     session->assembly->active = TRUE;
     native_assembly_queue(session->assembly, command, 16, address, NULL, NULL, NULL, 0, FALSE);
