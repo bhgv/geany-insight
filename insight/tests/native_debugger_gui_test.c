@@ -238,6 +238,7 @@ static gboolean timeout(gpointer data)
 #include "native_debugger_instruction_menu_gui.inc"
 #include "native_debugger_navigation_gui.inc"
 #include "native_debugger_opcode_gui.inc"
+#include "native_debugger_register_tools_gui.inc"
 #include "native_debugger_remote_gui.inc"
 
 /* EN: Advance the debugger GUI scenario; data is unused. Stop after all checks pass.
@@ -271,6 +272,8 @@ static gboolean drive(gpointer data)
         return native_remote_gui_step(window, tabs);
     if (phase == 1 && !native_catch_gui_step(window))
         return G_SOURCE_CONTINUE;
+    if (phase >= 101 && phase <= 102)
+        return register_tools_gui_step(window, tabs);
     if (phase == 100)
         return opcode_gui_step(window, tabs);
     if (phase >= 93 && phase <= 99)

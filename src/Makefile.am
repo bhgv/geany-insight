@@ -354,6 +354,8 @@ libgeany_la_SOURCES += \
 	insight-debuggers/disassembly/pipeline.inc \
 	insight-debuggers/disassembly/resolve.inc \
 	insight-debuggers/disassembly/registers-ui.inc \
+	insight-debuggers/disassembly/register-filter-model.inc \
+	insight-debuggers/disassembly/register-tools.inc \
 	insight-debuggers/disassembly/rules.inc \
 	insight-debuggers/disassembly/state.inc \
 	insight-debuggers/disassembly/symbols.inc \

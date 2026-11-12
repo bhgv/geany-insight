@@ -32,8 +32,8 @@ static void native_name_refresh_views(NativeDebug *session)
     }
 }
 
-/* EN: Drop function-local resolutions when session changes thread/frame; global names remain usable in this process.
- * RU: Сбрасывает локальные разрешения при смене потока/кадра session; глобальные имена остаются действующими в процессе. */
+/* EN: Drop function-local resolutions and stale register rows when session changes thread/frame; global names remain usable.
+ * RU: Сбрасывает локальные разрешения и старые строки регистров при смене потока/кадра session; глобальные имена сохраняются. */
 static void native_assembly_context(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
@@ -50,6 +50,8 @@ static void native_assembly_context(NativeDebug *session)
         else
             i++;
     }
+    if (assembly->register_rows)
+        gtk_list_store_clear(assembly->register_rows);
     assembly->instruction_pc_valid = FALSE;
     native_instruction_refresh(session);
     assembly->follow_needed = TRUE;

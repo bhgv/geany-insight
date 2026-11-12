@@ -185,3 +185,19 @@ It captures the row when the menu opens, so moving the cursor afterward does
 not change what is copied. A copied line includes the address, names, visible
 bytes and annotations, but no stop markers. Byte copying is disabled when
 valid bytes are absent.
+
+## Register search and actions
+
+Search matches the register name, hex address and resolved label without case,
+including Unicode. **Only changed registers** compares with the previous read
+in the same thread/frame; the first snapshot has no changes yet. Search and
+column sorting work together. Clear search to show the rows again. Changing
+thread/frame clears old rows until the next instruction read.
+
+Select a row and use **Copy register…** for its `$name` expression, hex value,
+unsigned decimal value or entire labelled row. Copying uses the cached snapshot.
+**View register address as code** reads the current register expression in the
+selected frame through GDB and adds the view to code history. It does not run
+the program or change a register. Non-address values can produce GDB read errors.
+The table also includes program-counter registers (`pc`, `rip`, `eip` when supplied
+by the target GDB).

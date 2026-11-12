@@ -26,6 +26,8 @@ typedef struct
 {
     GtkWidget *expression, *status, *text, *rules_view, *page, *follow;
     GtkListStore *rule_rows, *register_rows;
+    GtkWidget *register_search, *register_changed;
+    gpointer register_filter;
     GtkWidget *register_view, *history_back, *history_forward;
     GPtrArray *history;
     guint history_position, history_requested;

@@ -71,8 +71,8 @@ static void native_assembly_register_action(GtkButton *button, gpointer data)
     g_free(name);
 }
 
-/* EN: Create session's bounded register snapshot table and paused-only watch/memory buttons.
- * RU: Создаёт ограниченную таблицу регистров session и доступные на паузе кнопки наблюдения/памяти. */
+/* EN: Create session's bounded, searchable/sortable register snapshot with watch, memory, copy and code actions.
+ * RU: Создаёт ограниченный снимок регистров session с поиском/сортировкой и действиями наблюдения, памяти, копирования и кода. */
 static GtkWidget *native_assembly_register_widget(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
@@ -81,9 +81,16 @@ static GtkWidget *native_assembly_register_widget(NativeDebug *session)
     GtkWidget *hint = gtk_label_new(insight_tr("Registers from the last instruction read. Changed values are highlighted within the same thread/frame. Click Register to sort by name."));
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_box_pack_start(GTK_BOX(box), hint, FALSE, FALSE, 0);
+    native_register_search_widget(session, box);
     assembly->register_rows = gtk_list_store_new(6, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
-    GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(assembly->register_rows));
+    GtkTreeModel *filter = gtk_tree_model_filter_new(GTK_TREE_MODEL(assembly->register_rows), NULL);
+    assembly->register_filter = filter;
+    gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(filter), native_register_visible, session, NULL);
+    GtkTreeModel *sorted = gtk_tree_model_sort_new_with_model(filter);
+    GtkWidget *view = gtk_tree_view_new_with_model(sorted);
+    g_object_unref(sorted);
+    g_object_unref(filter);
     assembly->register_view = view;
     gtk_widget_set_name(view, "insight-gdb-registers");
     g_object_unref(assembly->register_rows);
@@ -113,6 +120,7 @@ static GtkWidget *native_assembly_register_widget(NativeDebug *session)
         g_ptr_array_add(session->paused_controls, button);
         gtk_flow_box_insert(GTK_FLOW_BOX(bar), button, -1);
     }
+    native_register_tools_widget(session, bar);
     gtk_box_pack_start(GTK_BOX(box), bar, FALSE, FALSE, 0);
     return box;
 }

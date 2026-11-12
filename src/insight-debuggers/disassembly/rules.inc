@@ -51,13 +51,13 @@ static gboolean native_name_offset(const gchar *text, gint64 *offset)
     return TRUE;
 }
 
-/* EN: Accept general-purpose base-register spellings for x86/x64, ARM/ARM64 and RISC-V; exclude vector/status registers.
- * RU: Принимает имена регистров общего назначения x86/x64, ARM/ARM64 и RISC-V, исключая векторные регистры и флаги. */
+/* EN: Accept integer/address registers, including PC, for x86/x64, ARM/ARM64 and RISC-V; exclude vector/status registers.
+ * RU: Принимает целочисленные/адресные регистры, включая PC, x86/x64, ARM/ARM64 и RISC-V; исключает векторы и флаги. */
 static gboolean native_name_register(const gchar *name)
 {
     if (!name)
         return FALSE;
-    const gchar *fixed[] = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
+    const gchar *fixed[] = {"pc", "rip", "eip", "ip", "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
         "eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp", "fp", "sp", "lr", "ra", "gp", "tp", "zero"};
     for (guint i = 0; i < G_N_ELEMENTS(fixed); i++)
         if (!strcmp(name, fixed[i]))

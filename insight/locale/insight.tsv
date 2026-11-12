@@ -3391,3 +3391,12 @@ Select one hexadecimal address to open as code.	Выделите один шес
 Show instruction bytes	Показывать байты инструкций
 Copy instruction bytes	Копировать байты инструкции
 Copy instruction line	Копировать строку инструкции
+
+Find register, address or resolved name	Найти регистр, адрес или подпись
+Only changed registers	Только изменившиеся регистры
+Copy register expression	Копировать выражение регистра
+Copy register hex value	Копировать hex-значение регистра
+Copy register decimal value	Копировать десятичное значение регистра
+Copy register row	Копировать строку регистра
+Copy register…	Копировать регистр…
+View register address as code	Открыть адрес регистра как код

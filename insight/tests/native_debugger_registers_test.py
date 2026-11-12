@@ -14,6 +14,7 @@ from native_debugger_models_test import function
 
 SESSION = '\ntypedef struct {NativeAssembly *assembly; char *selected_thread, *selected_frame;} NativeDebug;\n'
 EXTRA = r'''
+extern char *g_utf8_casefold(const char *, long);
 typedef void GtkTreeModel;
 typedef struct {gint stamp; void *user_data, *user_data2, *user_data3;} GtkTreeIter;
 typedef struct {void *dummy1, *dummy2, *dummy3; int dummy4, dummy5; void *dummy6;} GHashTableIter;
@@ -59,6 +60,13 @@ static void fixture_row(NativeAssembly *assembly, const char *expected, const ch
  * RU: Проверяет настоящие строки GTK, имена полей, регистры x86/ARM/RISC-V и границы сравнения потоков/кадров. */
 int main(void)
 {
+    assert(native_register_matches("RAX", "0x0042", "packet.Count", TRUE, "rax", FALSE));
+    assert(native_register_matches("rax", "0x0042", "packet.Count", TRUE, "count", TRUE));
+    assert(native_register_matches("rax", "0x0042", "Счётчик", TRUE, "СЧЁТ", FALSE));
+    assert(native_register_matches("rax", "0x0042", "", TRUE, "0042", FALSE));
+    assert(!native_register_matches("rax", "0x0042", "", FALSE, "", TRUE));
+    assert(!native_register_matches("rax", "0x0042", "", TRUE, "pc", FALSE));
+    assert(native_name_register("pc") && native_name_register("rip") && native_name_register("eip"));
     NativeAssembly assembly = {0};
     assembly.ranges = g_ptr_array_new_with_free_func(native_name_range_free);
     assembly.register_names = g_ptr_array_new_with_free_func(g_free);
@@ -114,6 +122,7 @@ class NativeRegisters(unittest.TestCase):
         if not all(libraries) or not shutil.which('cc'):
             self.skipTest('Needs cc and GTK/GLib runtime libraries.')
         code = model_source(SESSION) + EXTRA
+        code += Path('src/insight-debuggers/disassembly/register-filter-model.inc').read_text()
         code += function('src/insight-debuggers/disassembly/registers-ui.inc', 'native_assembly_register_rows') + MAIN
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

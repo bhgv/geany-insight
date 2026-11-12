@@ -47,6 +47,6 @@ static gboolean opcode_gui_step(GtkWidget *window, GtkWidget *tabs)
     g_free(line);
     g_free(bytes);
     g_free(text);
-    phase = 16;
+    phase = 101;
     return G_SOURCE_CONTINUE;
 }
