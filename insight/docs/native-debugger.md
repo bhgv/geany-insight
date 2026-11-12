@@ -156,6 +156,8 @@ The tree shows member names, types and values. Expand a structure, class,
 array or pointer to request its children from GDB. C++ members use GDB's
 resolved expression paths, including access groups and base classes where
 supported by GDB. Installed GDB pretty-printers are enabled when available.
+Nested pretty-printed containers can be expanded even when GDB has not yet
+counted their members. Expanding an empty container removes its placeholder.
 
 Large arrays load 128 children at a time. Activate **Load next 128 members…**
 for another page. A tree is limited to 4096 entries and depth 64; inspect a

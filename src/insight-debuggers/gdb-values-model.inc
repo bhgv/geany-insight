@@ -56,8 +56,10 @@ static gchar *native_values_next(NativeDebug *session, gboolean cleanup)
     return command;
 }
 
-/* EN: Append one GDB tuple below parent in session, labelling the root with expression when supplied.
- * RU: Добавляет кортеж GDB tuple под parent в session; expression задаёт подпись корня, если передано. */
+/* EN: Append GDB tuple below parent in session; expression optionally labels the root.
+ * Keep unknown dynamic children expandable until GDB confirms emptiness; missing names are ignored.
+ * RU: Добавляет кортеж GDB tuple под parent в session; expression при наличии задаёт подпись корня.
+ * Неизвестные динамические члены можно раскрывать до подтверждения пустоты GDB; записи без имени пропускаются. */
 static void native_value_row(NativeDebug *session, GtkTreeIter *parent, const gchar *tuple,
                              const gchar *expression)
 {
@@ -74,8 +76,10 @@ static void native_value_row(NativeDebug *session, GtkTreeIter *parent, const gc
     if (count)
         g_ascii_string_to_unsigned(count, 10, 0, G_MAXUINT, &children, NULL);
     gchar *more = native_debug_field(tuple, "has_more");
-    if (!children && !g_strcmp0(more, "1"))
+    gchar *dynamic = native_debug_field(tuple, "dynamic");
+    if (!children && (!g_strcmp0(more, "1") || (!more && !g_strcmp0(dynamic, "1"))))
         children = 1;
+    g_free(dynamic);
     g_free(more);
     gchar *safe_label = g_utf8_make_valid(label ? label : name, -1);
     gchar *safe_type = g_utf8_make_valid(type ? type : "", -1);
