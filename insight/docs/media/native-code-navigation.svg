@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="820" height="270" viewBox="0 0 820 270" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="350" viewBox="0 0 820 350" role="img" aria-labelledby="title desc">
 <title id="title">Code history / История кода</title>
 <desc id="desc">Confirmed address history with back, forward and return to PC. История подтверждённых адресов с возвратом и переходом к PC.</desc>
-<rect width="820" height="270" rx="12" fill="#edf3f9"/>
+<rect width="820" height="350" rx="12" fill="#edf3f9"/>
 <g font-family="sans-serif" fill="#17334d">
 <text x="24" y="34" font-size="20">Read code without running / Чтение кода без исполнения</text>
 <rect x="24" y="62" width="218" height="76" rx="8" fill="#fff" stroke="#6685a3"/>
@@ -19,5 +19,8 @@
 <text x="24" y="178" font-size="16">Back / Назад · Forward / Вперёд · Return to PC / Вернуться к PC</text>
 <text x="24" y="211" font-size="15">64 confirmed addresses / 64 подтверждённых адреса · errors keep position / ошибка сохраняет позицию</text>
 <text x="24" y="244" font-size="15">Exit clears history / Завершение очищает историю · no execution / без исполнения программы</text>
+<rect x="24" y="270" width="772" height="58" rx="8" fill="#fff" stroke="#6685a3"/>
+<text x="42" y="294" font-size="16">0x4010   [48 89 e5]   mov rbp,rsp</text>
+<text x="42" y="317" font-size="14">Cached bytes / Байты снимка → show / показать · copy bytes or line / копировать байты или строку</text>
 </g>
 </svg>

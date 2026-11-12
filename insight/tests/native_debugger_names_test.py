@@ -225,6 +225,7 @@ int main(int argc, char **argv)
     assert(!assembly.work.length);
     GKeyFile *profile = g_key_file_new();
     assembly.follow_enabled = TRUE;
+    assembly.show_bytes = TRUE;
     native_name_profile_store(&session, profile);
     GError *error = NULL;
     assert(native_name_profile_validate(profile, &error));
@@ -233,6 +234,11 @@ int main(int argc, char **argv)
     assert(!native_name_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_set_boolean(profile, "assembly-names", "follow", TRUE);
+    assert(g_key_file_get_boolean(profile, "assembly-names", "bytes", NULL));
+    g_key_file_set_string(profile, "assembly-names", "bytes", "broken");
+    assert(!native_name_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_boolean(profile, "assembly-names", "bytes", TRUE);
     NativeNameRule *loaded = native_name_rule_read(profile, 0);
     assert(loaded && !strcmp(loaded->name, "argument"));
     native_name_rule_free(loaded);

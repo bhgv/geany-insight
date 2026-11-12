@@ -13,7 +13,7 @@ static gchar *native_assembly_window(const gchar *expression, guint span)
     gchar *end = g_strdup_printf("(%s)+%u", expression, span);
     gchar *escaped = g_strescape(expression, NULL);
     gchar *escaped_end = g_strescape(end, NULL);
-    gchar *command = g_strdup_printf("-data-disassemble -s \"%s\" -e \"%s\" -- 0", escaped, escaped_end);
+    gchar *command = g_strdup_printf("-data-disassemble -s \"%s\" -e \"%s\" -- 2", escaped, escaped_end);
     g_free(escaped_end);
     g_free(escaped);
     g_free(end);
@@ -27,9 +27,35 @@ static gchar *native_assembly_command(const gchar *expression)
     return native_assembly_window(expression, 128);
 }
 
-/* EN: Return owned readable instructions from record, capped at 256 rows/64 KiB; NULL denotes malformed/error output.
- * RU: Возвращает читаемые инструкции из record до 256 строк/64 КиБ; NULL означает повреждение или ошибку. */
-static gchar *native_assembly_format(const gchar *record)
+/* EN: Return an owned, bounded GDB opcode string raw when all hex groups contain whole bytes; NULL means absent/invalid bytes.
+ * RU: Возвращает ограниченную строку кодов raw GDB, если группы содержат целые байты; NULL означает отсутствие или неверные байты. */
+static gchar *native_assembly_bytes(const gchar *raw)
+{
+    if (!raw || !*raw || strlen(raw) > 512)
+        return NULL;
+    guint digits = 0, total = 0;
+    for (const gchar *p = raw; ; p++)
+    {
+        if (!*p || *p == ' ' || *p == '\t')
+        {
+            if (digits % 2)
+                return NULL;
+            total += digits;
+            digits = 0;
+            if (!*p)
+                break;
+        }
+        else if (strchr("0123456789abcdefABCDEF", *p))
+            digits++;
+        else
+            return NULL;
+    }
+    return total ? g_strdup(raw) : NULL;
+}
+
+/* EN: Return owned instructions from record, optionally showing bytes, capped at 256 rows/64 KiB; NULL denotes malformed/error output.
+ * RU: Возвращает инструкции record с необязательными bytes до 256 строк/64 КиБ; NULL означает повреждение или ошибку. */
+static gchar *native_assembly_format_mode(const gchar *record, gboolean bytes)
 {
     const gchar *prefix = "^done,asm_insns=[";
     if (!g_str_has_prefix(record, prefix))
@@ -53,7 +79,16 @@ static gchar *native_assembly_format(const gchar *record)
         {
             gchar *label = g_strdup_printf("%s + %s", function ? function : "?", offset ? offset : "0");
             gchar *safe = g_strescape(label, NULL);
-            g_string_append_printf(text, "%s  <%s>  %s\n", address, safe, instruction);
+            if (bytes)
+            {
+                gchar *raw = native_debug_field(tuple, "opcodes");
+                gchar *opcodes = native_assembly_bytes(raw);
+                g_string_append_printf(text, "%s  <%s>  [%s]  %s\n", address, safe, opcodes ? opcodes : "??", instruction);
+                g_free(opcodes);
+                g_free(raw);
+            }
+            else
+                g_string_append_printf(text, "%s  <%s>  %s\n", address, safe, instruction);
             g_free(safe);
             g_free(label);
         }
@@ -74,4 +109,18 @@ static gchar *native_assembly_format(const gchar *record)
         return NULL;
     }
     return g_string_free(text, FALSE);
+}
+
+/* EN: Return normal instruction text for record without bytes; caller owns the result or NULL on invalid output.
+ * RU: Возвращает обычный текст инструкций record без байтов; результат принадлежит вызывающему, при ошибке NULL. */
+static gchar *native_assembly_format(const gchar *record)
+{
+    return native_assembly_format_mode(record, FALSE);
+}
+
+/* EN: Return record text with validated GDB byte groups; unavailable bytes are marked ?? and never invented.
+ * RU: Возвращает текст record с проверенными группами байтов GDB; отсутствующие байты отмечаются ??, без вымышленных значений. */
+static gchar *native_assembly_format_bytes(const gchar *record)
+{
+    return native_assembly_format_mode(record, TRUE);
 }

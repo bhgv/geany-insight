@@ -66,6 +66,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/disassembly/instruction-ui.inc"
 #include "insight-debuggers/disassembly/source-model.inc"
 #include "insight-debuggers/disassembly/source-ui.inc"
+#include "insight-debuggers/disassembly/opcode-ui.inc"
 #include "insight-debuggers/disassembly/instruction-menu.inc"
 #include "insight-debuggers/disassembly/navigation-ui.inc"
 #include "insight-debuggers/gdb-disassembly-ui.inc"

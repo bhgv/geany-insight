@@ -171,3 +171,17 @@ available only while paused and idle, and never resume the inferior.
 ![Code navigation / Навигация по коду](../media/native-code-navigation.svg)
 
 In the instruction text, **Alt+Left** and **Alt+Right** navigate back and forward.
+
+## Machine bytes
+
+**Show instruction bytes** adds a `[bytes]` column before the assembly text.
+Bytes come from GDB and retain its grouping/order; the debugger does not
+reorder them for another architecture. `??` means valid bytes are unavailable.
+The toggle repaints the cached snapshot without querying the inferior.
+Save the debugger profile to retain the setting.
+
+The row menu offers **Copy instruction bytes** and **Copy instruction line**.
+It captures the row when the menu opens, so moving the cursor afterward does
+not change what is copied. A copied line includes the address, names, visible
+bytes and annotations, but no stop markers. Byte copying is disabled when
+valid bytes are absent.

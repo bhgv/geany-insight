@@ -257,7 +257,7 @@ static gchar *native_name_line_addresses(NativeDebug *session, const gchar *text
  * RU: Дополняет проверенный record разрешёнными именами assembly, сохраняя исходные инструкции и числовые адреса. */
 static gchar *native_assembly_render(NativeDebug *session, const gchar *record)
 {
-    gchar *raw = native_assembly_format(record);
+    gchar *raw = session->assembly->show_bytes ? native_assembly_format_bytes(record) : native_assembly_format(record);
     if (!raw)
         return NULL;
     gchar **lines = g_strsplit(raw, "\n", 258);

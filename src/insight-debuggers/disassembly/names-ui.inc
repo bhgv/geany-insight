@@ -25,6 +25,7 @@ static void native_name_profile_store(NativeDebug *session, GKeyFile *profile)
     NativeAssembly *assembly = session->assembly;
     g_key_file_set_integer(profile, "assembly-names", "count", assembly->rules->len);
     g_key_file_set_boolean(profile, "assembly-names", "follow", assembly->follow_enabled);
+    g_key_file_set_boolean(profile, "assembly-names", "bytes", assembly->show_bytes);
     for (guint i = 0; i < assembly->rules->len; i++)
     {
         NativeNameRule *rule = assembly->rules->pdata[i];
@@ -51,6 +52,11 @@ static void native_name_profile_load(NativeDebug *session, GKeyFile *profile)
     for (gint i = 0; i < count; i++)
         g_ptr_array_add(assembly->rules, native_name_rule_read(profile, (guint)i));
     native_name_rows(session);
+    if (g_key_file_has_key(profile, "assembly-names", "bytes", NULL))
+    {
+        assembly->show_bytes = g_key_file_get_boolean(profile, "assembly-names", "bytes", NULL);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(assembly->bytes_toggle), assembly->show_bytes);
+    }
     if (g_key_file_has_key(profile, "assembly-names", "follow", NULL))
     {
         assembly->follow_enabled = g_key_file_get_boolean(profile, "assembly-names", "follow", NULL);

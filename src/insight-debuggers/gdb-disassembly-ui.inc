@@ -86,6 +86,10 @@ static GtkWidget *native_assembly_widget(NativeDebug *session)
     g_signal_connect(assembly->follow, "toggled", G_CALLBACK(native_assembly_follow_changed), session);
     g_signal_connect(session->tabs, "switch-page", G_CALLBACK(native_assembly_follow_page), session);
     gtk_box_pack_start(GTK_BOX(page), assembly->follow, FALSE, FALSE, 0);
+    assembly->bytes_toggle = gtk_check_button_new_with_label(insight_tr("Show instruction bytes"));
+    gtk_widget_set_name(assembly->bytes_toggle, "insight-gdb-show-bytes");
+    g_signal_connect(assembly->bytes_toggle, "toggled", G_CALLBACK(native_opcode_toggled), session);
+    gtk_box_pack_start(GTK_BOX(page), assembly->bytes_toggle, FALSE, FALSE, 0);
     assembly->status = gtk_label_new(insight_tr("Pause the program, then read instructions. This is a snapshot, not a live view."));
     gtk_widget_set_name(assembly->status, "insight-gdb-instruction-status");
     gtk_label_set_line_wrap(GTK_LABEL(assembly->status), TRUE);

@@ -103,6 +103,26 @@ static void native_instruction_popup(GtkTextView *view, GtkWidget *menu, gpointe
     g_object_set_data_full(G_OBJECT(name), "name-anchor", g_strdup(address), g_free);
     native_instruction_menu_item(menu, "Copy instruction address", address,
         G_CALLBACK(native_instruction_copy), session, TRUE);
+    gchar *bytes = native_opcode_at(session->assembly, address);
+    GtkWidget *copy_bytes = native_instruction_menu_item(menu, "Copy instruction bytes", address,
+        G_CALLBACK(native_opcode_copy), session, bytes != NULL);
+    g_object_set_data_full(G_OBJECT(copy_bytes), "instruction-copy-text", bytes, g_free);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->assembly->text));
+    GtkTextIter start, end;
+    gtk_text_buffer_get_iter_at_mark(buffer, &start, gtk_text_buffer_get_insert(buffer));
+    gtk_text_iter_set_line_offset(&start, 0);
+    end = start;
+    gtk_text_iter_forward_to_line_end(&end);
+    gchar *line = gtk_text_buffer_get_text(buffer, &start, &end, FALSE);
+    const gchar *plain = line;
+    if (g_str_has_prefix(plain, "● ") || g_str_has_prefix(plain, "○ "))
+        plain += strlen("● ");
+    if (g_str_has_prefix(plain, "▶ "))
+        plain += strlen("▶ ");
+    GtkWidget *copy_line = native_instruction_menu_item(menu, "Copy instruction line", address,
+        G_CALLBACK(native_opcode_copy), session, TRUE);
+    g_object_set_data_full(G_OBJECT(copy_line), "instruction-copy-text", g_strdup(plain), g_free);
+    g_free(line);
     g_free(address);
 }
 

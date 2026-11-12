@@ -90,7 +90,7 @@ static gboolean navigation_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_print("C/C++ GTK: confirmed code Back/Forward, selected address, invalid selection and return-to-PC passed.\n");
         g_clear_pointer(&previous, g_free);
         g_clear_pointer(&main_address, g_free);
-        phase = 16;
+        phase = 100;
     }
     g_free(address);
     return G_SOURCE_CONTINUE;

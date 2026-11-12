@@ -3387,3 +3387,7 @@ Code history forward	Вперёд по истории кода
 Return to program counter	Вернуться к счётчику команд
 Open selected address as code	Открыть выделенный адрес как код
 Select one hexadecimal address to open as code.	Выделите один шестнадцатеричный адрес для просмотра кода.
+
+Show instruction bytes	Показывать байты инструкций
+Copy instruction bytes	Копировать байты инструкции
+Copy instruction line	Копировать строку инструкции

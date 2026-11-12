@@ -29,7 +29,8 @@ typedef struct
     GtkWidget *register_view, *history_back, *history_forward;
     GPtrArray *history;
     guint history_position, history_requested;
-    gboolean history_replaying;
+    gboolean history_replaying, show_bytes;
+    GtkWidget *bytes_toggle;
     GPtrArray *rules, *ranges;
     GQueue work;
     NativeAssemblyWork *pending;
