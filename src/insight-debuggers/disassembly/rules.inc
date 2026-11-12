@@ -51,13 +51,22 @@ static gboolean native_name_offset(const gchar *text, gint64 *offset)
     return TRUE;
 }
 
+/* EN: Return whether name is an explicit program-counter register; these values must not be used as frame bases.
+ * RU: Проверяет, является ли name явным регистром счётчика команд; такие значения нельзя использовать как базы кадра. */
+static gboolean native_name_pc_register(const gchar *name)
+{
+    return !g_strcmp0(name, "pc") || !g_strcmp0(name, "rip") || !g_strcmp0(name, "eip");
+}
+
 /* EN: Accept integer/address registers, including PC, for x86/x64, ARM/ARM64 and RISC-V; exclude vector/status registers.
  * RU: Принимает целочисленные/адресные регистры, включая PC, x86/x64, ARM/ARM64 и RISC-V; исключает векторы и флаги. */
 static gboolean native_name_register(const gchar *name)
 {
     if (!name)
         return FALSE;
-    const gchar *fixed[] = {"pc", "rip", "eip", "ip", "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
+    if (native_name_pc_register(name))
+        return TRUE;
+    const gchar *fixed[] = {"rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp",
         "eax", "ebx", "ecx", "edx", "esi", "edi", "ebp", "esp", "fp", "sp", "lr", "ra", "gp", "tp", "zero"};
     for (guint i = 0; i < G_N_ELEMENTS(fixed); i++)
         if (!strcmp(name, fixed[i]))
@@ -80,7 +89,7 @@ static gboolean native_name_rule_valid(const NativeNameRule *rule)
         native_name_text(rule->name, 128, FALSE) && native_name_text(rule->type, 256, rule->kind != 2) &&
         native_name_text(rule->scope, 512, rule->kind != 1) &&
         (rule->kind != 1 || (native_name_offset(rule->anchor, &offset) &&
-         (!*rule->type || native_name_register(rule->type))));
+         (!*rule->type || (native_name_register(rule->type) && !native_name_pc_register(rule->type)))));
 }
 
 /* EN: Decode rule index from file into owned storage; return NULL when any required field is invalid.

@@ -201,3 +201,6 @@ selected frame through GDB and adds the view to code history. It does not run
 the program or change a register. Non-address values can produce GDB read errors.
 The table also includes program-counter registers (`pc`, `rip`, `eip` when supplied
 by the target GDB).
+
+PC-relative operands are not resolved using the selected frame PC: they need
+the individual instruction address and bias. PC is also rejected as a frame-name base.

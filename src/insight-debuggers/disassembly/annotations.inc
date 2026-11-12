@@ -54,11 +54,13 @@ static gboolean native_name_displace(guint64 base, gint64 offset, guint64 *addre
     return TRUE;
 }
 
-/* EN: Annotate one frame memory reference reg+offset with actual symbol/field names and function-scoped manual rules.
- * RU: Подписывает ссылку reg+offset настоящими именами/полями и ручными правилами текущей функции. */
+/* EN: Annotate reg+offset in assembly/function using notes; skip PC bases whose instruction-specific bias is unknown.
+ * RU: Подписывает reg+offset в assembly/function через notes; пропускает PC-базы с неизвестной поправкой конкретной инструкции. */
 static void native_name_frame(NativeAssembly *assembly, const gchar *function,
     const gchar *reg, gint64 offset, GPtrArray *notes)
 {
+    if (native_name_pc_register(reg))
+        return;
     guint64 *base = g_hash_table_lookup(assembly->registers, reg), address = 0;
     if (base && native_name_displace(*base, offset, &address))
     {

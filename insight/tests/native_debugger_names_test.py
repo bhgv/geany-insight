@@ -72,6 +72,22 @@ int main(int argc, char **argv)
     fixture_range(&assembly, 0xff0, 8, "arg: input", "worker");
     fixture_range(&assembly, 0x4000, 32, "packet", "");
     fixture_range(&assembly, 0x4008, 4, "packet.count", "");
+    const char *pc_names[] = {"pc", "rip", "eip"};
+    for (guint i = 0; i < G_N_ELEMENTS(pc_names); i++)
+    {
+        guint64 *value = g_new(guint64, 1);
+        *value = 0x4000;
+        g_hash_table_insert(assembly.registers, g_strdup(pc_names[i]), value);
+    }
+    const char *pc_operands[] = {"mov eax,[rip+8]", "mov eax,[eip+8]", "ldr r0,[pc,#8]"};
+    for (guint i = 0; i < G_N_ELEMENTS(pc_operands); i++)
+    {
+        char *notes = native_name_instruction(&assembly, pc_operands[i], "worker");
+        assert(!strstr(notes, "packet.count"));
+        g_free(notes);
+    }
+    NativeNameRule pc_rule = {.kind = 1, .anchor = "-0x10", .name = "bad_pc_frame", .type = "pc", .scope = "worker"};
+    assert(!native_name_rule_valid(&pc_rule));
     const char *instructions[] = {"mov rax,QWORD PTR [rbp-0x10]", "mov eax,DWORD PTR [ebp-16]",
         "ldr x0, [x29, #-16]", "ldr r0, [r11, #-16]", "ldr r1, [r7, #-16]",
         "lw a0,-16(s0)", "ld a0,-16(s0)", "ldr x0, [sp, #-16]"};
