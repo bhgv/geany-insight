@@ -137,7 +137,7 @@ static gboolean native_assembly_reply(NativeDebug *session, const gchar *record)
         else
             native_assembly_symbols(assembly, record);
     }
-    else if (work->action == 16)
+    else if (work->action == 16 || work->action == 17)
         native_instruction_source_reply(session, work, record);
     else if (work->action == 12)
         native_assembly_symbol_reply(assembly, work, record);

@@ -170,9 +170,11 @@ static gboolean instruction_menu_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_assert_true(instruction_menu_choose(window, "Open source for instruction", FALSE));
         phase = 92;
     }
-    else if (phase == 92 && !g_strcmp0(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-instruction-status"))),
-        "Instruction source opened. The execution stop has not changed."))
+    else if (phase == 92)
     {
+        const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-instruction-status")));
+        g_print("C/C++ GTK source status: %s\n", status);
+        g_assert_cmpstr(status, ==, "Instruction source opened. The execution stop has not changed.");
         GeanyDocument *document = document_get_current();
         g_assert_true(DOC_VALID(document));
         guint line = sci_get_line_from_position(document->editor->sci, sci_get_current_position(document->editor->sci)) + 1;

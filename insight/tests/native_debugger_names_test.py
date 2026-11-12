@@ -251,6 +251,11 @@ int main(int argc, char **argv)
     assert(!native_instruction_source_location("^done,asm_insns=[{address=\"0x4010\"}]", "0x4010", &source_line));
     assert(!native_instruction_source_location("^error,msg=\"no source\"", "0x4010", &source_line));
     assert(!native_instruction_source_location("^done,asm_insns=[{line=\"0\",fullname=\"/tmp/a.c\",line_asm_insn=[{address=\"0x4010\"}]}]", "0x4010", &source_line));
+    source = native_instruction_source_fullname("^done,files=[{file=\"src/a.c\",fullname=\"/project/src/a.c\"}]", "src/a.c");
+    assert(source && !strcmp(source, "/project/src/a.c"));
+    g_free(source);
+    assert(!native_instruction_source_fullname("^done,files=[{file=\"other/a.c\",fullname=\"/project/other/a.c\"}]", "src/a.c"));
+    assert(!native_instruction_source_fullname("^done,files=[{file=\"a.c\",fullname=\"/one/a.c\"},{file=\"a.c\",fullname=\"/two/a.c\"}]", "a.c"));
     if (argc == 3 && !strcmp(argv[1], "source"))
     {
         gchar *first = native_debug_field(argv[2], "address");

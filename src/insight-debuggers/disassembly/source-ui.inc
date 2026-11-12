@@ -7,7 +7,27 @@
 static void native_instruction_source_reply(NativeDebug *session, NativeAssemblyWork *work, const gchar *record)
 {
     guint line = 0;
-    gchar *file = native_instruction_source_location(record, work->expression, &line);
+    gchar *file = NULL;
+    if (work->action == 17)
+    {
+        guint64 number = 0;
+        if (work->label && g_ascii_string_to_unsigned(work->label, 10, 1, G_MAXINT, &number, NULL))
+        {
+            line = (guint)number;
+            file = native_instruction_source_fullname(record, work->expression);
+        }
+    }
+    else
+        file = native_instruction_source_location(record, work->expression, &line);
+    if (file && !g_path_is_absolute(file) && work->action != 17)
+    {
+        gchar *row = g_strdup_printf("%u", line);
+        native_assembly_queue(session->assembly, g_strdup("-file-list-exec-source-files"),
+            17, file, row, NULL, NULL, 0, FALSE);
+        g_free(row);
+        g_free(file);
+        return;
+    }
     gchar *native = file ? utils_get_locale_from_utf8(file) : NULL;
     if (native && g_path_is_absolute(native) && g_file_test(native, G_FILE_TEST_IS_REGULAR))
     {

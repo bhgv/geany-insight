@@ -55,3 +55,41 @@ static gchar *native_instruction_source_location(const gchar *record, const gcha
     }
     return NULL;
 }
+
+/* EN: Resolve file exactly through GDB's record source list; return one owned, unambiguous fullname or NULL, never match basename alone.
+ * RU: Разрешает точное file через список исходников record GDB; возвращает единственный полный путь либо NULL, без поиска только по basename. */
+static gchar *native_instruction_source_fullname(const gchar *record, const gchar *file)
+{
+    if (!record || !file || strlen(record) > 4194304 || !g_str_has_prefix(record, "^done"))
+        return NULL;
+    const gchar *cursor = strstr(record, "files=["), *start, *end;
+    if (!cursor)
+        return NULL;
+    cursor += strlen("files=[");
+    gchar *result = NULL;
+    guint count = 0;
+    while (count++ < 4096 && (end = native_next_tuple(&cursor, &start)))
+    {
+        gchar *tuple = g_strndup(start, end - start);
+        gchar *name = native_debug_field(tuple, "file");
+        gchar *full = native_debug_field(tuple, "fullname");
+        gboolean matches = !g_strcmp0(name, file) && native_name_text(full, 4096, FALSE);
+        gboolean conflict = matches && result && g_strcmp0(result, full);
+        if (matches && !result)
+            result = g_strdup(full);
+        g_free(full);
+        g_free(name);
+        g_free(tuple);
+        if (conflict)
+        {
+            g_free(result);
+            return NULL;
+        }
+    }
+    if (count > 4096)
+    {
+        g_free(result);
+        result = NULL;
+    }
+    return result;
+}
