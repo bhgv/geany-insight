@@ -149,3 +149,4 @@ static void native_instruction_refresh(NativeDebug *session);
 static void native_instruction_point(NativeDebug *session, const gchar *tuple, const gchar *parent);
 
 static void native_instruction_points_reset(NativeDebug *session);
+static void native_instruction_source_reply(NativeDebug *session, NativeAssemblyWork *work, const gchar *record);

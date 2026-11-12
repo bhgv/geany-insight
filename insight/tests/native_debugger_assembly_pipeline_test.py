@@ -18,6 +18,15 @@ SESSION = r'''
 typedef struct {NativeAssembly *assembly; gboolean stopped; void *window; char *selected_thread, *selected_frame;} NativeDebug;
 '''
 STUBS = r'''
+/* EN: Source navigation is checked by its own model and real GUI test; ignore session/work/record in this transport fixture.
+ * RU: Переход к исходнику проверяется моделью и настоящим GUI; session/work/record здесь не используются. */
+static void native_instruction_source_reply(NativeDebug *session, NativeAssemblyWork *work, const char *record)
+{
+    (void)session;
+    (void)work;
+    (void)record;
+}
+
 extern int g_queue_is_empty(GQueue *);
 #define g_clear_pointer(p,f) do {if (*(p)) f(*(p)); *(p)=NULL;} while (0)
 /* EN: Clear work queue using destroy, matching the production compatibility helper.

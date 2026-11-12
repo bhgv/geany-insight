@@ -167,6 +167,24 @@ static gboolean instruction_menu_gui_step(GtkWidget *window, GtkWidget *tabs)
         "The selected frame is already at this instruction."))
     {
         g_print("C/C++ GTK: captured-address popup, hardware point, enable/condition/ignore, double-click and name passed.\n");
+        g_assert_true(instruction_menu_choose(window, "Open source for instruction", FALSE));
+        phase = 92;
+    }
+    else if (phase == 92 && !g_strcmp0(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-instruction-status"))),
+        "Instruction source opened. The execution stop has not changed."))
+    {
+        GeanyDocument *document = document_get_current();
+        g_assert_true(DOC_VALID(document));
+        guint line = sci_get_line_from_position(document->editor->sci, sci_get_current_position(document->editor->sci)) + 1;
+        GtkTreeModel *frames = gtk_tree_view_get_model(GTK_TREE_VIEW(find(window, "insight-gdb-stack")));
+        GtkTreeIter frame;
+        g_assert_true(gtk_tree_model_get_iter_first(frames, &frame));
+        gchar *expected = NULL;
+        gtk_tree_model_get(frames, &frame, 3, &expected, -1);
+        g_assert_cmpuint(line, ==, (guint)g_ascii_strtoull(expected, NULL, 10));
+        g_free(expected);
+        g_assert_true(source_markers());
+        g_print("C/C++ GTK: exact instruction-to-source navigation preserved execution markers.\n");
         phase = 16;
     }
     return G_SOURCE_CONTINUE;

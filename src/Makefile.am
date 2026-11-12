@@ -344,6 +344,8 @@ libgeany_la_SOURCES += \
 	insight-debuggers/disassembly/follow-ui.inc \
 	insight-debuggers/disassembly/instruction-model.inc \
 	insight-debuggers/disassembly/instruction-ui.inc \
+	insight-debuggers/disassembly/source-model.inc \
+	insight-debuggers/disassembly/source-ui.inc \
 	insight-debuggers/disassembly/instruction-menu.inc \
 	insight-debuggers/disassembly/names-ui.inc \
 	insight-debuggers/disassembly/pipeline.inc \

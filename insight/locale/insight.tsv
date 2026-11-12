@@ -3375,3 +3375,9 @@ The selected frame is already at this instruction.	Выбранный кадр �
 Add hardware instruction breakpoint	Добавить аппаратную точку на инструкции
 Name this instruction address…	Задать имя адресу инструкции…
 Copy instruction address	Копировать адрес инструкции
+
+Open source for instruction	Открыть исходник инструкции
+Looking up instruction source…	Поиск исходника инструкции…
+Instruction source opened. The execution stop has not changed.	Исходник инструкции открыт. Позиция остановки не изменилась.
+Source file is unavailable locally. Check GDB source directories or SSH source mapping.	Исходник недоступен локально. Проверьте каталоги исходников GDB или сопоставление путей SSH.
+GDB has no source line for this instruction.	В GDB нет строки исходника для этой инструкции.

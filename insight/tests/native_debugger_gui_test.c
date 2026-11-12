@@ -269,7 +269,7 @@ static gboolean drive(gpointer data)
         return native_remote_gui_step(window, tabs);
     if (phase == 1 && !native_catch_gui_step(window))
         return G_SOURCE_CONTINUE;
-    if (phase >= 84 && phase <= 91)
+    if (phase >= 84 && phase <= 92)
         return instruction_menu_gui_step(window, tabs);
     if (phase >= 70 && phase <= 83)
         return native_assembly_gui_step(window, tabs);

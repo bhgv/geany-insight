@@ -33,7 +33,7 @@ typedef struct
     gchar *record, *function, *request, *last_error, *request_expression;
     gchar *context_thread, *context_frame;
     guint64 temporary_address, instruction_pc;
-    gboolean instruction_pc_valid;
+    gboolean instruction_pc_valid, source_only;
     GHashTable *instruction_points, *instruction_marks;
     gboolean active, visible, follow_needed, follow_enabled;
     GPtrArray *objects, *register_names;

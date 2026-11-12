@@ -475,3 +475,10 @@ the same address. Create an address point first if the items are unavailable.
 Editing and execution actions require an idle paused session; copying a
 snapshot address remains available while running. Menus also work when GDB
 connects to gdbserver through SSH.
+
+### Source for an instruction
+
+Use **Open source for instruction** in the row menu. GDB supplies the exact
+file and line; navigating leaves the execution stop unchanged. Missing debug
+information or unavailable local files produce a status message. For SSH,
+configure GDB source directories or source-path mapping before navigating.

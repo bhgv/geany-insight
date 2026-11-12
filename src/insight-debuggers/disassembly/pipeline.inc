@@ -41,6 +41,7 @@ static void native_assembly_prepare(NativeDebug *session, gchar *request, const 
 {
     NativeAssembly *assembly = session->assembly;
     assembly->active = TRUE;
+    assembly->source_only = FALSE;
     assembly->follow_needed = FALSE;
     g_free(assembly->context_thread);
     g_free(assembly->context_frame);
@@ -88,6 +89,7 @@ static gboolean native_assembly_next(NativeDebug *session)
         insight_queue_clear_full(&assembly->work, native_assembly_work_free);
         g_clear_pointer(&assembly->request, g_free);
         assembly->active = FALSE;
+        assembly->source_only = FALSE;
         return FALSE;
     }
     if (g_queue_is_empty(&assembly->work) && assembly->objects->len)
@@ -104,7 +106,9 @@ static gboolean native_assembly_next(NativeDebug *session)
     if (!assembly->pending)
     {
         assembly->active = FALSE;
-        native_assembly_finish(session);
+        if (!assembly->source_only)
+            native_assembly_finish(session);
+        assembly->source_only = FALSE;
         native_debug_update(session);
         return FALSE;
     }
@@ -133,6 +137,8 @@ static gboolean native_assembly_reply(NativeDebug *session, const gchar *record)
         else
             native_assembly_symbols(assembly, record);
     }
+    else if (work->action == 16)
+        native_instruction_source_reply(session, work, record);
     else if (work->action == 12)
         native_assembly_symbol_reply(assembly, work, record);
     else

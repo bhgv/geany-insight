@@ -325,6 +325,8 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/disassembly/follow-ui.inc"
 #include "insight-debuggers/disassembly/instruction-model.inc"
 #include "insight-debuggers/disassembly/instruction-ui.inc"
+#include "insight-debuggers/disassembly/source-model.inc"
+#include "insight-debuggers/disassembly/source-ui.inc"
 #include "insight-debuggers/disassembly/instruction-menu.inc"
 #include "insight-debuggers/gdb-disassembly-ui.inc"
 #include "insight-debuggers/gdb-remote-model.inc"

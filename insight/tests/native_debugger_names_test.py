@@ -242,7 +242,25 @@ int main(int argc, char **argv)
     assert(!native_name_profile_validate(profile, &error));
     g_clear_error(&error);
     g_key_file_unref(profile);
-    if (argc == 3 && !strcmp(argv[1], "point"))
+    guint source_line = 0;
+    const char *mixed = "^done,asm_insns=[src_and_asm_line={line=\"12\",fullname=\"/tmp/a.c\",line_asm_insn=[{address=\"0x4010\"}]}]";
+    char *source = native_instruction_source_location(mixed, "0x00004010", &source_line);
+    assert(source && !strcmp(source, "/tmp/a.c") && source_line == 12);
+    g_free(source);
+    assert(!native_instruction_source_location(mixed, "0x4011", &source_line) && source_line == 0);
+    assert(!native_instruction_source_location("^done,asm_insns=[{address=\"0x4010\"}]", "0x4010", &source_line));
+    assert(!native_instruction_source_location("^error,msg=\"no source\"", "0x4010", &source_line));
+    assert(!native_instruction_source_location("^done,asm_insns=[{line=\"0\",fullname=\"/tmp/a.c\",line_asm_insn=[{address=\"0x4010\"}]}]", "0x4010", &source_line));
+    if (argc == 3 && !strcmp(argv[1], "source"))
+    {
+        gchar *first = native_debug_field(argv[2], "address");
+        source = native_instruction_source_location(argv[2], first, &source_line);
+        assert(source && source_line > 0);
+        puts(source);
+        g_free(source);
+        g_free(first);
+    }
+    else if (argc == 3 && !strcmp(argv[1], "point"))
     {
         native_instruction_point(&session, argv[2], NULL);
         assert(g_hash_table_size(assembly.instruction_points) == 1);
@@ -290,6 +308,7 @@ class NativeNames(unittest.TestCase):
         for name in ('rules.inc', 'resolve.inc', 'annotations.inc'):
             code += (directory / name).read_text()
         code += (directory / 'instruction-model.inc').read_text()
+        code += (directory / 'source-model.inc').read_text()
         code += function(str(directory / 'names-ui.inc'), 'native_name_profile_store') + MAIN
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -315,6 +334,7 @@ class NativeNames(unittest.TestCase):
         subprocess.run(['cc', '-g', '-O0', str(source), '-o', str(target)], check=True)
         commands = ('-gdb-set disassembly-flavor intel\n'
                     '-data-disassemble -s main -e main+8 -- 0\n'
+                    '-data-disassemble -s main -e main+1 -- 1\n'
                     '-break-insert *main\n'
                     '-var-create typed * "*(struct Packet*)&object"\n'
                     '-var-list-children --no-values typed 0 64\n'
@@ -326,6 +346,9 @@ class NativeNames(unittest.TestCase):
         self.assertTrue(any(line.startswith('^done,asm_insns=') for line in records), result.stdout)
         assembly = next(line for line in records if line.startswith('^done,asm_insns='))
         self.assertNotIn('%rip', assembly)
+        mixed = next(line for line in records if line.startswith('^done,asm_insns=[src_and_asm_line='))
+        mapped = subprocess.check_output([str(helper), 'source', mixed], text=True)
+        self.assertIn(str(source), mapped)
         point = next(line for line in records if line.startswith('^done,bkpt='))
         subprocess.run([str(helper), 'point', point], check=True)
         fields = next(line for line in records if 'children=[' in line and line.startswith('^done'))

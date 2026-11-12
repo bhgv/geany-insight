@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="810" viewBox="0 0 920 810" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="900" viewBox="0 0 920 900" role="img" aria-labelledby="title desc">
 <title id="title">Symbolic disassembly / Имена в дизассемблере</title>
 <desc id="desc">Illustrative address, typed-field and function-scoped names across x86, ARM and RISC-V. Пример глобальных адресов, полей типов и имён внутри функции.</desc>
-<rect width="920" height="810" rx="14" fill="#edf3f9"/>
+<rect width="920" height="900" rx="14" fill="#edf3f9"/>
 <g font-family="sans-serif" fill="#17334d">
 <text x="24" y="36" font-size="22">One name, all references / Одно имя для всех обращений</text>
 <rect x="24" y="56" width="872" height="112" rx="8" fill="#fff" stroke="#6685a3"/>
@@ -32,5 +32,8 @@
 <text x="42" y="718" font-size="16">Hardware point / Аппаратная точка → condition / условие · skip / пропуск</text>
 <text x="42" y="746" font-size="16">Copy / Копировать · Name / Имя → shared views / общие представления</text>
 <text x="42" y="771" font-size="14">Double-click address / Двойной щелчок по адресу → toggle / переключить</text>
+<rect x="24" y="802" width="872" height="74" rx="8" fill="#fff" stroke="#6685a3"/>
+<text x="42" y="831" font-size="17">Instruction / Инструкция → GDB line table / таблица строк → source / исходник</text>
+<text x="42" y="858" font-size="14">Exact address / Точный адрес · stop marker stays / маркер остановки сохраняется</text>
 </g>
 </svg>

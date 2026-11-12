@@ -88,6 +88,8 @@ static void native_instruction_popup(GtkTextView *view, GtkWidget *menu, gpointe
             G_CALLBACK(native_instruction_action), session, idle && (i != 3 || !point));
         g_object_set_data(G_OBJECT(item), "instruction-action", GUINT_TO_POINTER(i));
     }
+    native_instruction_menu_item(menu, "Open source for instruction", address,
+        G_CALLBACK(native_instruction_source), session, idle);
     const gchar *labels[] = {"Enable / Disable", "Breakpoint condition", "Ignore first hits"};
     const gchar *edits[] = {"toggle", "condition", "ignore"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
