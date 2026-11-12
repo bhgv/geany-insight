@@ -135,11 +135,11 @@ int main(void)
     g_free(cwd);
     g_free(name);
     g_assert_cmpint(g_mkdir_with_parents(profile,0700),==,0);
-    g_assert_true(g_file_set_contents(source,"int sample_function(void) { return 1;
-     }\nint sample_variable;
-    \nstruct SampleStruct { int member;
-     };
-    \n#define SAMPLE_MACRO 1\n",-1,NULL));
+    g_assert_true(g_file_set_contents(source,
+        "int sample_function(void) { return 1; }\n"
+        "int sample_variable;\n"
+        "struct SampleStruct { int member; };\n"
+        "#define SAMPLE_MACRO 1\n", -1, NULL));
     gchar *config=g_build_filename(profile,"geany.conf",NULL);
     g_assert_true(g_file_set_contents(config,"[geany]\nconfirm_exit=false\n",-1,NULL));
     g_free(config);
