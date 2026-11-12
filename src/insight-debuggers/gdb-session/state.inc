@@ -102,6 +102,7 @@ typedef struct {
 static void native_assembly_prepare(NativeDebug *session, gchar *request, const gchar *expression);
 static void native_assembly_follow(NativeDebug *session);
 static void native_assembly_context(NativeDebug *session);
+static void native_assembly_running(NativeDebug *session);
 static void native_assembly_console(NativeDebug *session, const gchar *line);
 static void native_assembly_free(NativeAssembly *assembly);
 static gboolean native_assembly_next(NativeDebug *session);

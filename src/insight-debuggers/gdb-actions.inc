@@ -63,15 +63,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
         native_debug_point_reply(session, line);
         if (g_str_has_prefix(line, "*running") || g_str_has_prefix(line, "^running"))
         {
-            if (session->assembly)
-            {
-                session->assembly->instruction_pc_valid = FALSE;
-                native_instruction_refresh(session);
-                g_ptr_array_set_size(session->assembly->ranges, 0);
-                g_hash_table_remove_all(session->assembly->registers);
-                gtk_label_set_text(GTK_LABEL(session->assembly->status),
-                    insight_tr("Previous instruction snapshot. Pause and read again to resolve names in the new context."));
-            }
+            native_assembly_running(session);
             session->running = TRUE;
             session->stopped = FALSE;
             native_values_reset(session);

@@ -33,10 +33,10 @@ static void native_name_refresh_views(NativeDebug *session)
 }
 
 /* EN: Invalidate session's old frame/register state before repainting instructions on a thread/frame change.
- * Reset the register comparison baseline even for a return without an intervening read.
+ * Reset register comparison on a confirmed context change; retain it while stack selection is temporarily unknown.
  * Preserve global address ranges; active reads and unchanged contexts are left intact.
  * RU: Очищает старое состояние кадра/регистров session до перерисовки инструкций при смене потока/кадра.
- * Сбрасывает базу сравнения регистров даже при возвращении без промежуточного чтения.
+ * Сбрасывает сравнение при подтверждённой смене контекста; сохраняет базу, пока выбор кадра временно неизвестен.
  * Сохраняет глобальные диапазоны адресов; активное чтение и неизменившийся контекст не затрагиваются. */
 static void native_assembly_context(NativeDebug *session)
 {
@@ -57,10 +57,17 @@ static void native_assembly_context(NativeDebug *session)
     }
     if (assembly->register_rows)
         gtk_list_store_clear(assembly->register_rows);
-    if (assembly->previous_registers)
-        g_hash_table_remove_all(assembly->previous_registers);
-    g_clear_pointer(&assembly->register_thread, g_free);
-    g_clear_pointer(&assembly->register_frame, g_free);
+    gboolean confirmed_change = session->selected_thread && *session->selected_thread &&
+        session->selected_frame && *session->selected_frame &&
+        (g_strcmp0(assembly->register_thread, session->selected_thread) ||
+         g_strcmp0(assembly->register_frame, session->selected_frame));
+    if (confirmed_change)
+    {
+        if (assembly->previous_registers)
+            g_hash_table_remove_all(assembly->previous_registers);
+        g_clear_pointer(&assembly->register_thread, g_free);
+        g_clear_pointer(&assembly->register_frame, g_free);
+    }
     assembly->instruction_pc_valid = FALSE;
     assembly->follow_needed = TRUE;
     g_hash_table_remove_all(assembly->registers);
@@ -73,6 +80,21 @@ static void native_assembly_context(NativeDebug *session)
     gtk_label_set_text(GTK_LABEL(assembly->status),
         insight_tr("Previous instruction snapshot. Pause and read again to resolve names in the new context."));
     native_name_refresh_views(session);
+}
+
+/* EN: Invalidate session's execution-bound instruction annotations while preserving its raw snapshot and manual rules.
+ * RU: Сбрасывает привязанные к остановке подписи инструкций session, сохраняя исходный снимок и ручные правила. */
+static void native_assembly_running(NativeDebug *session)
+{
+    NativeAssembly *assembly = session->assembly;
+    if (!assembly)
+        return;
+    assembly->instruction_pc_valid = FALSE;
+    g_ptr_array_set_size(assembly->ranges, 0);
+    g_hash_table_remove_all(assembly->registers);
+    native_instruction_refresh(session);
+    gtk_label_set_text(GTK_LABEL(assembly->status),
+        insight_tr("Previous instruction snapshot. Pause and read again to resolve names in the new context."));
 }
 
 /* EN: Display completed disassembly of session without resetting the cursor before repaint; refresh address views and retain final errors.

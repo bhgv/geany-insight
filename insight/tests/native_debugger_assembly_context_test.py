@@ -43,7 +43,10 @@ static void gtk_label_set_text(void *label, const gchar *text)
 static void native_instruction_refresh(NativeDebug *session)
 {
     if (session->assembly->record)
+    {
+        g_free(rendered);
         rendered = native_assembly_render(session, session->assembly->record);
+    }
     refreshed++;
 }
 
@@ -74,6 +77,11 @@ int main(int argc, char **argv)
     assembly.active = active;
     assembly.instruction_pc_valid = TRUE;
     assembly.register_rows = (void *)1;
+    assembly.rules = g_ptr_array_new_with_free_func(native_name_rule_free);
+    NativeNameRule *rule = g_new0(NativeNameRule, 1);
+    rule->anchor = g_strdup("&global_packet");
+    rule->name = g_strdup("manual_rule");
+    g_ptr_array_add(assembly.rules, rule);
     assembly.ranges = g_ptr_array_new_with_free_func(native_name_range_free);
     assembly.registers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     guint64 *value = g_new(guint64, 1);
@@ -104,13 +112,28 @@ int main(int argc, char **argv)
         session.selected_frame = "0";
     else if (!strcmp(argv[1], "frame"))
         session.selected_thread = "1";
-    native_assembly_context(&session);
-    if (unchanged || active)
+    gboolean running = !strcmp(argv[1], "running") || !strcmp(argv[1], "running-twice");
+    if (running)
+    {
+        native_assembly_running(&session);
+        if (!strcmp(argv[1], "running-twice"))
+            native_assembly_running(&session);
+        assert(refreshed == (!strcmp(argv[1], "running-twice") ? 2u : 1u));
+        assert(!rows_cleared && !views_refreshed);
+        assert(!assembly.ranges->len && !g_hash_table_size(assembly.registers));
+        assert(!assembly.instruction_pc_valid);
+        assert(assembly.rules->len == 1 && !strcmp(rule->name, "manual_rule"));
+        assert(rendered && !strstr(rendered, "global_packet") && !strstr(rendered, "old_local"));
+        assert(strstr(rendered, "mov eax,[rax]") && strstr(rendered, "mov ebx,0x1000"));
+    }
+    else
+        native_assembly_context(&session);
+    if (!running && (unchanged || active))
     {
         assert(!refreshed && !rows_cleared && !views_refreshed);
         assert(g_hash_table_size(assembly.registers) == 1 && assembly.instruction_pc_valid);
     }
-    else
+    else if (!running)
     {
         assert(refreshed == 1 && rows_cleared == 1 && views_refreshed == 1);
         assert(!g_hash_table_size(assembly.registers) && !assembly.instruction_pc_valid && assembly.follow_needed);
@@ -128,6 +151,7 @@ int main(int argc, char **argv)
     g_free(assembly.context_frame);
     g_hash_table_unref(assembly.registers);
     g_ptr_array_unref(assembly.ranges);
+    g_ptr_array_unref(assembly.rules);
     return 0;
 }
 '''
@@ -141,7 +165,8 @@ class NativeAssemblyContext(unittest.TestCase):
         if not all(libraries) or not shutil.which('cc'):
             self.skipTest('Needs cc and GLib runtime.')
         code = model_source(SESSION) + FIXTURE
-        code += function('src/insight-debuggers/disassembly/views.inc', 'native_assembly_context') + MAIN
+        code += function('src/insight-debuggers/disassembly/views.inc', 'native_assembly_context')
+        code += function('src/insight-debuggers/disassembly/views.inc', 'native_assembly_running') + MAIN
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / 'context.c'
@@ -149,7 +174,7 @@ class NativeAssemblyContext(unittest.TestCase):
             executable = root / 'context'
             subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
                             str(source), '-o', str(executable), *['-l:' + library for library in libraries]], check=True)
-            for scenario in ('thread', 'frame', 'register-only', 'unchanged', 'active'):
+            for scenario in ('thread', 'frame', 'register-only', 'unchanged', 'active', 'running', 'running-twice'):
                 with self.subTest(scenario=scenario):
                     subprocess.run([str(executable), scenario], check=True)
 

@@ -62,7 +62,10 @@ For a different function, select its frame first to resolve that function's loca
 
 Global names also annotate pointers in locals, value trees, watches, watch graphs, source
 hover tooltips and memory addresses. Raw values and program bytes do not change.
-Names are cleared on execution and resolved again on the next read. Switching
+Names and cached register resolutions are cleared before the instruction snapshot
+is repainted on execution, starting with the first running event. The raw
+instructions and manual naming rules remain available; names are resolved again
+on the next read. Switching
 threads/frames drops local resolutions while retaining global names in the same process. Cached register values and the current-instruction marker are cleared before repainting,
 including when GDB has no function name. Indirect operands are not annotated from
 the previous frame's registers; explicit global addresses keep their names. **Save names
@@ -98,7 +101,9 @@ hex and unsigned decimal, with resolved address/field names. Click **Register**
 to sort by name. Values changed since the previous read are highlighted in orange;
 comparison restarts when selecting a different thread/frame or restarting a target. Returning to the original
 context without an intermediate read also starts a new comparison. If GDB cannot
-identify the selected thread or frame, values remain visible without change highlighting.
+identify the selected thread or frame, values remain visible without change highlighting. Reloading the stack at a new stop preserves the previous comparison
+baseline until the selected thread/frame is confirmed. Returning to the same
+context after this temporary loading state still highlights changed registers.
 
 Select a row and use **Watch selected register** to add `$register` to watches,
 or **View register address in memory** to inspect the address it contains. Reads

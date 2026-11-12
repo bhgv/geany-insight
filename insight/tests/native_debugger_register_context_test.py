@@ -70,6 +70,7 @@ int main(int argc, char **argv)
     NativeDebug session = {.assembly = &assembly, .selected_thread = "1", .selected_frame = "0"};
     assembly.context_thread = g_strdup("1");
     assembly.context_frame = g_strdup("0");
+    assembly.record = g_strdup("^done,asm_insns=[{address=\"0x10\",inst=\"nop\"}]");
     assembly.ranges = g_ptr_array_new_with_free_func(native_name_range_free);
     assembly.register_names = g_ptr_array_new_with_free_func(g_free);
     g_ptr_array_add(assembly.register_names, g_strdup("rax"));
@@ -92,7 +93,15 @@ int main(int argc, char **argv)
     {
         gboolean unchanged = !strcmp(argv[1], "unchanged");
         gboolean active = !strcmp(argv[1], "active");
-        if (!unchanged)
+        gboolean transient = g_str_has_prefix(argv[1], "transient");
+        if (transient)
+        {
+            if (strcmp(argv[1], "transient-frame"))
+                session.selected_thread = NULL;
+            if (strcmp(argv[1], "transient-thread"))
+                session.selected_frame = NULL;
+        }
+        else if (!unchanged)
         {
             if (!strcmp(argv[1], "thread"))
                 session.selected_thread = "2";
@@ -106,7 +115,7 @@ int main(int argc, char **argv)
         if (!active)
             native_assembly_context(&session);
         assembly.active = FALSE;
-        snapshot(&session, 0x2000, unchanged || active);
+        snapshot(&session, 0x2000, unchanged || active || transient);
         snapshot(&session, 0x3000, TRUE);
     }
     g_object_unref(assembly.register_rows);
@@ -118,6 +127,7 @@ int main(int argc, char **argv)
     g_free(assembly.register_frame);
     g_free(assembly.context_thread);
     g_free(assembly.context_frame);
+    g_free(assembly.record);
     return 0;
 }
 '''
@@ -140,7 +150,7 @@ class NativeRegisterContext(unittest.TestCase):
             executable = root / 'register-context'
             subprocess.run(['cc', '-std=c99', '-Wall', '-Wextra', '-Werror', '-Wno-unused-function',
                             str(source), '-o', str(executable), *['-l:' + name for name in libraries]], check=True)
-            for scenario in ('thread', 'frame', 'unchanged', 'active', 'unknown-thread', 'unknown-frame'):
+            for scenario in ('thread', 'frame', 'unchanged', 'active', 'unknown-thread', 'unknown-frame', 'transient', 'transient-thread', 'transient-frame'):
                 with self.subTest(scenario=scenario):
                     subprocess.run([str(executable), scenario], check=True)
 
