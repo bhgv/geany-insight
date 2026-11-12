@@ -63,7 +63,9 @@ For a different function, select its frame first to resolve that function's loca
 Global names also annotate pointers in locals, value trees, watches, watch graphs, source
 hover tooltips and memory addresses. Raw values and program bytes do not change.
 Names are cleared on execution and resolved again on the next read. Switching
-threads/frames drops local resolutions while retaining global names in the same process. **Save names
+threads/frames drops local resolutions while retaining global names in the same process. Cached register values and the current-instruction marker are cleared before repainting,
+including when GDB has no function name. Indirect operands are not annotated from
+the previous frame's registers; explicit global addresses keep their names. **Save names
 in debugger profile** preserves manual rules in the existing per-project/executable
 profile; temporary addresses and automatically discovered names are not persisted.
 

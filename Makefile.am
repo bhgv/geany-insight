@@ -870,3 +870,5 @@ dist_insightdocmedia_DATA += insight/docs/media/native-code-navigation.svg
 EXTRA_DIST += insight/tests/native_debugger_opcode_gui.inc
 
 EXTRA_DIST += insight/tests/native_debugger_register_tools_gui.inc
+
+EXTRA_DIST += insight/tests/native_debugger_assembly_context_test.py

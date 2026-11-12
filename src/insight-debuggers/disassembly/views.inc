@@ -32,13 +32,16 @@ static void native_name_refresh_views(NativeDebug *session)
     }
 }
 
-/* EN: Drop function-local resolutions and stale register rows when session changes thread/frame; global names remain usable.
- * RU: Сбрасывает локальные разрешения и старые строки регистров при смене потока/кадра session; глобальные имена сохраняются. */
+/* EN: Invalidate session's old frame/register state before repainting instructions on a thread/frame change.
+ * Preserve global address ranges; active reads and unchanged contexts are left intact.
+ * RU: Очищает старое состояние кадра/регистров session до перерисовки инструкций при смене потока/кадра.
+ * Сохраняет глобальные диапазоны адресов; активное чтение и неизменившийся контекст не затрагиваются. */
 static void native_assembly_context(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
     if (!assembly || assembly->active ||
-        (!assembly->function && !assembly->ranges->len) ||
+        (!assembly->function && !assembly->ranges->len && !assembly->record &&
+         !g_hash_table_size(assembly->registers) && !assembly->instruction_pc_valid) ||
         (!g_strcmp0(assembly->context_thread, session->selected_thread) &&
          !g_strcmp0(assembly->context_frame, session->selected_frame)))
         return;
@@ -53,7 +56,6 @@ static void native_assembly_context(NativeDebug *session)
     if (assembly->register_rows)
         gtk_list_store_clear(assembly->register_rows);
     assembly->instruction_pc_valid = FALSE;
-    native_instruction_refresh(session);
     assembly->follow_needed = TRUE;
     g_hash_table_remove_all(assembly->registers);
     g_clear_pointer(&assembly->function, g_free);
@@ -61,6 +63,7 @@ static void native_assembly_context(NativeDebug *session)
     g_free(assembly->context_frame);
     assembly->context_thread = g_strdup(session->selected_thread);
     assembly->context_frame = g_strdup(session->selected_frame);
+    native_instruction_refresh(session);
     gtk_label_set_text(GTK_LABEL(assembly->status),
         insight_tr("Previous instruction snapshot. Pause and read again to resolve names in the new context."));
     native_name_refresh_views(session);
