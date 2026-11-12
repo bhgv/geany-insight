@@ -38,7 +38,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends build-essential libgtk-3-dev \
-            meson ninja-build gettext python3-docutils xvfb xauth
+            meson ninja-build gettext python3-docutils xvfb xauth librsvg2-common fonts-dejavu-core
       - name: Build and install the minimal native editor
         run: |
           meson setup _panel-build --prefix "$PWD/_panel-install" \

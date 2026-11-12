@@ -10,6 +10,8 @@ static void constrain_message_width(GtkWidget *page) {
  for(GList *p=children;p;p=p->next) { GtkWidget *child=p->data;gboolean expand,fill;guint padding;GtkPackType pack;gtk_box_query_child_packing(GTK_BOX(page),child,&expand,&fill,&padding,&pack);g_object_ref(child);gtk_container_remove(GTK_CONTAINER(page),child);if(pack==GTK_PACK_START) gtk_box_pack_start(GTK_BOX(body),child,expand,fill,padding);else gtk_box_pack_end(GTK_BOX(body),child,expand,fill,padding);g_object_unref(child); }
  g_list_free(children);panel_scroll_minimum(body);GtkWidget *viewport=gtk_viewport_new(NULL,NULL);gtk_viewport_set_shadow_type(GTK_VIEWPORT(viewport),GTK_SHADOW_NONE);gtk_container_add(GTK_CONTAINER(viewport),body);gtk_container_add(GTK_CONTAINER(host),viewport);gtk_widget_show(viewport);gtk_box_pack_start(GTK_BOX(page),host,TRUE,TRUE,0);g_object_set_data(G_OBJECT(page),"insight-width-constrained",GINT_TO_POINTER(1));gtk_widget_show(body);gtk_widget_show(host);
 }
+/* EN: Initialize editor workbench panels, restore settings and connect application signals.
+ * RU: Создаёт панели редактора, восстанавливает настройки и подключает сигналы приложения. */
 void insight_workbench_init(void) {
  insight_diff_set_source_opener(diff_source_open);insight_diff_set_colorizer(insight_diff_native_colorize);
  insight_directory_set_types_provider(directory_known_types);insight_directory_set_open_guard(directory_path_open);
@@ -110,7 +112,13 @@ void insight_workbench_init(void) {
  gtk_container_remove(GTK_CONTAINER(parent),existing);
  gtk_container_remove(GTK_CONTAINER(existing),left_split);
  gtk_container_remove(GTK_CONTAINER(left_split),editor_book);
- gtk_paned_pack1(GTK_PANED(existing),editor_book,TRUE,TRUE);
+ /* EN: Keep native editor tabs at their minimum inside a clipped host when the central column collapses.
+  * RU: Сохраняет минимальный размер вкладок редактора внутри обрезаемой области при сжатии центра. */
+ GtkWidget *editor_host = narrow_panel_host(editor_book);
+ gtk_widget_set_name(editor_host, "insight-editor-notebook-host");
+ gtk_widget_show(gtk_bin_get_child(GTK_BIN(editor_host)));
+ g_object_bind_property(editor_book, "visible", editor_host, "visible", G_BINDING_SYNC_CREATE);
+ gtk_paned_pack1(GTK_PANED(existing), editor_host, TRUE, TRUE);
  GtkWidget *source_width_host=g_object_new(insight_width_host_get_type(),NULL);gtk_widget_set_name(source_width_host,"insight-source-width-host");gtk_container_add(GTK_CONTAINER(source_width_host),existing);gtk_paned_pack2(GTK_PANED(left_split),source_width_host,TRUE,TRUE);
  /* Clip the message notebook at its native minimum instead of allocating
   * its tabs/scrollbars an invalid height when the bottom shelf is collapsed. */
