@@ -32,6 +32,13 @@ static void fixture_range(NativeAssembly *assembly, guint64 address, guint64 siz
  * RU: Проверяет все синтаксисы операндов, единые имена, поля типов, локальные псевдонимы, константы и ошибки правил. */
 int main(int argc, char **argv)
 {
+    NativeNameRule query_rule = {.anchor = "&object", .name = "Счётчик", .type = "Packet", .scope = "worker"};
+    assert(native_name_rule_matches(&query_rule, "СЧЁТ"));
+    assert(native_name_rule_matches(&query_rule, "OBJECT"));
+    assert(native_name_rule_matches(&query_rule, "packet"));
+    assert(native_name_rule_matches(&query_rule, "WORKER"));
+    assert(native_name_rule_matches(&query_rule, ""));
+    assert(!native_name_rule_matches(&query_rule, "missing"));
     NativeAssembly assembly = {0};
     assembly.rules = g_ptr_array_new_with_free_func(native_name_rule_free);
     assembly.ranges = g_ptr_array_new_with_free_func(native_name_range_free);

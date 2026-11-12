@@ -62,6 +62,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/disassembly/registers-ui.inc"
 #include "insight-debuggers/disassembly/navigation-model.inc"
 #include "insight-debuggers/disassembly/views.inc"
+#include "insight-debuggers/disassembly/name-list-tools.inc"
 #include "insight-debuggers/disassembly/names-ui.inc"
 #include "insight-debuggers/disassembly/pipeline.inc"
 #include "insight-debuggers/disassembly/follow-ui.inc"

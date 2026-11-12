@@ -165,3 +165,22 @@ static void native_name_rule_replace(NativeAssembly *assembly, NativeNameRule *r
     }
     g_ptr_array_add(assembly->rules, rule);
 }
+
+/* EN: Match query against rule's user fields using Unicode case folding; an empty query accepts every rule without target reads.
+ * RU: Ищет query в ручных полях rule без учёта регистра Unicode; пустой запрос принимает все правила без чтения цели. */
+static gboolean native_name_rule_matches(const NativeNameRule *rule, const gchar *query)
+{
+    if (!query || !*query)
+        return TRUE;
+    gchar *needle = g_utf8_casefold(query, -1);
+    const gchar *fields[] = {rule->anchor, rule->name, rule->type, rule->scope};
+    gboolean found = FALSE;
+    for (guint i = 0; i < G_N_ELEMENTS(fields) && !found; i++)
+    {
+        gchar *field = g_utf8_casefold(fields[i] ? fields[i] : "", -1);
+        found = strstr(field, needle) != NULL;
+        g_free(field);
+    }
+    g_free(needle);
+    return found;
+}

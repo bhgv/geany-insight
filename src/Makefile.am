@@ -350,6 +350,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/disassembly/opcode-ui.inc \
 	insight-debuggers/disassembly/navigation-model.inc \
 	insight-debuggers/disassembly/navigation-ui.inc \
+	insight-debuggers/disassembly/name-list-tools.inc \
 	insight-debuggers/disassembly/names-ui.inc \
 	insight-debuggers/disassembly/pipeline.inc \
 	insight-debuggers/disassembly/resolve.inc \

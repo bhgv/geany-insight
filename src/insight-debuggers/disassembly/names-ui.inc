@@ -239,16 +239,29 @@ static GtkWidget *native_name_widget(NativeDebug *session)
     g_ptr_array_add(session->paused_controls, save);
     gtk_flow_box_insert(GTK_FLOW_BOX(bar), save, -1);
     gtk_box_pack_start(GTK_BOX(box), bar, FALSE, FALSE, 0);
+    native_name_search_widget(session, box);
     assembly->rule_rows = gtk_list_store_new(6, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_UINT);
-    GtkWidget *view = gtk_tree_view_new_with_model(GTK_TREE_MODEL(assembly->rule_rows));
+    GtkTreeModel *filter = gtk_tree_model_filter_new(GTK_TREE_MODEL(assembly->rule_rows), NULL);
+    assembly->rule_filter = filter;
+    gtk_tree_model_filter_set_visible_func(GTK_TREE_MODEL_FILTER(filter), native_name_visible, session, NULL);
+    GtkTreeModel *sort = gtk_tree_model_sort_new_with_model(filter);
+    GtkWidget *view = gtk_tree_view_new_with_model(sort);
+    g_object_unref(sort);
+    g_object_unref(filter);
     assembly->rules_view = view;
     gtk_widget_set_name(view, "insight-gdb-address-names");
     g_object_unref(assembly->rule_rows);
+    g_signal_connect(view, "row-activated", G_CALLBACK(native_name_row_activated), session);
     const gchar *columns[] = {"Kind", "Address / offset", "Name", "Type / register", "Function scope"};
     for (guint i = 0; i < G_N_ELEMENTS(columns); i++)
+    {
         gtk_tree_view_insert_column_with_attributes(GTK_TREE_VIEW(view), -1,
             insight_tr(columns[i]), gtk_cell_renderer_text_new(), "text", i, NULL);
+        GtkTreeViewColumn *column = gtk_tree_view_get_column(GTK_TREE_VIEW(view), i);
+        gtk_tree_view_column_set_sort_column_id(column, i);
+        gtk_tree_view_column_set_resizable(column, TRUE);
+    }
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_widget_set_size_request(scroll, -1, 100);
     gtk_container_add(GTK_CONTAINER(scroll), view);

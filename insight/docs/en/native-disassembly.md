@@ -212,3 +212,11 @@ A complete hex search such as `0x42` matches the numeric value, including
 with column headers, without reading or running the target. Tabs, line breaks and
 backslashes inside cells are escaped. Export keeps whole rows, up to 128 rows
 and 128 KiB; a status message reports truncation.
+
+The manual name list supports search by address expression, display name, type,
+or function (case-insensitive, including Unicode). Click a column header to sort;
+double-click a row or press Enter to edit that rule. Editing and deletion use the
+canonical rule identity even after filtering/sorting. **Copy name anchor** copies
+the selected expression or signed frame offset without evaluating it. A renamed
+rule may disappear when it no longer matches the active search; clear the search
+to see all rules. Save the debugger profile to persist the rules.

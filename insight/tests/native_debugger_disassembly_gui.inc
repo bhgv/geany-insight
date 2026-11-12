@@ -11,7 +11,7 @@ static gboolean native_assembly_gui_name(gpointer data)
     GtkWidget *label = dialog ? find(dialog, "insight-gdb-name-label") : NULL;
     if (!anchor || !label)
         return G_SOURCE_CONTINUE;
-    gtk_entry_set_text(GTK_ENTRY(anchor), "&main");
+    gtk_entry_set_text(GTK_ENTRY(anchor), !g_strcmp0(data, "decoy_alias") ? "&main + 1" : "&main");
     gtk_entry_set_text(GTK_ENTRY(label), data);
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
     return G_SOURCE_REMOVE;
@@ -87,6 +87,7 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     static gchar *previous_instruction;
     static gint points_before;
+    static gboolean second_rule_created, second_rule_deleted;
     GtkWidget *entry = find(window, "insight-gdb-instruction-address");
     if (!entry || !gtk_widget_is_sensitive(entry))
         return G_SOURCE_CONTINUE;
@@ -113,17 +114,52 @@ static gboolean native_assembly_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 71 && native_assembly_gui_text(window, "entry_alias") &&
              find(window, "local: local_child.code"))
     {
+        if (!second_rule_created)
+        {
+            second_rule_created = TRUE;
+            g_timeout_add(100, native_assembly_gui_name, "decoy_alias");
+            click(window, "Address name…");
+            return G_SOURCE_CONTINUE;
+        }
         GtkWidget *view = find(window, "insight-gdb-address-names");
+        GtkWidget *search = find(window, "insight-gdb-name-search");
+        GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(view));
         GtkTreePath *path = gtk_tree_path_new_first();
+        if (!second_rule_deleted)
+        {
+            g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 2);
+            gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(model), 2, GTK_SORT_ASCENDING);
+            gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), path);
+            g_assert_true(click(window, "Delete name"));
+            g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 1);
+            second_rule_deleted = TRUE;
+            gtk_tree_path_free(path);
+            return G_SOURCE_CONTINUE;
+        }
+        gtk_entry_set_text(GTK_ENTRY(search), "nonexistent-name-rule");
+        g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 0);
+        gtk_entry_set_text(GTK_ENTRY(search), "ENTRY_ALIAS");
+        g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 1);
         gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), path);
-        gtk_tree_path_free(path);
+        g_assert_true(click(window, "Copy name anchor"));
+        gchar *copied = gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD));
+        g_assert_cmpstr(copied, ==, "&main");
+        g_free(copied);
         phase = 73;
         g_timeout_add(100, native_assembly_gui_name, "program_entry");
-        click(window, "Edit name…");
+        gtk_tree_view_row_activated(GTK_TREE_VIEW(view), path, gtk_tree_view_get_column(GTK_TREE_VIEW(view), 2));
+        gtk_tree_path_free(path);
     }
     else if (phase == 73 && native_assembly_gui_text(window, "program_entry") &&
              !native_assembly_gui_text(window, "entry_alias"))
     {
+        GtkWidget *search = find(window, "insight-gdb-name-search");
+        GtkWidget *view = find(window, "insight-gdb-address-names");
+        g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)), NULL), ==, 0);
+        gtk_entry_set_text(GTK_ENTRY(search), "PROGRAM_ENTRY");
+        g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(view)), NULL), ==, 1);
+        gtk_entry_set_text(GTK_ENTRY(search), "");
+        g_print("C/C++ GTK: name rule search, sorted deletion, anchor copy and row-activated edit passed.\n");
         if (click(window, "Save names in debugger profile"))
             phase = 74;
     }

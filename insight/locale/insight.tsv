@@ -3405,3 +3405,6 @@ Register definition order	Порядок определения регистро
 Copy visible register table	Копировать видимую таблицу регистров
 Register table copied partially (128 rows / 128 KiB limit).	Таблица регистров скопирована частично (ограничение: 128 строк / 128 КиБ).
 Visible register table copied.	Видимая таблица регистров скопирована.
+
+Find address, name, type or function	Найти адрес, имя, тип или функцию
+Copy name anchor	Копировать адрес или смещение правила

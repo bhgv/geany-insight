@@ -28,6 +28,7 @@ typedef struct GMatchInfo GMatchInfo;
 extern int g_key_file_has_group(GKeyFile *, const char *);
 extern int g_key_file_has_key(GKeyFile *, const char *, const char *, GError **);
 extern GString *g_string_append_c(GString *, char);
+extern char *g_utf8_casefold(const char *, long);
 extern char **g_strsplit(const char *, const char *, int);
 extern void g_strfreev(char **);
 extern char *g_strchug(char *);
