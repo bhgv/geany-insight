@@ -12,8 +12,27 @@ static gboolean native_profile_text_valid(const gchar *value, glong limit)
         g_utf8_strlen(value, -1) <= limit && !strpbrk(value, "\r\n");
 }
 
-/* EN: Validate profile's supported point/watch section; return FALSE with error before applying it.
- * RU: Проверяет поддерживаемую секцию точек/наблюдений в profile; ошибка даёт FALSE и error до применения. */
+/* EN: Return profile's owned, outer-trimmed watch expression at index; missing/multiline values return NULL.
+ * Internal whitespace and quoted strings are preserved; the caller validates UTF-8 and length.
+ * RU: Возвращает выражение наблюдения profile с индексом index без внешних пробелов; отсутствующая/многострочная запись даёт NULL.
+ * Внутренние пробелы и строки в кавычках сохраняются; вызывающий проверяет UTF-8 и длину. */
+static gchar *native_profile_watch_expression(GKeyFile *profile, guint index)
+{
+    gchar *key = g_strdup_printf("expression-%u", index);
+    gchar *expression = g_key_file_get_string(profile, "watches", key, NULL);
+    g_free(key);
+    if (expression && strpbrk(expression, "\r\n"))
+    {
+        g_free(expression);
+        return NULL;
+    }
+    return expression ? g_strstrip(expression) : NULL;
+}
+
+/* EN: Validate profile's point/watch section, requiring unique nonempty normalized watch expressions.
+ * Return FALSE with error before applying invalid counts, fields or duplicate identities.
+ * RU: Проверяет секцию точек/наблюдений profile, требуя уникальных непустых нормализованных выражений.
+ * Возвращает FALSE с error до применения неверных чисел, полей либо повторяющихся выражений. */
 static gboolean native_profile_debug_validate(GKeyFile *profile, GError **error)
 {
     GError *failure = NULL;
@@ -22,11 +41,15 @@ static gboolean native_profile_debug_validate(GKeyFile *profile, GError **error)
     gboolean valid = !failure && watches >= 0 && watches <= 32 && points >= 0 && points <= 256;
     for (gint i = 0; valid && i < watches; i++)
     {
-        gchar *key = g_strdup_printf("expression-%d", i);
-        gchar *value = g_key_file_get_string(profile, "watches", key, NULL);
+        gchar *value = native_profile_watch_expression(profile, (guint)i);
         valid = native_profile_text_valid(value, 1024) && *value;
+        for (gint previous_index = 0; valid && previous_index < i; previous_index++)
+        {
+            gchar *previous = native_profile_watch_expression(profile, (guint)previous_index);
+            valid = g_strcmp0(value, previous) != 0;
+            g_free(previous);
+        }
         g_free(value);
-        g_free(key);
     }
     for (gint i = 0; valid && i < points; i++)
     {

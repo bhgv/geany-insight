@@ -135,8 +135,10 @@ static void native_profile_debug_store(NativeDebug *session, GKeyFile *profile)
     }
 }
 
-/* EN: Restore validated profile into session without running the target; replace supported point recipes and watches.
- * RU: Восстанавливает проверенный профиль в session без запуска; заменяет поддерживаемые точки и наблюдения. */
+/* EN: Restore validated profile into session without running the target; replace supported points and normalized watches.
+ * Watch normalization matches manual editing so restored expressions remain removable by the same text.
+ * RU: Восстанавливает проверенный profile в session без запуска; заменяет поддерживаемые точки и нормализованные наблюдения.
+ * Нормализация совпадает с ручным вводом, поэтому загруженные выражения можно удалить тем же текстом. */
 static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
 {
     if (g_key_file_get_integer(profile, "debugger", "version", NULL) < 2)
@@ -158,11 +160,9 @@ static void native_profile_debug_load(NativeDebug *session, GKeyFile *profile)
     count = g_key_file_get_integer(profile, "debugger", "watch-count", NULL);
     for (gint i = 0; i < count; i++)
     {
-        gchar *key = g_strdup_printf("expression-%d", i);
         NativeWatch *watch = g_new0(NativeWatch, 1);
-        watch->expression = g_key_file_get_string(profile, "watches", key, NULL);
+        watch->expression = native_profile_watch_expression(profile, (guint)i);
         g_ptr_array_add(session->expressions, watch);
-        g_free(key);
     }
     session->watch_next = 0;
     session->points_needed = session->profile_restoring = TRUE;

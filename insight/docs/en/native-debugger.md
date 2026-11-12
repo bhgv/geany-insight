@@ -331,6 +331,11 @@ the editor refreshes their margin markers and breakpoint list. Watch expressions
 appear as **Awaiting stop** and evaluate in the selected frame at the next stop.
 Runtime values and hit totals start afresh.
 
+Watch expressions lose outer spaces and tabs on load, matching manual **Add Watch**
+and **Remove Watch**. Internal whitespace, including spaces in quoted strings,
+is preserved. Blank, multiline or duplicate expressions after normalization reject
+the profile before its settings are applied. Version-one profiles keep current watches.
+
 Restore replaces current persistent source and C++ exception points and watch
 expressions with the saved set.
 It does not run or connect the target. Pending source points use GDB's normal

@@ -39,6 +39,9 @@ extern unsigned g_io_error_quark(void);
 extern void g_error_free(GError *);
 extern void g_free(void *);
 extern int g_strcmp0(const char *, const char *);
+extern char *g_strchug(char *);
+extern char *g_strchomp(char *);
+#define g_strstrip(s) g_strchomp(g_strchug(s))
 extern char *g_strdup_printf(const char *, ...);
 extern char *g_compute_checksum_for_string(int, const char *, gssize);
 extern char *g_strconcat(const char *, ...);
@@ -172,8 +175,8 @@ int main(void)
 
 
 class NativeProfile(unittest.TestCase):
-    # EN: Compile actual validation and scope selection with strict warnings, using the GLib/GIO runtime.
-    # RU: Компилирует настоящую проверку и выбор области со строгими предупреждениями, используя GLib/GIO.
+    # EN: Compile production validation and scope selection for self with strict warnings; reject corrupt profiles using GLib/GIO.
+    # RU: Компилирует проверку и выбор области self со строгими предупреждениями; отклоняет повреждённые профили через GLib/GIO.
     def test_validation_and_scope(self):
         libraries = [ctypes.util.find_library(name) for name in ('gio-2.0', 'glib-2.0')]
         if not shutil.which('cc') or not all(libraries):
@@ -183,6 +186,7 @@ class NativeProfile(unittest.TestCase):
         debug_helpers = function('src/insight-debuggers/gdb-profile-catch-model.inc', 'native_profile_point_kind')
         debug_helpers += '\n' + function('src/insight-debuggers/gdb-catchpoints-model.inc', 'native_catch_command')
         debug_helpers += '\n' + function('src/insight-debuggers/gdb-profile-debug-model.inc', 'native_profile_text_valid')
+        debug_helpers += '\n' + function('src/insight-debuggers/gdb-profile-debug-model.inc', 'native_profile_watch_expression')
         debug_helpers += '\n' + function('src/insight-debuggers/gdb-profile-locations-model.inc', 'native_profile_locations_validate')
         debug_helpers += '\n' + '\n'.join(function('src/insight-debuggers/gdb-profile-debug-model.inc', name)
                                                 for name in ('native_profile_debug_validate', 'native_profile_point_command'))
