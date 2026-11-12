@@ -215,3 +215,7 @@ Drag the divider above the bottom shelf down to collapse it almost to a thin str
 **Navigate → Lock Context Window** mirrors the Context Follow button: locking disables tracking and cancels the pending definition update while retaining the displayed source. Unlocking resumes tracking. Locking Context does not cancel the shared refresh queue used by other panels.
 
 The central editor/Context column can be collapsed to a narrow strip even in a new empty profile. Drag the dividers back to restore the workspace and its tabs.
+
+![Compact shelves](media/compact-shelves-regression.jpg)
+
+Real Linux editor captured by the GUI regression in an isolated test profile: 180 px File Symbols and 177 px Project shelves.

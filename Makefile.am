@@ -604,7 +604,7 @@ EXTRA_DIST += insight/tests/glib_compat_test.c insight/tests/build_sources_test.
 
 dist_insightdocmedia_DATA += insight/docs/media/revision-colors.svg
 
-dist_insightdocmedia_DATA += insight/docs/media/compact-context.jpg
+dist_insightdocmedia_DATA += insight/docs/media/compact-context.jpg insight/docs/media/compact-shelves-regression.jpg
 
 dist_insightdocmedia_DATA += insight/docs/media/context-updates.svg
 
