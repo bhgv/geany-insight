@@ -33,8 +33,10 @@ static void native_name_refresh_views(NativeDebug *session)
 }
 
 /* EN: Invalidate session's old frame/register state before repainting instructions on a thread/frame change.
+ * Reset the register comparison baseline even for a return without an intervening read.
  * Preserve global address ranges; active reads and unchanged contexts are left intact.
  * RU: Очищает старое состояние кадра/регистров session до перерисовки инструкций при смене потока/кадра.
+ * Сбрасывает базу сравнения регистров даже при возвращении без промежуточного чтения.
  * Сохраняет глобальные диапазоны адресов; активное чтение и неизменившийся контекст не затрагиваются. */
 static void native_assembly_context(NativeDebug *session)
 {
@@ -55,6 +57,10 @@ static void native_assembly_context(NativeDebug *session)
     }
     if (assembly->register_rows)
         gtk_list_store_clear(assembly->register_rows);
+    if (assembly->previous_registers)
+        g_hash_table_remove_all(assembly->previous_registers);
+    g_clear_pointer(&assembly->register_thread, g_free);
+    g_clear_pointer(&assembly->register_frame, g_free);
     assembly->instruction_pc_valid = FALSE;
     assembly->follow_needed = TRUE;
     g_hash_table_remove_all(assembly->registers);

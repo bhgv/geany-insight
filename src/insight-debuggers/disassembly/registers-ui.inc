@@ -2,15 +2,19 @@
 /* EN: Show target-defined general-purpose register snapshots with names, changes and inspection actions.
  * RU: Показывает снимки регистров общего назначения цели с именами, изменениями и действиями исследования. */
 
-/* EN: Rebuild session's register rows in GDB definition order; compare only snapshots from the same selected thread/frame.
- * RU: Перестраивает регистры session в порядке GDB; сравнивает только снимки одного выбранного потока/кадра. */
+/* EN: Rebuild session's register rows in GDB definition order; compare only a known matching thread/frame.
+ * Missing context identifiers suppress change highlighting while still displaying confirmed register values.
+ * RU: Перестраивает регистры session в порядке GDB; сравнивает только известный совпадающий поток/кадр.
+ * При отсутствии идентификаторов контекста показывает подтверждённые значения без подсветки изменений. */
 static void native_assembly_register_rows(NativeDebug *session)
 {
     NativeAssembly *assembly = session->assembly;
     if (!assembly->register_rows || !assembly->previous_registers || !assembly->register_names)
         return;
     gtk_list_store_clear(assembly->register_rows);
-    gboolean compare = !g_strcmp0(assembly->register_thread, session->selected_thread) &&
+    gboolean compare = session->selected_thread && *session->selected_thread &&
+        session->selected_frame && *session->selected_frame &&
+        !g_strcmp0(assembly->register_thread, session->selected_thread) &&
         !g_strcmp0(assembly->register_frame, session->selected_frame);
     for (guint i = 0; i < assembly->register_names->len; i++)
     {
