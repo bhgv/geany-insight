@@ -44,6 +44,17 @@ main (int argc, char **argv)
         if (first)
         {
             gchar *password = insight_remote_password_load (config, credential, NULL);
+            /* EN: Reuse old prompt-keyed passphrases once and migrate them to the selected key's stable identity.
+             * RU: Повторно используем прежний пароль по запросу и переносим к устойчивому идентификатору ключа. */
+            if (!password && strstr(prompt, "passphrase") && identity && *identity)
+            {
+                gchar *legacy = g_compute_checksum_for_string(G_CHECKSUM_SHA256, prompt, -1);
+                password = insight_remote_password_load(config, legacy, NULL);
+                if (password && insight_remote_password_save(config, credential, password, NULL))
+                    insight_remote_password_forget(config, legacy, NULL);
+                g_free(legacy);
+            }
+
             if (password)
             {
                 fputs (password, stdout);

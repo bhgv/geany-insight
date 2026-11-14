@@ -53,6 +53,7 @@ extern GKeyFile *g_key_file_new(void);
 extern void g_key_file_unref(GKeyFile *);
 extern int g_key_file_get_integer(GKeyFile *, const char *, const char *, GError **);
 extern char *g_key_file_get_string(GKeyFile *, const char *, const char *, GError **);
+extern int g_key_file_has_key(GKeyFile *, const char *, const char *, GError **);
 extern int g_key_file_get_boolean(GKeyFile *, const char *, const char *, GError **);
 extern void g_key_file_set_boolean(GKeyFile *, const char *, const char *, int);
 extern char *g_strescape(const char *, const char *);
@@ -80,6 +81,17 @@ int main(void)
     for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
         g_key_file_set_string(profile, "debugger", native_profile_names[i], "");
     assert(native_profile_validate(profile, &error) && !error);
+    g_key_file_set_string(profile, "debugger", "ssh-start-server", "broken");
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_boolean(profile, "debugger", "ssh-start-server", TRUE);
+    g_key_file_set_boolean(profile, "debugger", "ssh-remember", FALSE);
+    g_key_file_set_string(profile, "debugger", "ssh-directory", "/opt/app");
+    assert(native_profile_validate(profile, &error));
+    g_key_file_set_string(profile, "debugger", "ssh-directory", "/opt/app\ncommand");
+    assert(!native_profile_validate(profile, &error));
+    g_clear_error(&error);
+    g_key_file_set_string(profile, "debugger", "ssh-directory", "");
     g_key_file_set_integer(profile, "debugger", "version", 5);
     assert(!native_profile_validate(profile, &error));
     g_clear_error(&error);

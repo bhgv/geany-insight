@@ -2,6 +2,23 @@
 /* EN: Provide the local/SSH connection form, explicit connect and non-killing detach actions.
  * RU: Создаёт форму локального/SSH-подключения, явное подключение и отсоединение без kill. */
 
+/* EN: Start session's selected SSH connection, reusing its saved auto-server and working-directory settings.
+ * RU: Запускает выбранное SSH-подключение session с сохранённым автозапуском сервера и рабочим каталогом. */
+static void native_remote_begin(NativeDebug *session)
+{
+    NativeRemote *remote = session->remote;
+    if (remote->extended && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote->start_server)))
+    {
+        const gchar *value = gtk_entry_get_text(GTK_ENTRY(remote->directory));
+        gchar *directory =
+            *value ? g_strdup(value) : g_path_get_dirname(gtk_entry_get_text(GTK_ENTRY(remote->executable)));
+        native_server_start(session, directory);
+        g_free(directory);
+    }
+    else
+        native_remote_spawn(session);
+}
+
 /* EN: Connect or detach session data from button; reject incomplete paths before opening SSH.
  * RU: Подключает или отсоединяет сеанс data по button; проверяет пути до открытия SSH. */
 static void native_remote_clicked(GtkButton *button, gpointer data)
@@ -60,7 +77,7 @@ static void native_remote_clicked(GtkButton *button, gpointer data)
         return;
     }
     remote->extended = gtk_combo_box_get_active(GTK_COMBO_BOX(remote->mode)) == 2;
-    native_remote_spawn(session);
+    native_remote_begin(session);
 }
 
 /* EN: Refresh mode-dependent controls for session data when combo changes; combo is unused.
@@ -125,15 +142,10 @@ static void native_setup_applied(const InsightSshSetup *settings, gpointer data)
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(remote->remember), settings->remember);
     gtk_combo_box_set_active(GTK_COMBO_BOX(remote->mode), 2);
     remote->extended = TRUE;
-    if (settings->start_server)
-    {
-        gchar *directory =
-            *settings->directory ? g_strdup(settings->directory) : g_path_get_dirname(settings->program);
-        native_server_start(session, directory);
-        g_free(directory);
-    }
-    else
-        native_remote_spawn(session);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(remote->start_server), settings->start_server);
+    gtk_entry_set_text(GTK_ENTRY(remote->directory), settings->directory ? settings->directory : "");
+    native_profile_save(session);
+    native_remote_begin(session);
 }
 
 /* EN: Open the guided SSH debugger for session data; button is unused. Retain its parent until closure.
@@ -150,6 +162,7 @@ static void native_setup_open(GtkButton *button, gpointer data)
                                .config = gtk_entry_get_text(GTK_ENTRY(remote->config)),
                                .port = gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)),
                                .program = gtk_entry_get_text(GTK_ENTRY(remote->executable)),
+                               .directory = gtk_entry_get_text(GTK_ENTRY(remote->directory)),
                                .local_source = gtk_entry_get_text(GTK_ENTRY(remote->local_source)),
                                .remote_source = gtk_entry_get_text(GTK_ENTRY(remote->remote_source)),
                                .server_port =
@@ -159,8 +172,8 @@ static void native_setup_open(GtkButton *button, gpointer data)
     gchar *share = app->datadir ? g_path_get_dirname(app->datadir) : NULL;
     gchar *prefix = share ? g_path_get_dirname(share) : NULL;
     gchar *bin = prefix ? g_build_filename(prefix, "bin", NULL) : NULL;
-    GtkWidget *wizard = insight_ssh_setup_show(GTK_WINDOW(session->window), app->configdir,
-        bin, &initial, TRUE, native_setup_applied, session);
+    GtkWidget *wizard = insight_ssh_setup_show(GTK_WINDOW(session->window), app->configdir, bin, &initial,
+                                               TRUE, native_setup_applied, session);
     g_free(bin);
     g_free(prefix);
     g_free(share);
@@ -241,10 +254,18 @@ static GtkWidget *native_remote_widget(NativeDebug *session, const gchar *target
     gtk_box_pack_start(GTK_BOX(page), scroll, TRUE, TRUE, 0);
     remote->remember = gtk_check_button_new_with_label(insight_tr("Remember passwords on this computer"));
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(remote->remember), TRUE);
+    gtk_widget_set_name(remote->remember, "insight-gdb-ssh-remember");
     gtk_grid_attach(GTK_GRID(grid), remote->remember, 0, 12, 2, 1);
     GtkWidget *forget = gtk_button_new_with_label(insight_tr("Forget saved SSH passwords"));
     g_signal_connect(forget, "clicked", G_CALLBACK(native_setup_forget), session);
     gtk_grid_attach(GTK_GRID(grid), forget, 0, 13, 2, 1);
+    remote->directory =
+        native_remote_entry(GTK_GRID(grid), 14, "Remote working directory (empty: program folder)", "",
+                            "insight-gdb-remote-directory");
+    remote->start_server =
+        gtk_check_button_new_with_label(insight_tr("Start gdbserver automatically on the server"));
+    gtk_widget_set_name(remote->start_server, "insight-gdb-ssh-start-server");
+    gtk_grid_attach(GTK_GRID(grid), remote->start_server, 0, 15, 2, 1);
     GtkWidget *buttons = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
     remote->connect = gtk_button_new_with_label(insight_tr("Connect gdbserver via SSH"));
     remote->disconnect = gtk_button_new_with_label(insight_tr("Detach and close SSH"));

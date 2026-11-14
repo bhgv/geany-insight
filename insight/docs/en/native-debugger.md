@@ -17,6 +17,8 @@ Remote-program step in the production wizard, captured in an isolated GTK fixtur
 
 ![Remote debugging setup](../media/ssh-setup-debug.jpg)
 
+Completing the wizard saves SSH settings, remote working directory, automatic gdbserver startup, password-remembering choice and current breakpoints/watches in the project/executable debugger profile. Next time you open the same local executable, use **Remote / SSH → Connect gdbserver via SSH**: the editor starts its own server again when enabled, without repeating the wizard. Use **Save debugger profile** after editing advanced settings manually. Restoring a profile does not connect or run a program.
+
 
 Build with debug symbols, for example `cc -g -Og main.c -o app` or
 `c++ -g -Og main.cpp -o app`. Install GDB and make it available in

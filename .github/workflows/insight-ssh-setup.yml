@@ -10,6 +10,8 @@ on:
       - 'insight/desktop/ssh_*'
       - 'insight/desktop/remote_*'
       - 'insight/tests/ssh_setup*'
+      - 'insight/tests/ssh_auth_helper_test.py'
+      - 'src/insight-askpass.c'
       - '.github/workflows/insight-ssh-setup.yml'
   workflow_dispatch:
 permissions:
@@ -26,6 +28,10 @@ jobs:
         run: |
           cc -Wall -Wextra -Werror=implicit-function-declaration -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_test.c insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c -o ssh-model-test $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -Wall -Wextra -Werror=implicit-function-declaration -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c -o ssh-wizard-test $(pkg-config --libs gtk+-3.0 gio-2.0)
+      - name: Build and verify password reuse in production askpass
+        run: |
+          cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) src/insight-askpass.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o ssh-askpass-test $(pkg-config --libs gtk+-3.0 gio-2.0)
+          python3 insight/tests/ssh_auth_helper_test.py ./ssh-askpass-test
       - name: Verify credentials and public keys
         run: ./ssh-model-test
       - name: Drive real GTK wizard and capture its pages

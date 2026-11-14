@@ -9,14 +9,16 @@
 static GtkWidget *native_profile_entry(NativeDebug *session, guint index)
 {
     NativeRemote *remote = session->remote;
-    GtkWidget *entries[] = {remote->host, remote->user, remote->identity, remote->config,
-        remote->server_host, remote->executable, remote->remote_source, remote->local_source,
-        remote->sysroot, session->launch_args, session->launch_directory};
+    GtkWidget *entries[] = {
+        remote->host,        remote->user,         remote->identity,         remote->config,
+        remote->server_host, remote->executable,   remote->remote_source,    remote->local_source,
+        remote->sysroot,     session->launch_args, session->launch_directory};
     return index < G_N_ELEMENTS(entries) ? entries[index] : NULL;
 }
 
 /* EN: Load session's whole validated profile; missing files are silent only during automatic opening.
- * RU: Загружает полностью проверенный профиль session; отсутствие файла скрывается только при открытии окна. */
+ * RU: Загружает полностью проверенный профиль session; отсутствие файла скрывается только при открытии окна.
+ */
 static void native_profile_load(NativeDebug *session, gboolean automatic)
 {
     NativeRemote *remote = session->remote;
@@ -25,17 +27,20 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
     if (g_stat(remote->profile_path, &information))
     {
         if (!automatic || errno != ENOENT)
-            gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Debugger profile was not found or cannot be read."));
+            gtk_label_set_text(GTK_LABEL(remote->status),
+                               insight_tr("Debugger profile was not found or cannot be read."));
         return;
     }
     if (information.st_size < 0 || information.st_size > 256 * 1024)
     {
-        gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Debugger profile exceeds the 256 KiB limit."));
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           insight_tr("Debugger profile exceeds the 256 KiB limit."));
         return;
     }
     GKeyFile *profile = g_key_file_new();
     gboolean valid = g_key_file_load_from_file(profile, remote->profile_path, G_KEY_FILE_NONE, &error) &&
-        native_profile_validate(profile, &error) && native_name_profile_validate(profile, &error);
+                     native_profile_validate(profile, &error) &&
+                     native_name_profile_validate(profile, &error);
     if (valid)
     {
         for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
@@ -45,38 +50,59 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
             g_free(value);
         }
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(remote->port),
-            g_key_file_get_integer(profile, "debugger", "ssh-port", NULL));
+                                  g_key_file_get_integer(profile, "debugger", "ssh-port", NULL));
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(remote->server_port),
-            g_key_file_get_integer(profile, "debugger", "server-port", NULL));
+                                  g_key_file_get_integer(profile, "debugger", "server-port", NULL));
         gtk_combo_box_set_active(GTK_COMBO_BOX(remote->mode),
-            g_key_file_get_integer(profile, "debugger", "mode", NULL));
-        gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Debugger profile restored. Connect or Run explicitly."));
+                                 g_key_file_get_integer(profile, "debugger", "mode", NULL));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(remote->remember),
+                                     !g_key_file_has_key(profile, "debugger", "ssh-remember", NULL) ||
+                                         g_key_file_get_boolean(profile, "debugger", "ssh-remember", NULL));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(remote->start_server),
+                                     g_key_file_get_boolean(profile, "debugger", "ssh-start-server", NULL));
+        gchar *directory = g_key_file_get_string(profile, "debugger", "ssh-directory", NULL);
+        gtk_entry_set_text(GTK_ENTRY(remote->directory), directory ? directory : "");
+        g_free(directory);
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           insight_tr("Debugger profile restored. Connect or Run explicitly."));
         native_name_profile_load(session, profile);
         native_profile_debug_load(session, profile);
     }
     else
-        gtk_label_set_text(GTK_LABEL(remote->status), error ? error->message : insight_tr("Cannot restore debugger profile."));
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           error ? error->message : insight_tr("Cannot restore debugger profile."));
     g_clear_error(&error);
     g_key_file_unref(profile);
 }
 
 /* EN: Save session's form, source points and watches; preserve the old profile on validation/write failures.
- * RU: Сохраняет форму, точки исходников и наблюдения session; при ошибках проверки/записи прежний профиль сохраняется. */
+ * RU: Сохраняет форму, точки исходников и наблюдения session; при ошибках проверки/записи прежний профиль
+ * сохраняется. */
 static void native_profile_save(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
     GKeyFile *profile = g_key_file_new();
     g_key_file_set_integer(profile, "debugger", "version", 4);
-    g_key_file_set_integer(profile, "debugger", "mode", gtk_combo_box_get_active(GTK_COMBO_BOX(remote->mode)));
-    g_key_file_set_integer(profile, "debugger", "ssh-port", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)));
-    g_key_file_set_integer(profile, "debugger", "server-port", gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->server_port)));
+    g_key_file_set_integer(profile, "debugger", "mode",
+                           gtk_combo_box_get_active(GTK_COMBO_BOX(remote->mode)));
+    g_key_file_set_integer(profile, "debugger", "ssh-port",
+                           gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)));
+    g_key_file_set_integer(profile, "debugger", "server-port",
+                           gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->server_port)));
     for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
         g_key_file_set_string(profile, "debugger", native_profile_names[i],
-            gtk_entry_get_text(GTK_ENTRY(native_profile_entry(session, i))));
+                              gtk_entry_get_text(GTK_ENTRY(native_profile_entry(session, i))));
+    g_key_file_set_boolean(profile, "debugger", "ssh-remember",
+                           gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote->remember)));
+    g_key_file_set_boolean(profile, "debugger", "ssh-start-server",
+                           gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote->start_server)));
+    g_key_file_set_string(profile, "debugger", "ssh-directory",
+                          gtk_entry_get_text(GTK_ENTRY(remote->directory)));
     native_profile_debug_store(session, profile);
     native_name_profile_store(session, profile);
     GError *error = NULL;
-    gboolean valid = native_profile_validate(profile, &error) && native_name_profile_validate(profile, &error);
+    gboolean valid =
+        native_profile_validate(profile, &error) && native_name_profile_validate(profile, &error);
     gchar *directory = g_path_get_dirname(remote->profile_path);
     if (valid && g_mkdir_with_parents(directory, 0700))
     {
@@ -90,27 +116,30 @@ static void native_profile_save(NativeDebug *session)
         if (contents && length > 256 * 1024)
         {
             g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                insight_tr("Debugger profile exceeds the 256 KiB limit."));
+                                insight_tr("Debugger profile exceeds the 256 KiB limit."));
             valid = FALSE;
         }
         else
         {
             GFile *file = g_file_new_for_path(remote->profile_path);
             valid = contents && g_file_replace_contents(file, contents, length, NULL, FALSE,
-                G_FILE_CREATE_PRIVATE, NULL, NULL, &error);
+                                                        G_FILE_CREATE_PRIVATE, NULL, NULL, &error);
             g_object_unref(file);
         }
         g_free(contents);
     }
-    gtk_label_set_text(GTK_LABEL(remote->status), valid ? insight_tr("Debugger profile saved for this project and executable.") :
-        error ? error->message : insight_tr("Cannot save debugger profile."));
+    gtk_label_set_text(GTK_LABEL(remote->status),
+                       valid   ? insight_tr("Debugger profile saved for this project and executable.")
+                       : error ? error->message
+                               : insight_tr("Cannot save debugger profile."));
     g_clear_error(&error);
     g_free(directory);
     g_key_file_unref(profile);
 }
 
 /* EN: Save idle/paused session data from button; restoring/forgetting require an inactive target and tunnel.
- * RU: Сохраняет session data по button в простое/на паузе; восстановление/удаление требуют неактивных программы и туннеля. */
+ * RU: Сохраняет session data по button в простое/на паузе; восстановление/удаление требуют неактивных
+ * программы и туннеля. */
 static void native_profile_clicked(GtkButton *button, gpointer data)
 {
     NativeDebug *session = data;
@@ -127,8 +156,10 @@ static void native_profile_clicked(GtkButton *button, gpointer data)
     else
     {
         gboolean removed = !g_unlink(remote->profile_path) || errno == ENOENT;
-        gtk_label_set_text(GTK_LABEL(remote->status), removed ?
-            insight_tr("Saved debugger profile forgotten. Current form values are kept.") : g_strerror(errno));
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           removed
+                               ? insight_tr("Saved debugger profile forgotten. Current form values are kept.")
+                               : g_strerror(errno));
     }
 }
 
@@ -137,8 +168,8 @@ static void native_profile_clicked(GtkButton *button, gpointer data)
 static GtkWidget *native_profile_widget(NativeDebug *session, const gchar *target)
 {
     NativeRemote *remote = session->remote;
-    remote->profile_path = native_profile_path(app->configdir,
-        app->project ? app->project->file_name : NULL, target);
+    remote->profile_path =
+        native_profile_path(app->configdir, app->project ? app->project->file_name : NULL, target);
     GtkWidget *box = remote->profile_controls = gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(box), GTK_SELECTION_NONE);
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(box), 3);

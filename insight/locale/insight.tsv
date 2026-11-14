@@ -3470,3 +3470,15 @@ Choose local source directory…	Выбрать локальный катало�
 Debug server port (different from SSH port)	Порт сервера отладки (отличается от порта SSH)
 Start gdbserver automatically on the server	Автоматически запускать gdbserver на сервере
 The remote program is not uploaded automatically. Keep a matching local copy with debug symbols. If gdbserver is already running, turn automatic startup off.	Программа не отправляется на сервер автоматически. Подготовьте соответствующую локальную копию с отладочными символами. Если gdbserver уже запущен, выключите автоматический запуск.
+Connect will prepare remote debugging. Add a breakpoint, then press Run.	Подключение подготовит удалённую отладку. Добавьте точку останова и нажмите «Запустить».
+Connect will open your SSH terminal.	После подключения откроется терминал SSH.
+Choose local source directory	Выберите локальный каталог исходников
+Choose an existing private SSH key	Выберите существующий закрытый ключ SSH
+Matching source directory on this computer (optional)	Соответствующий каталог исходников на этом компьютере (необязательно)
+SSH setup output exceeds 64 KiB.	Вывод настройки SSH превышает 64 КиБ.
+SSH setup command failed.	Команда настройки SSH завершилась с ошибкой.
+Working… You can cancel at any time.	Выполнение… Можно отменить в любой момент.
+SSH setup could not start.	Не удалось начать настройку SSH.
+Remote working directory (empty: program folder)	Рабочий каталог на сервере (пусто: каталог программы)
+Invalid SSH setup options in debugger profile.	Недопустимые параметры SSH в профиле отладчика.
+Invalid remote working directory in debugger profile.	Недопустимый рабочий каталог на сервере в профиле отладчика.

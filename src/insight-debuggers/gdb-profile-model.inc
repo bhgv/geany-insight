@@ -3,12 +3,12 @@
  * RU: Определяет и проверяет ограниченные настройки отладчика для проекта и программы. */
 
 static const gchar *native_profile_names[] = {
-    "host", "user", "identity", "ssh-config", "server-host", "remote-executable",
-    "remote-source", "local-source", "sysroot", "arguments", "working-directory"
-};
+    "host",          "user",         "identity", "ssh-config", "server-host",      "remote-executable",
+    "remote-source", "local-source", "sysroot",  "arguments",  "working-directory"};
 
-/* EN: Validate every required value in profile before changing widgets; return FALSE and error on invalid data.
- * RU: Проверяет все обязательные значения profile до изменения формы; ошибка даёт FALSE и error. */
+/* EN: Validate required fields and optional SSH setup values in profile before changing widgets; return FALSE
+ * and error on invalid data. RU: Проверяет обязательные поля и необязательные параметры SSH в profile до
+ * изменения формы; ошибка даёт FALSE и error. */
 static gboolean native_profile_validate(GKeyFile *profile, GError **error)
 {
     const gchar *integer_names[] = {"version", "mode", "ssh-port", "server-port"};
@@ -22,7 +22,7 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
         {
             g_clear_error(&failure);
             g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                insight_tr("Invalid debugger profile version, mode or port."));
+                                insight_tr("Invalid debugger profile version, mode or port."));
             return FALSE;
         }
     }
@@ -30,19 +30,45 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
     {
         gchar *value = g_key_file_get_string(profile, "debugger", native_profile_names[i], NULL);
         glong limit = !strcmp(native_profile_names[i], "arguments") ? 8192 : 4096;
-        gboolean valid = value && strlen(value) <= (gsize)limit * 4 &&
-            g_utf8_validate(value, -1, NULL) && g_utf8_strlen(value, -1) <= limit &&
-            !strpbrk(value, "\r\n");
+        gboolean valid = value && strlen(value) <= (gsize)limit * 4 && g_utf8_validate(value, -1, NULL) &&
+                         g_utf8_strlen(value, -1) <= limit && !strpbrk(value, "\r\n");
         g_free(value);
         if (!valid)
         {
             g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                insight_tr("Invalid or missing debugger profile field."));
+                                insight_tr("Invalid or missing debugger profile field."));
+            return FALSE;
+        }
+    }
+    const gchar *options[] = {"ssh-remember", "ssh-start-server"};
+    for (guint i = 0; i < G_N_ELEMENTS(options); i++)
+        if (g_key_file_has_key(profile, "debugger", options[i], NULL))
+        {
+            GError *failure = NULL;
+            g_key_file_get_boolean(profile, "debugger", options[i], &failure);
+            if (failure)
+            {
+                g_clear_error(&failure);
+                g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                    insight_tr("Invalid SSH setup options in debugger profile."));
+                return FALSE;
+            }
+        }
+    if (g_key_file_has_key(profile, "debugger", "ssh-directory", NULL))
+    {
+        gchar *value = g_key_file_get_string(profile, "debugger", "ssh-directory", NULL);
+        gboolean valid = value && strlen(value) <= 4096 && g_utf8_validate(value, -1, NULL) &&
+                         !strpbrk(value, "\r\n") && (!*value || *value == '/');
+        g_free(value);
+        if (!valid)
+        {
+            g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+                                insight_tr("Invalid remote working directory in debugger profile."));
             return FALSE;
         }
     }
     return g_key_file_get_integer(profile, "debugger", "version", NULL) < 2 ||
-        native_profile_debug_validate(profile, error);
+           native_profile_debug_validate(profile, error);
 }
 
 /* EN: Build a private settings filename from directory, project and target; all returned bytes are owned.
