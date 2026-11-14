@@ -66,18 +66,40 @@ gchar *insight_remote_program(const gchar *program, const gchar *directory)
     }
     return path;
 }
-gchar **insight_remote_argv(const InsightRemote *r,gboolean sftp) {
- GPtrArray *args=g_ptr_array_new();
- g_ptr_array_add(args,g_strdup(sftp ? "sftp" : "ssh"));
- g_ptr_array_add(args,g_strdup("-oBatchMode=no")); g_ptr_array_add(args,g_strdup("-oConnectTimeout=15"));
- g_ptr_array_add(args,g_strdup("-oServerAliveInterval=15")); g_ptr_array_add(args,g_strdup("-oServerAliveCountMax=3"));
- if(*r->user) g_ptr_array_add(args,g_strdup_printf("-oUser=%s",r->user));
- if(*r->identity) { g_ptr_array_add(args,g_strdup("-i")); g_ptr_array_add(args,g_strdup(r->identity)); }
- g_ptr_array_add(args,g_strdup(sftp ? "-P" : "-p")); g_ptr_array_add(args,g_strdup_printf("%u",r->port));
- if(sftp) { g_ptr_array_add(args,g_strdup("-b")); g_ptr_array_add(args,g_strdup("-")); }
- else g_ptr_array_add(args,g_strdup("-tt"));
- g_ptr_array_add(args,g_strdup("--")); g_ptr_array_add(args,sftp && strchr(r->host,':') ? g_strdup_printf("[%s]",r->host) : g_strdup(r->host));
- g_ptr_array_add(args,NULL); return (gchar **)g_ptr_array_free(args,FALSE);
+/* EN: Return owned SSH/SFTP arguments for endpoint r; Windows local key paths are absolute before child cwd changes.
+ * RU: Возвращает аргументы SSH/SFTP сервера r; локальный ключ Windows получает абсолютный путь до смены каталога процесса. */
+gchar **insight_remote_argv(const InsightRemote *r, gboolean sftp)
+{
+    GPtrArray *args = g_ptr_array_new();
+    g_ptr_array_add(args, g_strdup(sftp ? "sftp" : "ssh"));
+    g_ptr_array_add(args, g_strdup("-oBatchMode=no"));
+    g_ptr_array_add(args, g_strdup("-oConnectTimeout=15"));
+    g_ptr_array_add(args, g_strdup("-oServerAliveInterval=15"));
+    g_ptr_array_add(args, g_strdup("-oServerAliveCountMax=3"));
+    if (*r->user)
+        g_ptr_array_add(args, g_strdup_printf("-oUser=%s", r->user));
+    if (*r->identity)
+    {
+        g_ptr_array_add(args, g_strdup("-i"));
+#ifdef G_OS_WIN32
+        g_ptr_array_add(args, insight_canonicalize_filename(r->identity, NULL));
+#else
+        g_ptr_array_add(args, g_strdup(r->identity));
+#endif
+    }
+    g_ptr_array_add(args, g_strdup(sftp ? "-P" : "-p"));
+    g_ptr_array_add(args, g_strdup_printf("%u", r->port));
+    if (sftp)
+    {
+        g_ptr_array_add(args, g_strdup("-b"));
+        g_ptr_array_add(args, g_strdup("-"));
+    }
+    else
+        g_ptr_array_add(args, g_strdup("-tt"));
+    g_ptr_array_add(args, g_strdup("--"));
+    g_ptr_array_add(args, sftp && strchr(r->host, ':') ? g_strdup_printf("[%s]", r->host) : g_strdup(r->host));
+    g_ptr_array_add(args, NULL);
+    return (gchar **)g_ptr_array_free(args, FALSE);
 }
 gchar **insight_remote_scp_argv(const InsightRemote *r,const gchar *local,gboolean upload,gboolean folder,GError **error) {
  if(!valid_path(local) || !g_path_is_absolute(local)) { g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"SCP requires an absolute local path");return NULL; }

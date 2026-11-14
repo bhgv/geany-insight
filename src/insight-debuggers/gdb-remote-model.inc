@@ -30,7 +30,11 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
     if (*config)
     {
         g_ptr_array_add(args, g_strdup("-F"));
+#ifdef G_OS_WIN32
+        g_ptr_array_add(args, insight_canonicalize_filename(config, NULL));
+#else
         g_ptr_array_add(args, g_strdup(config));
+#endif
     }
     if (port)
     {
@@ -45,7 +49,11 @@ static gchar **native_remote_argv(const gchar *ssh, const gchar *host, const gch
     if (*identity)
     {
         g_ptr_array_add(args, g_strdup("-i"));
+#ifdef G_OS_WIN32
+        g_ptr_array_add(args, insight_canonicalize_filename(identity, NULL));
+#else
         g_ptr_array_add(args, g_strdup(identity));
+#endif
     }
     gchar *address = strchr(server_host, ':') ? g_strdup_printf("[%s]", server_host) : g_strdup(server_host);
     g_ptr_array_add(args, g_strdup("-L"));

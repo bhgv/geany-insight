@@ -200,8 +200,10 @@ setup_job_start (SshSetupWizard *wizard, SetupJob kind)
                 "Choose a valid SSH private key to obtain its public key.");
         else
         {
-            const gchar *args[] = { keygen, "-y", "-f", settings.identity, NULL };
+            gchar *absolute_identity = insight_canonicalize_filename(settings.identity, NULL);
+            const gchar *args[] = { keygen, "-y", "-f", absolute_identity, NULL };
             argv = g_strdupv ((gchar **)args);
+            g_free(absolute_identity);
         }
     }
     else if (!error)

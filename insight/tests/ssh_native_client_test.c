@@ -2,6 +2,7 @@
 /* EN: Exercise production debugger tunnel arguments with a native OpenSSH client and loopback SSH fixture.
  * RU: Проверяет аргументы туннеля отладчика с нативным OpenSSH и локальной SSH-фикстурой. */
 #include "ssh_auth.h"
+#include "glib_compat.h"
 #include "remote_io.h"
 #include <string.h>
 #include <glib/gstdio.h>

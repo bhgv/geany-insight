@@ -189,7 +189,11 @@ client_config (gchar **argv, const RemoteRoot *root)
         if (!strcmp (argv[i], "--"))
         {
             g_ptr_array_add (args, g_strdup ("-F"));
+#ifdef G_OS_WIN32
+            g_ptr_array_add(args, insight_canonicalize_filename(root->ssh_config, NULL));
+#else
             g_ptr_array_add (args, g_strdup (root->ssh_config));
+#endif
         }
         g_ptr_array_add (args, g_strdup (argv[i]));
     }

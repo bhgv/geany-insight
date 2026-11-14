@@ -108,15 +108,26 @@ insight_ssh_auth_prepare (GSubprocessLauncher *launcher, const gchar *configdir,
     g_subprocess_launcher_setenv (launcher, "GEANY_INSIGHT_SSH_TARGET", target, TRUE);
     g_subprocess_launcher_setenv (launcher, "GEANY_INSIGHT_SSH_AUTH_SESSION", session, TRUE);
     g_subprocess_launcher_setenv (launcher, "GEANY_INSIGHT_SSH_SAVE_PASSWORD", "1", TRUE);
+#ifdef G_OS_WIN32
+    gchar *absolute_identity = identity && *identity ? insight_canonicalize_filename(identity, NULL) : g_strdup("");
+    g_subprocess_launcher_setenv(launcher, "GEANY_INSIGHT_SSH_KEY", absolute_identity, TRUE);
+    g_free(absolute_identity);
+#else
     g_subprocess_launcher_setenv (launcher, "GEANY_INSIGHT_SSH_KEY", identity ? identity : "", TRUE);
+#endif
     if (helper)
     {
 #ifdef G_OS_WIN32
-        /* EN: Win32 OpenSSH passes this value through its command-line builder; quote the executable path.
-         * RU: Win32 OpenSSH передаёт значение построителю командной строки; заключаем путь программы в кавычки. */
-        gchar *quoted_helper = g_strconcat("\"", helper, "\"", NULL);
-        g_subprocess_launcher_setenv(launcher, "SSH_ASKPASS", quoted_helper, TRUE);
-        g_free(quoted_helper);
+        /* EN: Win32 OpenSSH reads askpass through ANSI getenv. Keep that value ASCII and resolve it in a trusted cwd.
+         * RU: Win32 OpenSSH читает askpass через ANSI getenv. Оставляем ASCII-имя и задаём доверенный рабочий каталог. */
+        gchar *helper_directory = g_path_get_dirname(helper);
+        gchar *helper_name = g_path_get_basename(helper);
+        gchar *relative_helper = g_strconcat(".\\", helper_name, NULL);
+        g_subprocess_launcher_set_cwd(launcher, helper_directory);
+        g_subprocess_launcher_setenv(launcher, "SSH_ASKPASS", relative_helper, TRUE);
+        g_free(relative_helper);
+        g_free(helper_name);
+        g_free(helper_directory);
 #else
         g_subprocess_launcher_setenv (launcher, "SSH_ASKPASS", helper, TRUE);
 #endif

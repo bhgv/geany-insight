@@ -3,6 +3,7 @@
  * connection verification. RU: Реализует отменяемый мастер SSH с настройкой
  * ключа и проверкой соединения. */
 #include "insight-ssh-setup.h"
+#include "../insight/desktop/glib_compat.h"
 #include "../insight/desktop/remote_credentials.h"
 #include "../insight/desktop/ssh_auth.h"
 #include "../insight/desktop/ssh_setup.h"

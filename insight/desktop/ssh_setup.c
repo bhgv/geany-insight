@@ -3,6 +3,7 @@
  * operations with literal arguments. RU: Проверяет ввод мастера и формирует
  * команды SSH, установки ключа и сервера отладки с буквальными аргументами. */
 #include "ssh_setup.h"
+#include "glib_compat.h"
 #include <string.h>
 
 /* EN: Return owned SSH argv for remote using client/config and one command;
@@ -32,7 +33,11 @@ gchar **insight_ssh_setup_argv(const InsightRemote *remote, const gchar *client,
             if (!strcmp(base[i], "--") && config && *config)
             {
                 g_ptr_array_add(args, g_strdup("-F"));
+#ifdef G_OS_WIN32
+                g_ptr_array_add(args, insight_canonicalize_filename(config, NULL));
+#else
                 g_ptr_array_add(args, g_strdup(config));
+#endif
             }
             g_ptr_array_add(args, g_strdup(base[i]));
         }
