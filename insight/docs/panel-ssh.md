@@ -16,6 +16,12 @@ The wizard needs OpenSSH (`ssh` and, for keys, `ssh-keygen`) and the application
 
 ![Guided SSH and debugging flow](media/ssh-setup-flow.svg)
 
+Production SSH wizard captured in an isolated GTK fixture with a test SSH client. The account and public key are test data; private keys and passwords are not displayed.
+
+![SSH server and login](media/ssh-setup-server.jpg)
+
+![SSH key creation and enrollment](media/ssh-setup-keys.jpg)
+
 
 Remote files and commands through OpenSSH.
 

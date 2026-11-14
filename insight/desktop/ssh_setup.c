@@ -159,9 +159,9 @@ insight_ssh_server_command (const gchar *directory, guint port, GError **error)
         return NULL;
     }
     gchar *quoted = g_shell_quote (directory);
-    gchar *command = g_strdup_printf ("cd %s || exit 1; "
+    gchar *command = g_strdup_printf ("cd %s || exit 1; exec 3<&0; "
                                       "env LC_ALL=C gdbserver --multi 127.0.0.1:%u & server=$!; "
-                                      "(while IFS= read -r ignored; do :; done; kill \"$server\" 2>/dev/null) <&0 & watcher=$!; "
+                                      "(while IFS= read -r ignored; do :; done; kill \"$server\" 2>/dev/null) <&3 & watcher=$!; "
                                       "trap 'kill \"$server\" \"$watcher\" 2>/dev/null' 0 HUP INT TERM; "
                                       "wait \"$server\"; result=$?; kill \"$watcher\" 2>/dev/null; "
                                       "wait \"$watcher\" 2>/dev/null; exit \"$result\"",

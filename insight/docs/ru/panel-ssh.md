@@ -16,6 +16,12 @@
 
 ![Путь настройки SSH и отладки](../media/ssh-setup-flow.svg)
 
+Настоящий мастер SSH в изолированном GTK-тесте с тестовым SSH-клиентом. На снимках тестовая учётная запись и открытый тестовый ключ; закрытый ключ и пароль не отображаются.
+
+![SSH server and login](../media/ssh-setup-server.jpg)
+
+![SSH key creation and enrollment](../media/ssh-setup-keys.jpg)
+
 
 Удалённые файлы и команды через OpenSSH.
 

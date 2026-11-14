@@ -179,6 +179,62 @@ keys (void)
     g_free (keygen);
 }
 
+/* EN: Mark boolean data when process object has been reaped through result.
+ * RU: Устанавливает логическое data после завершения ожидания процесса object через result. */
+static void server_waited(GObject *object, GAsyncResult *result, gpointer data)
+{
+    g_subprocess_wait_finish(G_SUBPROCESS(object), result, NULL);
+    *((gboolean *)data) = TRUE;
+}
+
+/* EN: Check the production server supervisor keeps channel stdin and reaps its server on EOF.
+ * RU: Проверяет сохранение stdin канала производственным супервизором и остановку сервера при EOF. */
+static void server_lifetime(void)
+{
+#ifdef G_OS_WIN32
+    g_test_skip("Remote POSIX shell lifetime fixture runs on Linux");
+#else
+    gchar *directory = g_dir_make_tmp("insight-ssh-server-test-XXXXXX", NULL);
+    gchar *program = g_build_filename(directory, "gdbserver", NULL);
+    g_file_set_contents(program, "#!/bin/sh\nprintf 'Listening on port 2345\\n' >&2\nexec sleep 20\n", -1, NULL);
+    g_chmod(program, 0700);
+    gchar *command = insight_ssh_server_command(directory, 2345, NULL);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDIN_PIPE |
+        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    gchar *search = g_strconcat(directory, G_SEARCHPATH_SEPARATOR_S, g_getenv("PATH"), NULL);
+    g_subprocess_launcher_setenv(launcher, "PATH", search, TRUE);
+    const gchar *argv[] = {"sh", "-c", command, NULL};
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, NULL);
+    g_assert_nonnull(process);
+    GDataInputStream *output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(process));
+    gchar *line = g_data_input_stream_read_line(output, NULL, NULL, NULL);
+    g_assert_cmpstr(line, ==, "Listening on port 2345");
+    g_assert_true(g_output_stream_close(g_subprocess_get_stdin_pipe(process), NULL, NULL));
+    gboolean done = FALSE;
+    g_subprocess_wait_async(process, NULL, server_waited, &done);
+    gint64 deadline = g_get_monotonic_time() + 5 * G_TIME_SPAN_SECOND;
+    while (!done && g_get_monotonic_time() < deadline)
+    {
+        while (g_main_context_iteration(NULL, FALSE))
+            ;
+        g_usleep(1000);
+    }
+    if (!done)
+        g_subprocess_force_exit(process);
+    g_assert_true(done);
+    g_object_unref(output);
+    g_object_unref(process);
+    g_object_unref(launcher);
+    g_remove(program);
+    g_rmdir(directory);
+    g_free(line);
+    g_free(search);
+    g_free(command);
+    g_free(program);
+    g_free(directory);
+#endif
+}
+
 /* EN: Register isolated SSH model checks using argc/argv for GLib test selection.
  * RU: Регистрирует изолированные проверки SSH; argc/argv выбирают тесты GLib. */
 int
@@ -187,5 +243,6 @@ main (int argc, char **argv)
     g_test_init (&argc, &argv, NULL);
     g_test_add_func ("/ssh/private-credentials", credentials);
     g_test_add_func ("/ssh/public-key-enrollment", keys);
+    g_test_add_func("/ssh/owned-server-lifetime", server_lifetime);
     return g_test_run ();
 }

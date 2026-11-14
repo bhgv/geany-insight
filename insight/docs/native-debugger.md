@@ -13,6 +13,10 @@
 
 Saved SSH passwords/passphrases are shared with the terminal and kept outside projects. The page's remember toggle and **Forget saved SSH passwords** control this computer's credentials. Advanced fields still support manually started plain or extended gdbserver sessions.
 
+Remote-program step in the production wizard, captured in an isolated GTK fixture.
+
+![Remote debugging setup](media/ssh-setup-debug.jpg)
+
 
 While paused, open **Threads and stack** to select the GDB thread.
 The table shows up to 64 frames in the selected thread. Selecting a frame
