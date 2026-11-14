@@ -40,7 +40,7 @@ def main(argv):
         legacy = hashlib.sha256(prompt.encode()).hexdigest()
         canonical = str(identity)
         if os.name == 'nt' or sys.platform.startswith(('win', 'mingw')):
-            canonical = ntpath.normpath(canonical)
+            canonical = ntpath.normpath(canonical).replace("/", "\\")
         stable = hashlib.sha256(('private-key:' + canonical).encode()).hexdigest()
         vault = root / 'credentials.conf'
         vault.write_text(f'[insight-ssh-password-{account}]\npassword=fixture-пароль\n\n'

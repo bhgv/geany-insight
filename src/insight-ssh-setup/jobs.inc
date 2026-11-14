@@ -183,7 +183,15 @@ setup_job_start (SshSetupWizard *wizard, SetupJob kind)
         else if (kind == SETUP_GENERATE)
         {
             gchar *path = g_build_filename (wizard->key_stage, "id_ed25519", NULL);
+#ifdef G_OS_WIN32
+            /* EN: GLib's Windows quoting drops empty argv values; answer keygen's two empty prompts instead.
+             * RU: Экранирование GLib Windows теряет пустые argv; отвечаем на два запроса keygen пустыми строками. */
+            const gchar *args[] = {keygen, "-q", "-t", "ed25519", "-f", path, NULL};
+            input = g_strdup("\n\n");
+            g_subprocess_launcher_setenv(launcher, "GEANY_INSIGHT_SSH_KEYGEN_EMPTY_PASSPHRASE", "1", TRUE);
+#else
             const gchar *args[] = { keygen, "-q", "-t", "ed25519", "-N", "", "-f", path, NULL };
+#endif
             argv = g_strdupv ((gchar **)args);
             g_free (path);
         }

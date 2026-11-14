@@ -29,6 +29,14 @@ int main(int argc, char **argv)
     argc = g_strv_length(argv);
 #endif
     const char *prompt = argc > 1 ? argv[1] : "SSH authentication";
+    /* EN: A wizard-owned new key explicitly has no passphrase; never reuse an account password for this job.
+     * RU: Новый ключ мастера явно создаётся без пароля; не используем пароль учётной записи для этого задания. */
+    if (!g_strcmp0(g_getenv("GEANY_INSIGHT_SSH_KEYGEN_EMPTY_PASSPHRASE"), "1") && strstr(prompt, "passphrase"))
+    {
+        fputc('\n', stdout);
+        fflush(stdout);
+        return 0;
+    }
     gboolean confirmation = strstr(prompt, "yes/no") != NULL;
     const char *config = g_getenv("GEANY_INSIGHT_SSH_CONFIG"), *target = g_getenv("GEANY_INSIGHT_SSH_TARGET"),
                *session = g_getenv("GEANY_INSIGHT_SSH_AUTH_SESSION");
