@@ -12,6 +12,7 @@ on:
       - 'insight/tests/ssh_setup*'
       - 'insight/tests/ssh_auth_helper_test.py'
       - 'insight/tests/ssh_native_client*'
+      - 'insight/tests/ssh_askpass_dialog_test.c'
       - 'src/insight-debuggers/gdb-remote-model.inc'
       - 'insight/tools/package_native_windows.py'
       - 'src/insight-askpass.c'
@@ -77,6 +78,11 @@ jobs:
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c $common -o ssh-wizard-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_native_client_test.c $common -o ssh-tunnel-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -mwindows -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) src/insight-askpass.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o ssh-askpass-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
+      - name: Verify real Windows password and server-key dialogs
+        run: |
+          cc -mwindows -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_askpass_dialog_test.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o ssh-dialog-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
+          ./ssh-dialog-test.exe "SSH password"
+          ./ssh-dialog-test.exe "Trust fixture server (yes/no)"
       - name: Place compiled askpass into the Unicode runtime directory
         shell: pwsh
         run: Copy-Item ./ssh-askpass-test.exe (Join-Path $env:INSIGHT_NATIVE_SSH_BIN 'geany-insight-askpass.exe')

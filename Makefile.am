@@ -889,3 +889,5 @@ EXTRA_DIST += insight/tests/ssh_setup_test.c insight/tests/ssh_setup_gui_test.c 
  insight/tests/ssh_auth_helper_test.py insight/tests/native_debugger_ssh_setup_gui.inc
 
 EXTRA_DIST += insight/tests/ssh_native_client_fixture.py insight/tests/ssh_native_client_test.c
+
+EXTRA_DIST += insight/tests/ssh_askpass_dialog_test.c
