@@ -884,3 +884,6 @@ EXTRA_DIST += insight/tests/native_debugger_source_catalog_test.py
 dist_insightdocmedia_DATA += insight/docs/media/ssh-setup-flow.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/ssh-setup-server.jpg insight/docs/media/ssh-setup-keys.jpg insight/docs/media/ssh-setup-debug.jpg
+
+EXTRA_DIST += insight/tests/ssh_setup_test.c insight/tests/ssh_setup_gui_test.c \
+ insight/tests/ssh_auth_helper_test.py insight/tests/native_debugger_ssh_setup_gui.inc
