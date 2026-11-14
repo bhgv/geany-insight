@@ -3,17 +3,6 @@
  * RU: Выполняет ограниченные отменяемые операции OpenSSH вне основного потока
  * GTK. */
 
-/* EN: Release the task in data and its owned process/input; input is never a
- * password. RU: Освобождает задание data и принадлежащие ему процесс/ввод;
- * input не содержит пароль. */
-static void setup_task_free(gpointer data)
-{
-    SetupTask *task = data;
-    g_object_unref(task->process);
-    g_free(task->input);
-    g_free(task);
-}
-
 /* EN: Stop a network operation after its bounded deadline; data retains the wizard window.
  * RU: Останавливает сетевую операцию по истечении срока; data удерживает окно мастера. */
 static gboolean setup_timeout(gpointer data)
@@ -26,75 +15,6 @@ static gboolean setup_timeout(gpointer data)
     if (wizard->process)
         g_subprocess_force_exit(wizard->process);
     return G_SOURCE_REMOVE;
-}
-
-/* EN: Return bounded UTF-8 diagnostics from output, removing only the wizard's protocol lines.
- * RU: Возвращает ограниченную диагностику UTF-8 из output, удаляя только протокольные строки мастера. */
-static gchar *setup_failure_output(const gchar *output)
-{
-    gchar **lines = g_strsplit(output, "\n", -1);
-    GString *message = g_string_new(NULL);
-    for (guint i = 0; lines[i]; i++)
-        if (!g_str_has_prefix(lines[i], "GEANY-SSH-CHECK:") &&
-            strcmp(g_strchomp(lines[i]), "GEANY-SSH-READY"))
-            g_string_append_printf(message, "%s\n", lines[i]);
-    g_strfreev(lines);
-    gchar *valid = g_utf8_make_valid(message->str, MIN(message->len, (gsize)4096));
-    g_string_free(message, TRUE);
-    return g_strstrip(valid);
-}
-
-/* EN: Execute job data for task; source is unused and cancel interrupts both
- * streaming and waiting. RU: Выполняет data для task; source не используется,
- * cancel прерывает чтение и ожидание. */
-static void setup_worker(GTask *task, gpointer source, gpointer data, GCancellable *cancel)
-{
-    (void)source;
-    SetupTask *job = data;
-    GError *error = NULL;
-    GOutputStream *input = g_subprocess_get_stdin_pipe(job->process);
-    gboolean ok = TRUE;
-    if (job->input)
-        ok = g_output_stream_write_all(input, job->input, strlen(job->input), NULL, cancel, &error);
-    if (ok)
-        ok = g_output_stream_close(input, cancel, &error);
-    GString *output = g_string_new(NULL);
-    gchar buffer[4096];
-    while (ok)
-    {
-        gssize size = g_input_stream_read(g_subprocess_get_stdout_pipe(job->process), buffer, sizeof buffer,
-                                          cancel, &error);
-        if (size < 0)
-            ok = FALSE;
-        else if (!size)
-            break;
-        else if (output->len + size > 65536)
-        {
-            g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "SSH setup output exceeds 64 KiB.");
-            ok = FALSE;
-        }
-        else
-            g_string_append_len(output, buffer, size);
-    }
-    if (ok)
-        ok = g_subprocess_wait(job->process, cancel, &error);
-    if (ok && !g_subprocess_get_successful(job->process))
-    {
-        gchar *valid = setup_failure_output(output->str);
-        g_set_error(&error, G_IO_ERROR, G_IO_ERROR_FAILED, "%s",
-                    *valid ? valid : "SSH setup command failed.");
-        g_free(valid);
-        ok = FALSE;
-    }
-    if (!ok)
-    {
-        g_subprocess_force_exit(job->process);
-        g_subprocess_wait(job->process, NULL, NULL);
-        g_string_free(output, TRUE);
-        g_task_return_error(task, error);
-    }
-    else
-        g_task_return_pointer(task, g_string_free(output, FALSE), g_free);
 }
 
 /* EN: Finish result for window data, ignoring callbacks after destruction;
@@ -113,7 +33,7 @@ static void setup_job_done(GObject *source, GAsyncResult *result, gpointer data)
         g_clear_pointer(&output, g_free);
         g_clear_error(&error);
         g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_TIMED_OUT,
-            "SSH operation timed out. Check the network and server, then retry or go Back.");
+                            "SSH operation timed out. Check the network and server, then retry or go Back.");
     }
     if (wizard->timer)
         g_source_remove(wizard->timer);
@@ -213,7 +133,7 @@ static void setup_job_start(SshSetupWizard *wizard, SetupJob kind)
     gchar **argv = NULL;
     gchar *input = NULL, *command = NULL;
     GSubprocessLauncher *launcher = g_subprocess_launcher_new(
-        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
     wizard->auth =
         insight_ssh_auth_prepare(launcher, wizard->configdir, settings.host, settings.user, settings.port,
                                  settings.identity, helper, settings.remember, &error);

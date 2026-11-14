@@ -31,6 +31,7 @@ static void native_remote_drop(NativeDebug *session)
         g_subprocess_force_exit(remote->server);
     g_clear_object(&remote->server);
     g_clear_object(&remote->server_output);
+    g_clear_object(&remote->server_errors);
     g_clear_object(&remote->server_cancel);
     insight_ssh_auth_cleanup(remote->auth);
     insight_ssh_auth_cleanup(remote->server_auth);

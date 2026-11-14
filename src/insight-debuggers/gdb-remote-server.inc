@@ -50,7 +50,8 @@ static void native_server_read(GObject *object, GAsyncResult *result, gpointer d
     NativeDebug *session = g_object_get_data(G_OBJECT(data), "native-debug");
     NativeRemote *remote = session->remote;
     gchar *line = g_data_input_stream_read_line_finish(G_DATA_INPUT_STREAM(object), result, NULL, NULL);
-    if (!session->closed && object == G_OBJECT(remote->server_output) && line)
+    if (!session->closed &&
+        (object == G_OBJECT(remote->server_output) || object == G_OBJECT(remote->server_errors)) && line)
     {
         g_strchomp(line);
         gchar *message = g_strdup_printf("gdbserver: %.2000s", line);
@@ -66,8 +67,8 @@ static void native_server_read(GObject *object, GAsyncResult *result, gpointer d
             native_remote_spawn(session);
         }
         g_free(ready);
-        if (object == G_OBJECT(remote->server_output))
-            g_data_input_stream_read_line_async(remote->server_output, G_PRIORITY_DEFAULT,
+        if (remote->server)
+            g_data_input_stream_read_line_async(G_DATA_INPUT_STREAM(object), G_PRIORITY_DEFAULT,
                                                 remote->server_cancel, native_server_read,
                                                 g_object_ref(data));
     }
@@ -99,7 +100,7 @@ static void native_server_start(NativeDebug *session, const gchar *directory)
         g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
                             insight_tr("OpenSSH was not found in PATH."));
     GSubprocessLauncher *launcher = g_subprocess_launcher_new(
-        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
     if (!error)
         remote->server_auth = insight_ssh_auth_prepare(
             launcher, app->configdir, endpoint->host, endpoint->user, endpoint->port, endpoint->identity,
@@ -115,9 +116,12 @@ static void native_server_start(NativeDebug *session, const gchar *directory)
         remote->busy = TRUE;
         remote->server_cancel = g_cancellable_new();
         remote->server_output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(remote->server));
+        remote->server_errors = g_data_input_stream_new(g_subprocess_get_stderr_pipe(remote->server));
         remote->server_timer = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT, 120, native_server_timeout,
                                                           g_object_ref(session->window), g_object_unref);
         g_subprocess_wait_async(remote->server, NULL, native_server_exited, g_object_ref(session->window));
+        g_data_input_stream_read_line_async(remote->server_errors, G_PRIORITY_DEFAULT, remote->server_cancel,
+                                            native_server_read, g_object_ref(session->window));
         g_data_input_stream_read_line_async(remote->server_output, G_PRIORITY_DEFAULT, remote->server_cancel,
                                             native_server_read, g_object_ref(session->window));
         gtk_label_set_text(GTK_LABEL(remote->status),

@@ -41,6 +41,7 @@ typedef struct
 static void setup_update(SshSetupWizard *wizard);
 static void setup_job_start(SshSetupWizard *wizard, SetupJob kind);
 static gboolean setup_collect(SshSetupWizard *wizard, InsightSshSetup *settings, GError **error);
+#include "insight-ssh-setup/process.inc"
 #include "insight-ssh-setup/jobs.inc"
 #include "insight-ssh-setup/keys.inc"
 #include "insight-ssh-setup/pages.inc"

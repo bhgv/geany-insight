@@ -109,7 +109,6 @@ static void wizard_flow(void)
     GtkWidget *window = insight_ssh_setup_show(NULL, directory, external ? external : directory, &initial,
                                                FALSE, connected, &applied);
     g_object_ref_sink(window);
-    gtk_window_resize(GTK_WINDOW(window), 650, 480);
     SshSetupWizard *wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
     g_assert_false(gtk_entry_get_visibility(GTK_ENTRY(wizard->password)));
     gtk_entry_set_text(GTK_ENTRY(wizard->password), "isolated-тест-password");

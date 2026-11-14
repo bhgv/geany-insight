@@ -2,6 +2,7 @@
 /* EN: Exercise production debugger tunnel arguments with a native OpenSSH client and loopback SSH fixture.
  * RU: Проверяет аргументы туннеля отладчика с нативным OpenSSH и локальной SSH-фикстурой. */
 #include "ssh_auth.h"
+#include "ssh_setup.h"
 #include "glib_compat.h"
 #include "remote_io.h"
 #include <string.h>
@@ -87,11 +88,59 @@ static void tunnel(void)
     g_strfreev(argv);
 }
 
+/* EN: Receive a real native SSH server-readiness line from stderr, using the production server command.
+ * RU: Получает строку готовности по stderr нативного SSH с производственной командой сервера. */
+static void server_stderr(void)
+{
+    const gchar *bin = g_getenv("INSIGHT_SSH_TEST_CLIENT_DIR");
+    gchar *ssh = insight_remote_program("ssh", bin);
+    gchar *helper = insight_remote_program("geany-insight-askpass", bin);
+    gchar *directory = g_dir_make_tmp("insight server тест-XXXXXX", NULL);
+    InsightRemote *endpoint = insight_remote_new("test-server", "developer", 0, "", "/", directory, NULL);
+    gchar *command = insight_ssh_server_command("/fixture", 2345, NULL);
+    gchar **argv = insight_ssh_setup_argv(endpoint, ssh, g_getenv("INSIGHT_SSH_TEST_CONFIG"), command, TRUE);
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDIN_PIPE |
+        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
+    gchar *auth = insight_ssh_auth_prepare(launcher, directory, "test-server", "developer", 0, "", helper, TRUE, NULL);
+    g_assert_true(insight_ssh_auth_seed(launcher, "isolated-тест-password", NULL));
+    GError *error = NULL;
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, (const gchar *const *)argv, &error);
+    g_assert_no_error(error);
+    GDataInputStream *stream = g_data_input_stream_new(g_subprocess_get_stderr_pipe(process));
+    gchar *line = g_data_input_stream_read_line(stream, NULL, NULL, &error);
+    g_assert_no_error(error);
+    g_assert_nonnull(line);
+    g_strchomp(line);
+    g_assert_cmpstr(line, ==, "Listening on port 2345");
+    g_subprocess_force_exit(process);
+    g_subprocess_wait(process, NULL, NULL);
+    g_object_unref(stream);
+    g_object_unref(process);
+    g_object_unref(launcher);
+    insight_ssh_auth_cleanup(auth);
+    gchar *vault = insight_ssh_auth_path(directory);
+    g_remove(vault);
+    gchar *folder = g_path_get_dirname(vault);
+    g_rmdir(folder);
+    g_rmdir(directory);
+    g_free(folder);
+    g_free(vault);
+    g_free(auth);
+    g_free(line);
+    g_free(command);
+    g_free(ssh);
+    g_free(helper);
+    g_free(directory);
+    g_strfreev(argv);
+    insight_remote_free(endpoint);
+}
+
 /* EN: Register native-client integration checks; argc/argv select GLib tests.
  * RU: Регистрирует интеграционные проверки нативного клиента; argc/argv выбирают тесты GLib. */
 int main(int argc, char **argv)
 {
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/ssh/native-debugger-tunnel", tunnel);
+    g_test_add_func("/ssh/native-server-stderr", server_stderr);
     return g_test_run();
 }

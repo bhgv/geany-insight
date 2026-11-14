@@ -639,7 +639,7 @@ libgeany_la_SOURCES += \
  insight-remote/connection.inc insight-remote/roots.inc insight-remote/scp.inc insight-remote/uploads.inc insight-remote/transport.inc insight-remote/actions.inc \
  insight-remote/profile.inc insight-remote/interface.inc insight-remote/transfer-results.inc \
  insight-ssh-setup.c insight-ssh-setup.h \
- insight-ssh-setup/jobs.inc insight-ssh-setup/keys.inc insight-ssh-setup/pages.inc insight-ssh-setup/lifecycle.inc \
+ insight-ssh-setup/process.inc insight-ssh-setup/jobs.inc insight-ssh-setup/keys.inc insight-ssh-setup/pages.inc insight-ssh-setup/lifecycle.inc \
  ../insight/desktop/file_patterns.c ../insight/desktop/file_patterns.h \
  ../insight/desktop/keyword_search.c ../insight/desktop/keyword_search.h \
  ../insight/desktop/search_state.c ../insight/desktop/search_state.h \

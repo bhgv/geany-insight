@@ -85,6 +85,11 @@ def channel_worker(channel, server):
             base64.b64decode(public[1], validate=True)
             server.state['keys'].add(public[1])
             channel.sendall(b'GEANY-SSH-KEY-INSTALLED\n')
+        elif 'gdbserver --multi' in command:
+            server.state['servers'] += 1
+            channel.send_stderr(b'Listening on port 2345\n')
+            while channel.recv(4096):
+                pass
         elif 'GEANY-GDB-SSH-READY' in command:
             channel.sendall(b'GEANY-GDB-SSH-READY\n')
             while channel.recv(4096):
@@ -128,7 +133,7 @@ def connection_worker(client, host, state):
 def main(argv):
     if len(argv) != 4:
         raise SystemExit('Usage: ssh_native_client_fixture.py CLIENT_BIN GUI_TEST TUNNEL_TEST')
-    state = {'keys': set(), 'passwords': 0, 'publickeys': 0, 'forwards': 0}
+    state = {'keys': set(), 'passwords': 0, 'publickeys': 0, 'forwards': 0, 'servers': 0}
     host = paramiko.RSAKey.generate(2048)
     with tempfile.TemporaryDirectory(prefix='insight SSH тест ') as temporary, socket.socket() as listener:
         root = Path(temporary)
@@ -165,7 +170,7 @@ def main(argv):
             subprocess.run([str(Path(argv[2]).resolve())], env=environment, check=True, timeout=60)
             subprocess.run([str(Path(argv[3]).resolve())], env=environment, check=True, timeout=30)
             assert state['keys'] and state['passwords'] >= 2 and state['publickeys'] >= 2, state
-            assert state['forwards'] == 1, state
+            assert state['forwards'] == 1 and state['servers'] == 1, state
             print('Native OpenSSH: Windows GTK wizard, password, installed key and debugger tunnel passed', state)
         finally:
             stop.set()

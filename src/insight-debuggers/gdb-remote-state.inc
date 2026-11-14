@@ -21,7 +21,7 @@ typedef struct
     GtkWidget *profile_save, *profile_restore, *profile_forget, *pid, *attach;
     GtkWidget *setup, *remember, *start_server, *directory;
     GSubprocess *ssh, *server;
-    GDataInputStream *server_output;
+    GDataInputStream *server_output, *server_errors;
     GCancellable *server_cancel;
     guint server_timer;
     gchar *auth, *server_auth;
