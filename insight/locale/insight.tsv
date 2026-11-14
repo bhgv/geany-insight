@@ -3408,3 +3408,65 @@ Visible register table copied.	Видимая таблица регистров 
 
 Find address, name, type or function	Найти адрес, имя, тип или функцию
 Copy name anchor	Копировать адрес или смещение правила
+
+# Guided SSH connections and shared per-computer credentials.
+Set up SSH step by step…	Настроить SSH пошагово…
+Set up SSH debugging step by step…	Настроить SSH-отладку пошагово…
+SSH connection setup	Настройка подключения SSH
+SSH debugging setup	Настройка SSH-отладки
+SSH setup	Настройка SSH
+Server and login	Сервер и учётная запись
+SSH key (optional)	Ключ SSH (необязательно)
+Remote program	Программа на сервере
+Check the connection	Проверка подключения
+Ready to connect	Всё готово к подключению
+Server address or SSH alias	Адрес сервера или псевдоним SSH
+Login on the server (empty: use SSH config)	Логин на сервере (пусто: из настроек SSH)
+Password (empty: use a saved password, key or agent)	Пароль (пусто: сохранённый пароль, ключ или агент)
+Remember passwords on this computer	Сохранять пароли на этом компьютере
+Forget saved SSH passwords	Удалить сохранённые пароли SSH
+Saved SSH passwords removed from this computer	Сохранённые пароли SSH удалены с этого компьютера
+Private key on this computer (optional)	Закрытый ключ на этом компьютере (необязательно)
+Choose existing private key…	Выбрать существующий закрытый ключ…
+Create a key for this server	Создать ключ для этого сервера
+Obtain public key	Получить открытый ключ
+Copy public key	Копировать открытый ключ
+Install public key on this server	Установить открытый ключ на сервер
+Program on the server (absolute path)	Программа на сервере (абсолютный путь)
+Working directory on the server (empty: program folder)	Рабочий каталог на сервере (пусто: каталог программы)
+Source directory used by the remote build (optional)	Каталог исходников при сборке на сервере (необязательно)
+Matching local source directory (optional)	Соответствующий локальный каталог исходников (необязательно)
+Start gdbserver automatically	Запускать gdbserver автоматически
+Check connection	Проверить подключение
+Connection verified. Continue to connect.	Подключение проверено. Продолжите для соединения.
+The server did not confirm the connection.	Сервер не подтвердил подключение.
+Private key created on this computer. Obtaining its public key…	Закрытый ключ создан на этом компьютере. Получение открытого ключа…
+Public key ready. Install it on this server or copy it for your administrator.	Открытый ключ готов. Установите его на сервер или скопируйте для администратора.
+Public key installed. Existing server keys were preserved. Check the connection next.	Открытый ключ установлен. Существующие ключи сервера сохранены. Теперь проверьте подключение.
+Choose your server to begin. Creating or installing a key requires an explicit click.	Начните с выбора сервера. Создание и установка ключа выполняются только по нажатию соответствующей кнопки.
+Enter the server address and your account there. Passwords and keys work for terminals, files and debugging.	Укажите адрес сервера и свою учётную запись. Пароли и ключи используются для терминалов, файлов и отладки.
+Saved without encryption in a private settings file on this computer, outside project files. Leave this off to remember only for this connection.	Пароли сохраняются без шифрования в закрытом файле настроек этого компьютера, отдельно от проектов. Выключите флажок для временного хранения в текущем подключении.
+Optional: use an existing private key, or create a new one here. The new private key has no passphrase and stays on this computer. Only the public key is installed on the server.	Необязательно: выберите существующий закрытый ключ или создайте новый. Новый ключ не защищён парольной фразой и остаётся на этом компьютере. На сервер устанавливается только открытый ключ.
+The local program supplies debug symbols. Choose the matching program on the server. The editor can start gdbserver and create its SSH tunnel.	Локальная программа предоставляет отладочные символы. Укажите соответствующую программу на сервере. Редактор может запустить gdbserver и создать SSH-туннель.
+Check the connection before continuing. SSH will ask you to confirm a new server key and any missing password.	Прежде чем продолжить, проверьте подключение. SSH попросит подтвердить ключ нового сервера и ввести недостающий пароль.
+If the check fails, read the explanation below, go back and correct the server, login or key. No application is started by this check.	Если проверка не удалась, прочитайте сообщение ниже, вернитесь и исправьте адрес, логин или ключ. Проверка не запускает отлаживаемую программу.
+Use the wizard to check SSH and start gdbserver automatically. Then set a breakpoint and press Run. Advanced fields connect to an existing server.	Мастер проверит SSH и автоматически запустит gdbserver. Затем установите точку останова и нажмите «Запустить». Расширенные поля позволяют подключиться к существующему серверу.
+Starting gdbserver via SSH… Disconnect cancels startup.	Запуск gdbserver через SSH… Кнопка отключения отменяет запуск.
+gdbserver did not become ready. Check SSH access and the debug port.	gdbserver не готов. Проверьте доступ SSH и порт отладки.
+gdbserver ended. See SSH diagnostics in the console.	gdbserver завершился. Диагностика SSH доступна в консоли.
+Cannot create the private key directory.	Не удалось создать каталог закрытого ключа.
+Cannot create the private key staging directory.	Не удалось создать временный каталог закрытого ключа.
+Choose a valid SSH private key to obtain its public key.	Выберите действительный закрытый ключ SSH для получения открытого ключа.
+Choose an absolute remote program path.	Укажите абсолютный путь программы на сервере.
+Choose an absolute remote directory and a valid debug port.	Укажите абсолютный каталог на сервере и допустимый порт отладки.
+Choose an existing SSH config file or leave it empty.	Выберите существующий файл настроек SSH или оставьте поле пустым.
+Enter an absolute program path on the server.	Укажите абсолютный путь программы на сервере.
+Set both source directories, including an existing local folder, or leave both empty.	Укажите оба каталога исходников, включая существующий локальный, либо оставьте оба поля пустыми.
+Install the OpenSSH ssh-keygen program.	Установите программу ssh-keygen из OpenSSH.
+Install the OpenSSH client.	Установите клиент OpenSSH.
+Obtain or create a public key first.	Сначала получите или создайте открытый ключ.
+Save passwords and key passphrases in private settings on this computer, outside project files	Сохранять пароли сервера и ключей в закрытых настройках этого компьютера, отдельно от проектов
+Choose local source directory…	Выбрать локальный каталог исходников…
+Debug server port (different from SSH port)	Порт сервера отладки (отличается от порта SSH)
+Start gdbserver automatically on the server	Автоматически запускать gdbserver на сервере
+The remote program is not uploaded automatically. Keep a matching local copy with debug symbols. If gdbserver is already running, turn automatic startup off.	Программа не отправляется на сервер автоматически. Подготовьте соответствующую локальную копию с отладочными символами. Если gdbserver уже запущен, выключите автоматический запуск.

@@ -4,7 +4,13 @@
 
 typedef enum
 {
-    NATIVE_REMOTE_NONE, NATIVE_REMOTE_SYSROOT, NATIVE_REMOTE_CONNECT, NATIVE_REMOTE_CLEAR_STOP, NATIVE_REMOTE_ATTACH, NATIVE_REMOTE_DETACH, NATIVE_REMOTE_DISCONNECT
+    NATIVE_REMOTE_NONE,
+    NATIVE_REMOTE_SYSROOT,
+    NATIVE_REMOTE_CONNECT,
+    NATIVE_REMOTE_CLEAR_STOP,
+    NATIVE_REMOTE_ATTACH,
+    NATIVE_REMOTE_DETACH,
+    NATIVE_REMOTE_DISCONNECT
 } NativeRemoteRequest;
 
 typedef struct
@@ -13,7 +19,12 @@ typedef struct
     GtkWidget *server_host, *server_port, *executable, *remote_source, *local_source, *sysroot;
     GtkWidget *connect, *disconnect, *status, *profile_controls;
     GtkWidget *profile_save, *profile_restore, *profile_forget, *pid, *attach;
-    GSubprocess *ssh;
+    GtkWidget *setup, *remember;
+    GSubprocess *ssh, *server;
+    GDataInputStream *server_output;
+    GCancellable *server_cancel;
+    guint server_timer;
+    gchar *auth, *server_auth;
     GDataInputStream *output, *errors;
     GCancellable *cancel;
     guint timer, local_port, attached_pid;

@@ -22,9 +22,24 @@ static void native_remote_drop(NativeDebug *session)
     g_clear_object(&remote->output);
     g_clear_object(&remote->errors);
     g_clear_object(&remote->cancel);
+    if (remote->server_timer)
+        g_source_remove(remote->server_timer);
+    remote->server_timer = 0;
+    if (remote->server_cancel)
+        g_cancellable_cancel(remote->server_cancel);
+    if (remote->server)
+        g_subprocess_force_exit(remote->server);
+    g_clear_object(&remote->server);
+    g_clear_object(&remote->server_output);
+    g_clear_object(&remote->server_cancel);
+    insight_ssh_auth_cleanup(remote->auth);
+    insight_ssh_auth_cleanup(remote->server_auth);
+    g_clear_pointer(&remote->auth, g_free);
+    g_clear_pointer(&remote->server_auth, g_free);
     remote->attached_pid = 0;
     remote->interrupt_pending = FALSE;
-    remote->pause_requested = remote->clear_stop_signal = remote->release_pending = remote->own_continue_pending = FALSE;
+    remote->pause_requested = remote->clear_stop_signal = remote->release_pending =
+        remote->own_continue_pending = FALSE;
     remote->busy = remote->connected = remote->detach_needed = remote->disconnect_needed = FALSE;
     remote->pending = NATIVE_REMOTE_NONE;
 }
@@ -41,8 +56,10 @@ static void native_remote_exited(GObject *object, GAsyncResult *result, gpointer
         gboolean connected = session->remote->connected;
         native_remote_drop(session);
         insight_queue_clear_full(&session->launch_commands, g_free);
-        gtk_label_set_text(GTK_LABEL(session->remote->status),
-            insight_tr("SSH tunnel ended. See the debugger console for authentication or forwarding errors."));
+        gtk_label_set_text(
+            GTK_LABEL(session->remote->status),
+            insight_tr(
+                "SSH tunnel ended. See the debugger console for authentication or forwarding errors."));
         native_debug_log(session, insight_tr("SSH tunnel ended."));
         if (connected)
         {
@@ -89,14 +106,16 @@ static void native_remote_ready(NativeDebug *session)
     }
     g_queue_push_tail(&session->launch_commands, setting);
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set remotetimeout 15"));
-    g_queue_push_tail(&session->launch_commands, g_strdup_printf("-target-select %s 127.0.0.1:%u",
-        remote->extended ? "extended-remote" : "remote", remote->local_port));
+    g_queue_push_tail(&session->launch_commands,
+                      g_strdup_printf("-target-select %s 127.0.0.1:%u",
+                                      remote->extended ? "extended-remote" : "remote", remote->local_port));
     gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("SSH tunnel ready; connecting GDB…"));
     native_debug_resume(session->window, session);
 }
 
 /* EN: Read SSH stdout/stderr from object for the dialog in data; only the exact readiness line starts GDB.
- * RU: Читает stdout/stderr SSH object для диалога data; GDB запускается только по точной строке готовности. */
+ * RU: Читает stdout/stderr SSH object для диалога data; GDB запускается только по точной строке готовности.
+ */
 static void native_remote_read(GObject *object, GAsyncResult *result, gpointer data)
 {
     GtkWidget *dialog = data;
@@ -104,7 +123,7 @@ static void native_remote_read(GObject *object, GAsyncResult *result, gpointer d
     NativeRemote *remote = session->remote;
     gchar *line = g_data_input_stream_read_line_finish(G_DATA_INPUT_STREAM(object), result, NULL, NULL);
     gboolean current = !session->closed && remote->ssh &&
-        (object == G_OBJECT(remote->output) || object == G_OBJECT(remote->errors));
+                       (object == G_OBJECT(remote->output) || object == G_OBJECT(remote->errors));
     if (current && line)
     {
         g_strchomp(line);
@@ -112,7 +131,8 @@ static void native_remote_read(GObject *object, GAsyncResult *result, gpointer d
             native_remote_ready(session);
         else if (object == G_OBJECT(remote->output) && native_attach_interrupt_reply(session, line))
         {
-            /* EN/RU: The acknowledgement is protocol data, not console text. / Подтверждение — данные протокола. */
+            /* EN/RU: The acknowledgement is protocol data, not console text. / Подтверждение — данные
+             * протокола. */
         }
         else if (*line)
         {
@@ -120,8 +140,8 @@ static void native_remote_read(GObject *object, GAsyncResult *result, gpointer d
             native_debug_log(session, text);
             g_free(text);
         }
-        g_data_input_stream_read_line_async(G_DATA_INPUT_STREAM(object), G_PRIORITY_DEFAULT,
-            remote->cancel, native_remote_read, g_object_ref(dialog));
+        g_data_input_stream_read_line_async(G_DATA_INPUT_STREAM(object), G_PRIORITY_DEFAULT, remote->cancel,
+                                            native_remote_read, g_object_ref(dialog));
     }
     g_free(line);
     g_object_unref(dialog);
@@ -148,7 +168,7 @@ static gboolean native_remote_port(NativeDebug *session, GError **error)
     GInetAddress *address = g_inet_address_new_from_string("127.0.0.1");
     GSocketAddress *requested = g_inet_socket_address_new(address, 0), *effective = NULL;
     gboolean valid = g_socket_listener_add_address(listener, requested, G_SOCKET_TYPE_STREAM,
-        G_SOCKET_PROTOCOL_TCP, NULL, &effective, error);
+                                                   G_SOCKET_PROTOCOL_TCP, NULL, &effective, error);
     if (valid)
         session->remote->local_port = g_inet_socket_address_get_port(G_INET_SOCKET_ADDRESS(effective));
     g_clear_object(&effective);
@@ -159,8 +179,9 @@ static gboolean native_remote_port(NativeDebug *session, GError **error)
     return valid;
 }
 
-/* EN: Start validated SSH settings in session with bundled/PATH clients and optional GUI askpass; report spawn errors.
- * RU: Запускает проверенные настройки SSH session через комплект/PATH и необязательный GUI askpass; сообщает ошибки запуска. */
+/* EN: Start validated SSH settings in session with bundled/PATH clients and optional GUI askpass; report
+ * spawn errors. RU: Запускает проверенные настройки SSH session через комплект/PATH и необязательный GUI
+ * askpass; сообщает ошибки запуска. */
 static gboolean native_remote_spawn(NativeDebug *session)
 {
     NativeRemote *remote = session->remote;
@@ -174,24 +195,29 @@ static gboolean native_remote_spawn(NativeDebug *session)
     g_free(share);
     GError *error = NULL;
     if (!ssh)
-        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND, insight_tr("OpenSSH was not found in PATH."));
+        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                            insight_tr("OpenSSH was not found in PATH."));
     if (!error)
         native_remote_port(session, &error);
-    GSubprocessLauncher *launcher = g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDIN_PIPE |
-        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
-    if (helper)
-    {
-        g_subprocess_launcher_setenv(launcher, "SSH_ASKPASS", helper, TRUE);
-        g_subprocess_launcher_setenv(launcher, "SSH_ASKPASS_REQUIRE", "force", TRUE);
-        g_subprocess_launcher_setenv(launcher, "GEANY_INSIGHT_SSH_SAVE_PASSWORD", "0", TRUE);
-    }
-    gchar **argv = !error ? native_remote_argv(ssh,
-        gtk_entry_get_text(GTK_ENTRY(remote->host)), gtk_entry_get_text(GTK_ENTRY(remote->user)),
-        (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)),
-        gtk_entry_get_text(GTK_ENTRY(remote->identity)), gtk_entry_get_text(GTK_ENTRY(remote->config)),
-        gtk_entry_get_text(GTK_ENTRY(remote->server_host)),
-        (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->server_port)),
-        remote->local_port, helper != NULL) : NULL;
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDIN_PIPE | G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
+    if (!error)
+        remote->auth = insight_ssh_auth_prepare(
+            launcher, app->configdir, gtk_entry_get_text(GTK_ENTRY(remote->host)),
+            gtk_entry_get_text(GTK_ENTRY(remote->user)),
+            gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)),
+            gtk_entry_get_text(GTK_ENTRY(remote->identity)), helper,
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote->remember)), &error);
+    gchar **argv = !error ? native_remote_argv(
+                                ssh, gtk_entry_get_text(GTK_ENTRY(remote->host)),
+                                gtk_entry_get_text(GTK_ENTRY(remote->user)),
+                                (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)),
+                                gtk_entry_get_text(GTK_ENTRY(remote->identity)),
+                                gtk_entry_get_text(GTK_ENTRY(remote->config)),
+                                gtk_entry_get_text(GTK_ENTRY(remote->server_host)),
+                                (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->server_port)),
+                                remote->local_port, helper != NULL)
+                          : NULL;
     if (argv)
         remote->ssh = g_subprocess_launcher_spawnv(launcher, (const gchar *const *)argv, &error);
     g_strfreev(argv);
@@ -200,21 +226,23 @@ static gboolean native_remote_spawn(NativeDebug *session)
     g_free(ssh);
     if (!remote->ssh)
     {
-        gtk_label_set_text(GTK_LABEL(remote->status), error ? error->message : insight_tr("Invalid SSH endpoint."));
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           error ? error->message : insight_tr("Invalid SSH endpoint."));
         g_clear_error(&error);
+        native_remote_drop(session);
         return FALSE;
     }
     remote->busy = TRUE;
     remote->cancel = g_cancellable_new();
     remote->output = g_data_input_stream_new(g_subprocess_get_stdout_pipe(remote->ssh));
     remote->errors = g_data_input_stream_new(g_subprocess_get_stderr_pipe(remote->ssh));
-    remote->timer = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT, 120,
-        native_remote_timeout, g_object_ref(session->window), g_object_unref);
+    remote->timer = g_timeout_add_seconds_full(G_PRIORITY_DEFAULT, 120, native_remote_timeout,
+                                               g_object_ref(session->window), g_object_unref);
     g_subprocess_wait_async(remote->ssh, NULL, native_remote_exited, g_object_ref(session->window));
-    g_data_input_stream_read_line_async(remote->output, G_PRIORITY_DEFAULT,
-        remote->cancel, native_remote_read, g_object_ref(session->window));
-    g_data_input_stream_read_line_async(remote->errors, G_PRIORITY_DEFAULT,
-        remote->cancel, native_remote_read, g_object_ref(session->window));
+    g_data_input_stream_read_line_async(remote->output, G_PRIORITY_DEFAULT, remote->cancel,
+                                        native_remote_read, g_object_ref(session->window));
+    g_data_input_stream_read_line_async(remote->errors, G_PRIORITY_DEFAULT, remote->cancel,
+                                        native_remote_read, g_object_ref(session->window));
     gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Connecting SSH… Use Disconnect to cancel."));
     native_debug_update(session);
     return TRUE;

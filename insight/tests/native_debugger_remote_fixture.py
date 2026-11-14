@@ -146,6 +146,21 @@ def main():
                                      if line.startswith('State:')).split()[1]
                         assert state not in ('T', 't'), 'Detach must resume the attached program'
                         stop(children.pop())
+            # EN: The wizard must own/start its gdbserver; no externally started server is left here.
+            # RU: Мастер обязан сам запустить gdbserver; внешнего сервера на этом этапе нет.
+            env.update(INSIGHT_GDB_SETUP_GUI='1', INSIGHT_GDB_REMOTE_MODE='2')
+            subprocess.run([str(Path(sys.argv[1]).resolve()), str(executable), str(source),
+                            str(root / 'profile-wizard')], env=env, check=True, timeout=150)
+            for _ in range(100):
+                with socket.socket() as released:
+                    released.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    try:
+                        released.bind(('127.0.0.1', server_port))
+                        break
+                    except OSError:
+                        time.sleep(0.05)
+            else:
+                raise RuntimeError('Wizard-owned gdbserver still listens after detach')
             assert not (root / 'mux').exists(), 'Debugger must not reuse or leave an SSH control master'
             return 0
         finally:

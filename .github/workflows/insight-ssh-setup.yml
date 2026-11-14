@@ -1,0 +1,37 @@
+# EN: Validate the production SSH wizard, private credentials and real OpenSSH key enrollment.
+# RU: Проверяет настоящий мастер SSH, закрытые пароли и установку ключей OpenSSH.
+name: Insight SSH setup
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/insight-ssh-setup*'
+      - 'src/insight-ssh-setup/**'
+      - 'insight/desktop/ssh_*'
+      - 'insight/desktop/remote_*'
+      - 'insight/tests/ssh_setup*'
+      - '.github/workflows/insight-ssh-setup.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  wizard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK and OpenSSH
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgtk-3-dev openssh-client xvfb xauth
+      - name: Build production models and wizard fixture
+        run: |
+          cc -Wall -Wextra -Werror=implicit-function-declaration -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_test.c insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c -o ssh-model-test $(pkg-config --libs gtk+-3.0 gio-2.0)
+          cc -Wall -Wextra -Werror=implicit-function-declaration -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c -o ssh-wizard-test $(pkg-config --libs gtk+-3.0 gio-2.0)
+      - name: Verify credentials and public keys
+        run: ./ssh-model-test
+      - name: Drive real GTK wizard and capture its pages
+        run: INSIGHT_SSH_SERVER_CAPTURE="$PWD/ssh-setup-server.jpg" INSIGHT_SSH_KEYS_CAPTURE="$PWD/ssh-setup-keys.jpg" INSIGHT_SSH_DEBUG_CAPTURE="$PWD/ssh-setup-debug.jpg" GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' ./ssh-wizard-test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ssh-setup-production-widget
+          path: ssh-setup-*.jpg

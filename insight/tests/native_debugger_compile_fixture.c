@@ -16,6 +16,9 @@
 #include "insight/core/runtime.h"
 #include "insight/desktop/glib_compat.h"
 #include "insight/desktop/remote_io.h"
+#include "insight/desktop/ssh_auth.h"
+#include "insight/desktop/ssh_setup.h"
+#include "insight-ssh-setup.h"
 #include <string.h>
 #define insight_tr(s) (s)
 typedef struct {
@@ -76,6 +79,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/gdb-disassembly-ui.inc"
 #include "insight-debuggers/gdb-remote-model.inc"
 #include "insight-debuggers/gdb-remote-process.inc"
+#include "insight-debuggers/gdb-remote-server.inc"
 #include "insight-debuggers/gdb-attach-model.inc"
 #include "insight-debuggers/gdb-attach-ui.inc"
 #include "insight-debuggers/gdb-attach-interrupt.inc"

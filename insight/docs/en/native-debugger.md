@@ -1,5 +1,19 @@
 # C/C++ debugging with GDB
 
+## SSH debugging: simplest start
+
+1. Install `gdbserver` on the server and GDB/OpenSSH on this computer. Build the remote C/C++ program with `-g -Og`. Keep the matching executable/debug symbols and source locally; the wizard does not upload or build your application.
+2. Open **Tools → C/C++ → Debug C/C++ Executable…** and select the local executable with matching debug symbols.
+3. In the debugger's **Remote / SSH** page, press **Set up SSH debugging step by step…**. Enter or restore your server/login and choose password/key authentication as described in [SSH](panel-ssh.md).
+4. On **Remote program**, enter its absolute server path. Optionally set the server working directory (default: the program's folder). When build paths differ, set the source directory recorded during remote compilation and the matching existing local source directory.
+5. Leave **Start gdbserver automatically on the server** enabled. Its port (default 2345) is separate from SSH port 22. The server listens on remote `127.0.0.1`; SSH carries the debugger traffic. Disable startup only when reusing an existing `gdbserver --multi`.
+6. **Check connection → Next → Connect** verifies SSH, availability of `gdbserver` and an executable remote file. Connect starts the owned server, waits for its readiness, creates the tunnel and connects GDB in extended-remote mode.
+7. Add a breakpoint at `main` or a source line, then **Run**. **Step Over / Step Into / Step Out**, **Continue**, **Pause**, **Variables**, **Watches** and **Threads and stack** work in the selected stopped context. Run launches the remote executable; the local executable supplies symbols.
+8. **Detach and close SSH** detaches the application and closes the tunnel and wizard-owned server. Startup can be cancelled with the same button. Diagnostics remain in the debugger console. Unexpected network/server loss is reported; it does not promise that a running inferior survives.
+
+Saved SSH passwords/passphrases are shared with the terminal and kept outside projects. The page's remember toggle and **Forget saved SSH passwords** control this computer's credentials. Advanced fields still support manually started plain or extended gdbserver sessions.
+
+
 Build with debug symbols, for example `cc -g -Og main.c -o app` or
 `c++ -g -Og main.cpp -o app`. Install GDB and make it available in
 `PATH` before starting Geany.

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Validate remote endpoints and construct literal OpenSSH transfer arguments.
+ * RU: Проверяет удалённые адреса и формирует буквальные аргументы передачи OpenSSH. */
 #include "remote_io.h"
 #include "glib_compat.h"
 #include <string.h>
@@ -15,27 +17,54 @@ InsightRemote *insight_remote_new(const char *host,const char *user,guint port,c
  InsightRemote *r=g_new0(InsightRemote,1); r->host=g_strdup(host); r->user=g_strdup(user ? user : ""); r->port=port; r->identity=g_strdup(identity ? identity : ""); r->remote=g_strdup(remote); r->local=insight_canonicalize_filename(local,NULL); return r;
 }
 void insight_remote_free(InsightRemote *r) { if(!r) return; g_free(r->host); g_free(r->user); g_free(r->identity); g_free(r->remote); g_free(r->local); g_free(r); }
-gchar *insight_remote_program(const gchar *program,const gchar *directory) {
+/* EN: Resolve program beside directory, in PATH or Windows system OpenSSH; return an owned absolute path or NULL.
+ * RU: Ищет program в directory, PATH либо системном OpenSSH Windows; возвращает абсолютный путь либо NULL. */
+gchar *insight_remote_program(const gchar *program, const gchar *directory)
+{
 #ifdef G_OS_WIN32
- gchar *name=g_strconcat(program,".exe",NULL);
+    gchar *name = g_strconcat(program, ".exe", NULL);
 #else
- gchar *name=g_strdup(program);
+    gchar *name = g_strdup(program);
 #endif
- gchar *path=directory ? g_build_filename(directory,name,NULL) : NULL;
- g_free(name);
- if(path && g_file_test(path,G_FILE_TEST_IS_REGULAR) && g_file_test(path,G_FILE_TEST_IS_EXECUTABLE)) { gchar *absolute=insight_canonicalize_filename(path,NULL);g_free(path);return absolute; }
- g_free(path);path=g_find_program_in_path(program);
+    gchar *path = directory ? g_build_filename(directory, name, NULL) : NULL;
+    g_free(name);
+    if (path && g_file_test(path, G_FILE_TEST_IS_REGULAR) && g_file_test(path, G_FILE_TEST_IS_EXECUTABLE))
+    {
+        gchar *absolute = insight_canonicalize_filename(path, NULL);
+        g_free(path);
+        return absolute;
+    }
+    g_free(path);
+    path = g_find_program_in_path(program);
 #ifdef G_OS_WIN32
- if(!path && (!strcmp(program,"ssh") || !strcmp(program,"sftp") || !strcmp(program,"scp"))) {
-  const gchar *root=g_getenv("SystemRoot");
-  if(root) { name=g_strconcat(program,".exe",NULL);const gchar *folders[]={"Sysnative","System32"};
-   for(guint i=0;i<G_N_ELEMENTS(folders) && !path;i++) { gchar *candidate=g_build_filename(root,folders[i],"OpenSSH",name,NULL);if(g_file_test(candidate,G_FILE_TEST_IS_REGULAR) && g_file_test(candidate,G_FILE_TEST_IS_EXECUTABLE)) path=candidate;else g_free(candidate); }
-   g_free(name);
-  }
- }
+    if (!path && (!strcmp(program, "ssh") || !strcmp(program, "sftp") || !strcmp(program, "scp") ||
+                  !strcmp(program, "ssh-keygen")))
+    {
+        const gchar *root = g_getenv("SystemRoot");
+        if (root)
+        {
+            name = g_strconcat(program, ".exe", NULL);
+            const gchar *folders[] = {"Sysnative", "System32"};
+            for (guint i = 0; i < G_N_ELEMENTS(folders) && !path; i++)
+            {
+                gchar *candidate = g_build_filename(root, folders[i], "OpenSSH", name, NULL);
+                if (g_file_test(candidate, G_FILE_TEST_IS_REGULAR) &&
+                    g_file_test(candidate, G_FILE_TEST_IS_EXECUTABLE))
+                    path = candidate;
+                else
+                    g_free(candidate);
+            }
+            g_free(name);
+        }
+    }
 #endif
- if(path && !g_path_is_absolute(path)) { gchar *absolute=insight_canonicalize_filename(path,NULL);g_free(path);path=absolute; }
- return path;
+    if (path && !g_path_is_absolute(path))
+    {
+        gchar *absolute = insight_canonicalize_filename(path, NULL);
+        g_free(path);
+        path = absolute;
+    }
+    return path;
 }
 gchar **insight_remote_argv(const InsightRemote *r,gboolean sftp) {
  GPtrArray *args=g_ptr_array_new();

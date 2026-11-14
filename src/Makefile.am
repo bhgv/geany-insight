@@ -318,6 +318,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-remote-state.inc \
 	insight-debuggers/gdb-remote-model.inc \
 	insight-debuggers/gdb-remote-process.inc \
+	insight-debuggers/gdb-remote-server.inc \
 	insight-debuggers/gdb-attach-interrupt.inc \
 	insight-debuggers/gdb-attach-model.inc \
 	insight-debuggers/gdb-attach-ui.inc \
@@ -635,14 +636,20 @@ libgeany_la_SOURCES += insight-themes.c insight-themes.h
 libgeany_la_SOURCES += \
  insight-overview.c insight-overview.h \
  insight-remote.c insight-remote.h \
+ insight-remote/connection.inc insight-remote/roots.inc insight-remote/scp.inc insight-remote/uploads.inc insight-remote/transport.inc insight-remote/actions.inc \
+ insight-remote/profile.inc insight-remote/interface.inc insight-remote/transfer-results.inc \
+ insight-ssh-setup.c insight-ssh-setup.h \
+ insight-ssh-setup/jobs.inc insight-ssh-setup/keys.inc insight-ssh-setup/pages.inc insight-ssh-setup/lifecycle.inc \
  ../insight/desktop/file_patterns.c ../insight/desktop/file_patterns.h \
  ../insight/desktop/keyword_search.c ../insight/desktop/keyword_search.h \
  ../insight/desktop/search_state.c ../insight/desktop/search_state.h \
  ../insight/desktop/remote_io.c ../insight/desktop/remote_io.h \
  ../insight/desktop/remote_credentials.c ../insight/desktop/remote_credentials.h \
+ ../insight/desktop/ssh_auth.c ../insight/desktop/ssh_auth.h \
+ ../insight/desktop/ssh_setup.c ../insight/desktop/ssh_setup.h \
  ../insight/desktop/glib_compat.h
 
-geany_insight_askpass_SOURCES = insight-askpass.c ../insight/desktop/remote_credentials.c ../insight/desktop/remote_credentials.h
+geany_insight_askpass_SOURCES = insight-askpass.c ../insight/desktop/remote_credentials.c ../insight/desktop/remote_credentials.h ../insight/desktop/ssh_auth.c ../insight/desktop/ssh_auth.h
 geany_insight_askpass_LDADD = $(GTK_LIBS) $(INTLLIBS)
 geany_insight_askpass_LDFLAGS =
 if MINGW

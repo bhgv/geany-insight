@@ -1,5 +1,22 @@
 # SSH
 
+## First connection: guided setup
+
+Open **File → SSH files / folders / projects…**, select **Connection**, then **Set up SSH step by step…**.
+
+1. Enter the server address, login and SSH port (usually 22). Enter a password, or leave it empty to use a saved password, key or agent. Keep **Remember passwords on this computer** enabled for future connections.
+2. The key step is optional. **Choose existing private key…** selects a key already on your computer. **Create a key for this server** creates an Ed25519 key without overwriting an existing one. The new private key has no passphrase and stays in private application settings; an imported encrypted key may use its saved passphrase.
+3. **Obtain public key** derives the public half of a selected private key. **Copy public key** copies only that public half for an administrator. **Install public key on this server** adds it to your remote account's `~/.ssh/authorized_keys`, preserving existing entries and avoiding duplicates. Initial installation needs a working password, agent or another authorized key. Ask the administrator if you have no initial access.
+4. Press **Next**, then **Check connection**. Confirm the server fingerprint after checking it with your administrator. Read any error below the form and use **Back** to correct the settings.
+5. After a successful check, press **Next → Connect**. A terminal opens using these settings. The same authentication is available to file transfers and the C/C++ debugger.
+
+Passwords and key passphrases are saved **without encryption** in a private per-computer file (`insight/ssh-credentials.conf` under the application's configuration directory), outside project files. POSIX permissions restrict newly written files to their owner. Turning remembering off uses disposable authentication files that are deleted after the connection. **Forget saved SSH passwords** removes the selected account's password and selected key's passphrase. Existing project-stored credentials move into private settings when the local profile is saved/used.
+
+The wizard needs OpenSSH (`ssh` and, for keys, `ssh-keygen`) and the application's `geany-insight-askpass` helper for graphical password prompts. It does not create a server account or install the server's SSH service. The remote key installer expects a POSIX shell and standard `awk`, `mkdir`, `chmod`, `touch` tools.
+
+![Guided SSH and debugging flow](../media/ssh-setup-flow.svg)
+
+
 Remote files and commands through OpenSSH.
 
 ## Controls

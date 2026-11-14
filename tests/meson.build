@@ -1004,3 +1004,14 @@ executable('test_insight_verilog_debugger_gui',
   '../insight/tests/verilog_debugger_gui_test.c', dependencies: test_deps)
 executable('test_insight_native_debugger_gui',
   '../insight/tests/native_debugger_gui_test.c', dependencies: test_deps)
+
+ssh_setup_test = executable('test_insight_ssh_setup', '../insight/tests/ssh_setup_test.c',
+  '../insight/desktop/ssh_auth.c', '../insight/desktop/ssh_setup.c',
+  '../insight/desktop/remote_io.c', '../insight/desktop/remote_credentials.c',
+  include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight SSH onboarding and private credentials', ssh_setup_test)
+ssh_setup_gui_test = executable('test_insight_ssh_setup_gui', '../insight/tests/ssh_setup_gui_test.c',
+  '../insight/desktop/ssh_auth.c', '../insight/desktop/ssh_setup.c',
+  '../insight/desktop/remote_io.c', '../insight/desktop/remote_credentials.c',
+  include_directories: include_directories('../insight/desktop'), dependencies: deps)
+test('Insight production SSH setup wizard GUI', ssh_setup_gui_test, timeout: 45)

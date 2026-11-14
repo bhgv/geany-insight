@@ -40,6 +40,10 @@ on:
       - src/insight-terminal-ui.*
       - src/insight-serial.*
       - src/insight-remote.*
+      - src/insight-remote/**
+      - src/insight-ssh-setup*
+      - src/insight-ssh-setup/**
+      - insight/desktop/ssh_*
       - src/insight-askpass.c
       - insight/desktop/remote_io.*
       - insight/tools/remote_pack.py

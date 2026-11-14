@@ -16,18 +16,25 @@ static void native_remote_update(NativeDebug *session)
     NativeRemote *remote = session->remote;
     if (!remote)
         return;
-    gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy && !remote->interrupt_pending && !remote->release_pending;
+    gboolean idle = session->ready && !session->pending && !session->writing && !remote->busy &&
+                    !remote->interrupt_pending && !remote->release_pending;
     native_attach_update(session, idle);
+    if (remote->setup)
+        gtk_widget_set_sensitive(remote->setup,
+                                 idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->mode, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->form, idle && !remote->ssh && !session->running && !session->stopped);
     gtk_widget_set_sensitive(remote->profile_controls, idle && !session->running);
     gtk_widget_set_sensitive(remote->profile_save, idle && !session->running);
-    gtk_widget_set_sensitive(remote->profile_restore, idle && !remote->ssh && !session->running && !session->stopped);
-    gtk_widget_set_sensitive(remote->profile_forget, idle && !remote->ssh && !session->running && !session->stopped);
-    gtk_widget_set_sensitive(remote->connect, idle && native_remote_selected(session) &&
-        !remote->ssh && !session->running && !session->stopped);
-    gtk_widget_set_sensitive(remote->disconnect, remote->ssh &&
-        ((remote->busy && !remote->connected) || (idle && !session->stop_requested)));
+    gtk_widget_set_sensitive(remote->profile_restore,
+                             idle && !remote->ssh && !session->running && !session->stopped);
+    gtk_widget_set_sensitive(remote->profile_forget,
+                             idle && !remote->ssh && !session->running && !session->stopped);
+    gtk_widget_set_sensitive(remote->connect, idle && native_remote_selected(session) && !remote->ssh &&
+                                                  !session->running && !session->stopped);
+    gtk_widget_set_sensitive(
+        remote->disconnect, (remote->ssh || remote->server) &&
+                                ((remote->busy && !remote->connected) || (idle && !session->stop_requested)));
     if (remote->busy || remote->interrupt_pending || remote->release_pending)
     {
         for (guint i = 0; i < NATIVE_ACTION_COUNT; i++)
@@ -101,7 +108,8 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
         if (remote->busy && !remote->timer && g_str_has_prefix(record, "^error"))
         {
             gchar *message = native_debug_field(record, "msg");
-            gtk_label_set_text(GTK_LABEL(remote->status), message ? message : insight_tr("Remote connection failed."));
+            gtk_label_set_text(GTK_LABEL(remote->status),
+                               message ? message : insight_tr("Remote connection failed."));
             g_free(message);
             insight_queue_clear_full(&session->launch_commands, g_free);
             native_remote_drop(session);
@@ -135,9 +143,10 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
             session->watch_next = 0;
             native_debug_observe(session, record);
         }
-        gtk_label_set_text(GTK_LABEL(remote->status), insight_tr(remote->extended ?
-            "SSH gdbserver connected. Run starts the remote executable." :
-            "SSH gdbserver connected. Continue resumes the remote program."));
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           insight_tr(remote->extended
+                                          ? "SSH gdbserver connected. Run starts the remote executable."
+                                          : "SSH gdbserver connected. Continue resumes the remote program."));
     }
     else if (request == NATIVE_REMOTE_CLEAR_STOP)
     {
@@ -146,7 +155,8 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
             remote->busy = remote->detach_needed = remote->disconnect_needed = FALSE;
             session->stop_requested = FALSE;
             insight_queue_clear_full(&session->launch_commands, g_free);
-            gtk_label_set_text(GTK_LABEL(remote->status),
+            gtk_label_set_text(
+                GTK_LABEL(remote->status),
                 insight_tr("Could not clear the SSH pause signal. See the GDB console before resuming."));
         }
     }
@@ -154,20 +164,22 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
     {
         if (success)
         {
-            remote->attached_pid = (guint)g_ascii_strtoull(gtk_entry_get_text(GTK_ENTRY(remote->pid)), NULL, 10);
+            remote->attached_pid =
+                (guint)g_ascii_strtoull(gtk_entry_get_text(GTK_ENTRY(remote->pid)), NULL, 10);
             session->running = FALSE;
             session->stopped = TRUE;
             session->points_needed = TRUE;
             session->threads_needed = session->stack_needed = session->locals_needed = TRUE;
             session->watch_next = 0;
-            gtk_label_set_text(GTK_LABEL(remote->status),
+            gtk_label_set_text(
+                GTK_LABEL(remote->status),
                 insight_tr("Remote process attached. Inspect or Continue; Detach leaves it running."));
         }
         else
         {
             gchar *message = native_debug_field(record, "msg");
             gchar *status = g_strdup_printf(insight_tr("Attach failed; SSH connection remains open: %s"),
-                message ? message : insight_tr("Unknown GDB error"));
+                                            message ? message : insight_tr("Unknown GDB error"));
             gtk_label_set_text(GTK_LABEL(remote->status), status);
             g_free(status);
             g_free(message);
@@ -191,12 +203,14 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
         if (!success && request == NATIVE_REMOTE_CONNECT)
         {
             gchar *message = native_debug_field(record, "msg");
-            gtk_label_set_text(GTK_LABEL(remote->status), message ? message : insight_tr("Remote connection failed."));
+            gtk_label_set_text(GTK_LABEL(remote->status),
+                               message ? message : insight_tr("Remote connection failed."));
             g_free(message);
             insight_queue_clear_full(&session->launch_commands, g_free);
         }
         else if (success || remote->ssh)
-            gtk_label_set_text(GTK_LABEL(remote->status), insight_tr("Remote disconnected; SSH tunnel closed."));
+            gtk_label_set_text(GTK_LABEL(remote->status),
+                               insight_tr("Remote disconnected; SSH tunnel closed."));
         native_remote_drop(session);
         native_target_clear(session);
         native_remote_restore(session);
@@ -213,11 +227,14 @@ static gboolean native_remote_launch(NativeDebug *session)
     GError *error = NULL;
     gchar *arguments = native_launch_arguments(gtk_entry_get_text(GTK_ENTRY(session->launch_args)), &error);
     gchar *executable = native_remote_setting("remote exec-file", path);
-    gboolean valid = remote->connected && remote->extended && !remote->busy && *path && arguments && executable;
+    gboolean valid =
+        remote->connected && remote->extended && !remote->busy && *path && arguments && executable;
     if (!valid)
     {
-        gtk_label_set_text(GTK_LABEL(remote->status), error ? error->message :
-            insight_tr("Connect in extended-remote mode and specify the remote executable before Run or Restart."));
+        gtk_label_set_text(GTK_LABEL(remote->status),
+                           error ? error->message
+                                 : insight_tr("Connect in extended-remote mode and specify the remote "
+                                              "executable before Run or Restart."));
         g_clear_error(&error);
         g_free(arguments);
         g_free(executable);

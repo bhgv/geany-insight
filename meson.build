@@ -948,6 +948,8 @@ insight_native = static_library('insight_native',
  'insight/desktop/keyword_search.c',
  'insight/desktop/remote_io.c',
  'insight/desktop/remote_credentials.c',
+ 'insight/desktop/ssh_auth.c',
+ 'insight/desktop/ssh_setup.c',
  'insight/desktop/search_state.c',
 	'insight/desktop/calculate.c', 'insight/desktop/text_boundary.c', 'insight/desktop/line_insert.c', 'insight/desktop/paragraph.c', 'insight/desktop/renumber.c', 'insight/desktop/text_transfer.c', 'insight/desktop/symbol_edit.c', 'insight/desktop/ai_client.c', 'insight/desktop/ai_edit_session.c', 'insight/desktop/replace_files.c', 'insight/desktop/html_export.c', 'insight/desktop/project_report.c', 'insight/desktop/backup_store.c', 'insight/desktop/intelligent_paste.c', 'insight/desktop/completion_settings.c', 'insight/desktop/completion_preferences.c', 'insight/desktop/filetype_pairs.c', 'insight/desktop/filetype_editing.c', 'insight/desktop/filetype_options.c', 'insight/desktop/git_history.c', 'insight/desktop/git_project.c', 'insight/desktop/folder_tree.c', 'insight/desktop/folder_layout.c', 'insight/desktop/window_motion.c', 'insight/desktop/window_motion.h', 'insight/desktop/disk_operation.c', 'insight/desktop/directory_operation.c', 'insight/desktop/project_files.c', 'insight/desktop/custom_command.c', 'insight/desktop/master_list.c', 'insight/desktop/master_sync.c',
  'insight/core/index.c', 'insight/core/document.c', 'insight/core/occurrences.c', 'insight/desktop/index_cache.c', 'insight/desktop/project_db.c',
@@ -1048,6 +1050,7 @@ libgeany = shared_library('geany',
 	'src/insight-overview.c',
 	'src/insight-overview.h',
 	'src/insight-remote.c',
+ 'src/insight-ssh-setup.c',
 	'src/insight-remote.h',
 	'src/insight-workbench.h',
 	'src/main.h',
@@ -1128,7 +1131,8 @@ executable('geany',
 )
 
 i18n = import('i18n')
-executable('geany-insight-askpass', 'src/insight-askpass.c', 'insight/desktop/remote_credentials.c', dependencies: deps, install: true, win_subsystem: 'windows')
+executable('geany-insight-askpass', 'src/insight-askpass.c', 'insight/desktop/remote_credentials.c',
+ 'insight/desktop/ssh_auth.c', dependencies: deps, install: true, win_subsystem: 'windows')
 
 desktop_file = 'geany.desktop'
 desktop_output_file = i18n.merge_file(
