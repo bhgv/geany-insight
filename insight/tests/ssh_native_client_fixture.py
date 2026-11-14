@@ -27,7 +27,7 @@ class Server(paramiko.ServerInterface):
     # EN: Authenticate fixture username/password without consulting actual OS accounts.
     # RU: Проверяет username/password фикстуры без обращения к учётным записям ОС.
     def check_auth_password(self, username, password):
-        if username == 'developer' and password == 'isolated-test-password':
+        if username == 'developer' and password == 'isolated-тест-password':
             self.state['passwords'] += 1
             return paramiko.AUTH_SUCCESSFUL
         return paramiko.AUTH_FAILED

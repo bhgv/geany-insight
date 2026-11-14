@@ -30,7 +30,7 @@ static void tunnel(void)
     gchar *auth =
         insight_ssh_auth_prepare(launcher, directory, "test-server", "developer", 0, "", helper, TRUE, NULL);
     g_assert_nonnull(auth);
-    g_assert_true(insight_ssh_auth_seed(launcher, "isolated-test-password", NULL));
+    g_assert_true(insight_ssh_auth_seed(launcher, "isolated-тест-password", NULL));
     gchar **argv =
         native_remote_argv(ssh, "test-server", "developer", 0, "", config, "127.0.0.1", 2345, port, TRUE);
     GError *error = NULL;

@@ -109,7 +109,7 @@ static void wizard_flow(void)
     g_object_ref_sink(window);
     SshSetupWizard *wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
     g_assert_false(gtk_entry_get_visibility(GTK_ENTRY(wizard->password)));
-    gtk_entry_set_text(GTK_ENTRY(wizard->password), "isolated-test-password");
+    gtk_entry_set_text(GTK_ENTRY(wizard->password), "isolated-тест-password");
     capture(wizard, "INSIGHT_SSH_SERVER_CAPTURE");
     gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
     g_assert_cmpuint(wizard->page, ==, 1);

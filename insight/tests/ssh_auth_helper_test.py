@@ -20,7 +20,7 @@ def answer(helper, prompt, vault, session, account, identity, expected):
     environment.update(GEANY_INSIGHT_SSH_CONFIG=str(vault), GEANY_INSIGHT_SSH_TARGET=account,
                        GEANY_INSIGHT_SSH_AUTH_SESSION=str(session), GEANY_INSIGHT_SSH_SAVE_PASSWORD='1',
                        GEANY_INSIGHT_SSH_KEY=str(identity))
-    result = subprocess.run([str(helper), prompt], env=environment, text=True,
+    result = subprocess.run([str(helper), prompt], env=environment, text=True, encoding='utf-8',
                             capture_output=True, timeout=5, check=True)
     assert result.stdout.rstrip('\n') == expected
 
@@ -39,12 +39,12 @@ def main(argv):
         legacy = hashlib.sha256(prompt.encode()).hexdigest()
         stable = hashlib.sha256(('private-key:' + str(identity)).encode()).hexdigest()
         vault = root / 'credentials.conf'
-        vault.write_text(f'[insight-ssh-password-{account}]\npassword=fixture-password\n\n'
+        vault.write_text(f'[insight-ssh-password-{account}]\npassword=fixture-пароль\n\n'
                          f'[insight-ssh-password-{legacy}]\npassword=fixture-passphrase\n', encoding='utf-8')
         vault.chmod(0o600)
         for number in range(2):
             answer(helper, "tester@test-host's password:", vault, root / f'account-{number}',
-                   account, identity, 'fixture-password')
+                   account, identity, 'fixture-пароль')
         for number in range(2):
             answer(helper, prompt, vault, root / f'key-{number}', account, identity, 'fixture-passphrase')
         saved = configparser.ConfigParser()
