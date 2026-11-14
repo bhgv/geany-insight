@@ -8,6 +8,10 @@ After the program exits, the status retains its decimal exit code, for example *
 
 A signal stop differs from a signal exit: at a stop you can inspect the stack and variables; after exit the stopped context is cleared and stepping is unavailable. Code `0` usually indicates success; the program defines other codes. Windows exit codes are also displayed as decimal numbers.
 
+Actual editor window with GDB and a test program: the exit reason stays in the status while stepping controls are disabled.
+
+![Signal exit status](media/native-debugger-exit.jpg)
+
 ![Exit result and the next run](media/native-exit-status.svg)
 
 
