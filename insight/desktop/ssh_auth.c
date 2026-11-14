@@ -111,7 +111,15 @@ insight_ssh_auth_prepare (GSubprocessLauncher *launcher, const gchar *configdir,
     g_subprocess_launcher_setenv (launcher, "GEANY_INSIGHT_SSH_KEY", identity ? identity : "", TRUE);
     if (helper)
     {
+#ifdef G_OS_WIN32
+        /* EN: Win32 OpenSSH passes this value through its command-line builder; quote the executable path.
+         * RU: Win32 OpenSSH передаёт значение построителю командной строки; заключаем путь программы в кавычки. */
+        gchar *quoted_helper = g_strconcat("\"", helper, "\"", NULL);
+        g_subprocess_launcher_setenv(launcher, "SSH_ASKPASS", quoted_helper, TRUE);
+        g_free(quoted_helper);
+#else
         g_subprocess_launcher_setenv (launcher, "SSH_ASKPASS", helper, TRUE);
+#endif
         g_subprocess_launcher_setenv (launcher, "SSH_ASKPASS_REQUIRE", "force", TRUE);
         if (!g_getenv ("DISPLAY"))
             g_subprocess_launcher_setenv (launcher, "DISPLAY", ":0", TRUE);
