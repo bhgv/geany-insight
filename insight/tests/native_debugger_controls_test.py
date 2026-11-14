@@ -29,6 +29,11 @@ extern char *g_canonicalize_filename(const char *, const char *);
 extern GString *g_string_new(const char *);
 extern void g_string_append_printf(GString *, const char *, ...);
 extern char *g_string_free(GString *, int);
+#define G_SHELL_ERROR (g_shell_error_quark())
+#define G_SHELL_ERROR_BAD_QUOTING 0
+extern unsigned g_shell_error_quark(void);
+extern void g_set_error_literal(GError **, unsigned, int, const char *);
+extern char *g_shell_quote(const char *);
 extern int g_shell_parse_argv(const char *, int *, char ***, GError **);
 extern void g_error_free(GError *);
 extern char *g_strchug(char *);
@@ -77,15 +82,15 @@ int main(int argc, char **argv)
 {
     assert(argc == 2);
     GError *error = NULL;
-    char *command = native_launch_arguments("alpha 'two words' \"\" 'a\\b'", &error);
+    char *command = native_launch_arguments("alpha 'two words' \"\" 'a\\b'", FALSE, &error);
     assert(command && !error);
-    assert(!strcmp(command, "-exec-arguments \"alpha\" \"two words\" \"\" \"a\\\\b\""));
+    assert(!strcmp(command, "-exec-arguments 'alpha' 'two words' '' 'a\\b'"));
     puts(command);
     g_free(command);
-    assert(!native_launch_arguments("'unterminated", &error) && error);
+    assert(!native_launch_arguments("'unterminated", FALSE, &error) && error);
     g_error_free(error);
     error = NULL;
-    command = native_launch_arguments("", &error);
+    command = native_launch_arguments("", FALSE, &error);
     assert(!strcmp(command, "-exec-arguments"));
     g_free(command);
     NativeDebug session = {0};
@@ -197,8 +202,9 @@ def controls_source(main):
     helpers = [function('src/insight-debuggers/gdb-context.inc', n) for n in
                ('native_debug_field', 'native_next_tuple', 'native_context_id')]
     helpers += [function('src/insight-debuggers/gdb-catchpoints-model.inc', 'native_catch_description')]
-    helpers += [function('src/insight-debuggers/gdb-lifecycle.inc', n) for n in
-                ('native_launch_arguments', 'native_launch_next')]
+    helpers += [function('src/insight-debuggers/gdb-arguments-model.inc', n) for n in
+                ('native_windows_argument', 'native_launch_arguments')]
+    helpers += [function('src/insight-debuggers/gdb-lifecycle.inc', 'native_launch_next')]
     helpers += [function('src/insight-debuggers/gdb-breakpoints.inc', n) for n in
                 ('native_point_key', 'native_point_number')]
     helpers += [function('src/insight-debuggers/gdb-source-markers.inc', 'native_source_points')]

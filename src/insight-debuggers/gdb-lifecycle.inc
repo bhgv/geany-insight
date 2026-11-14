@@ -66,29 +66,6 @@ static void native_target_exited(NativeDebug *session, const gchar *record)
     session->stop_detail = detail ? detail : g_strdup(insight_tr("Program exited."));
 }
 
-/* EN: Build MI argument command from text; return NULL and set error for invalid quoting.
- * RU: Создаёт команду аргументов MI из text; при неверных кавычках возвращает NULL и error. */
-static gchar *native_launch_arguments(const gchar *text, GError **error)
-{
-    gint count = 0;
-    gchar **arguments = NULL;
-    gchar *trimmed = g_strdup(text);
-    g_strstrip(trimmed);
-    gboolean valid = !*trimmed || g_shell_parse_argv(trimmed, &count, &arguments, error);
-    g_free(trimmed);
-    if (!valid)
-        return NULL;
-    GString *command = g_string_new("-exec-arguments");
-    for (gint i = 0; i < count; i++)
-    {
-        gchar *escaped = g_strescape(arguments[i], NULL);
-        g_string_append_printf(command, " \"%s\"", escaped);
-        g_free(escaped);
-    }
-    g_strfreev(arguments);
-    return g_string_free(command, FALSE);
-}
-
 /* EN: Validate dialog's launch form and queue settings plus run; report errors without launching.
  * RU: Проверяет форму dialog и ставит настройки и запуск в очередь; ошибки показываются без запуска. */
 static gboolean native_launch_prepare(GtkWidget *dialog)
@@ -98,7 +75,13 @@ static gboolean native_launch_prepare(GtkWidget *dialog)
         return native_remote_launch(session);
     GError *error = NULL;
     gchar *arguments = native_launch_arguments(
-        gtk_entry_get_text(GTK_ENTRY(session->launch_args)), &error);
+        gtk_entry_get_text(GTK_ENTRY(session->launch_args)),
+#ifdef G_OS_WIN32
+        TRUE,
+#else
+        FALSE,
+#endif
+        &error);
     const gchar *directory = gtk_entry_get_text(GTK_ENTRY(session->launch_directory));
     gboolean valid = arguments && g_path_is_absolute(directory) &&
                      g_file_test(directory, G_FILE_TEST_IS_DIR);
@@ -116,6 +99,7 @@ static gboolean native_launch_prepare(GtkWidget *dialog)
     insight_queue_clear_full(&session->launch_commands, g_free);
     gchar *escaped = g_strescape(directory, NULL);
     g_queue_push_tail(&session->launch_commands, g_strdup_printf("-environment-cd \"%s\"", escaped));
+    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell on"));
     g_queue_push_tail(&session->launch_commands, arguments);
     g_queue_push_tail(&session->launch_commands, g_strdup("-exec-run"));
     g_free(escaped);

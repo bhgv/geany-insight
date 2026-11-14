@@ -1,5 +1,7 @@
 # C/C++ debugging with GDB
 
+Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcards, `$HOME` and command substitution stay literal. On Unix, GDB uses shell startup with each argument quoted; local Windows uses Windows command-line quoting and SSH targets use POSIX quoting. Line breaks are rejected.
+
 ## Program exit result
 
 After the program exits, the status retains its decimal exit code, for example **Program exited with code 31.** A terminating signal shows its name and description. The reason remains until the next run or disconnection; breakpoints and watches stay configured. **Run** starts a fresh process; **Restart** also applies the current launch settings.

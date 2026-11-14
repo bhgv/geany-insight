@@ -3495,3 +3495,4 @@ Verified: SSH login, executable file and working directory. Next: Connect.	Пр�
 Program exited with code %u.	Программа завершилась с кодом %u.
 Program exited.	Программа завершилась.
 Program terminated by signal	Программа завершена сигналом
+Program arguments must not contain line breaks.	Аргументы программы не должны содержать переводы строк.

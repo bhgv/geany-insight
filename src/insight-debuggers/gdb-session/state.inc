@@ -120,7 +120,7 @@ static gboolean native_remote_selected(NativeDebug *session);
 static gboolean native_remote_launch(NativeDebug *session);
 static gchar *native_remote_next(NativeDebug *session);
 static gboolean native_remote_reply(NativeDebug *session, const gchar *record);
-static gchar *native_launch_arguments(const gchar *text, GError **error);
+static gchar *native_launch_arguments(const gchar *text, gboolean windows_target, GError **error);
 static void native_debug_resume(GtkWidget *dialog, NativeDebug *session);
 static void native_memory_sync(NativeDebug *session);
 static gchar *native_memory_next(NativeDebug *session);

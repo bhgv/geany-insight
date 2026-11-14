@@ -37,7 +37,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     session->profile_disabled_pending = g_ptr_array_new_with_free_func(native_location_override_free);
     session->points_needed = TRUE;
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set confirm off"));
-    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell off"));
+    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell on"));
     g_queue_push_tail(&session->launch_commands, g_strdup("-enable-pretty-printing"));
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-show sysroot"));
     session->editor_points = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);

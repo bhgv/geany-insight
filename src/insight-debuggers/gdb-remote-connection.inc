@@ -225,7 +225,7 @@ static gboolean native_remote_launch(NativeDebug *session)
     NativeRemote *remote = session->remote;
     const gchar *path = gtk_entry_get_text(GTK_ENTRY(remote->executable));
     GError *error = NULL;
-    gchar *arguments = native_launch_arguments(gtk_entry_get_text(GTK_ENTRY(session->launch_args)), &error);
+    gchar *arguments = native_launch_arguments(gtk_entry_get_text(GTK_ENTRY(session->launch_args)), FALSE, &error);
     gchar *executable = native_remote_setting("remote exec-file", path);
     gboolean valid =
         remote->connected && remote->extended && !remote->busy && *path && arguments && executable;
@@ -242,6 +242,7 @@ static gboolean native_remote_launch(NativeDebug *session)
     }
     insight_queue_clear_full(&session->launch_commands, g_free);
     g_queue_push_tail(&session->launch_commands, executable);
+    g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell on"));
     g_queue_push_tail(&session->launch_commands, arguments);
     g_queue_push_tail(&session->launch_commands, g_strdup("-exec-run"));
     return TRUE;
