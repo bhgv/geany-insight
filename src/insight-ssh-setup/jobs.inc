@@ -169,8 +169,12 @@ setup_job_start (SshSetupWizard *wizard, SetupJob kind)
     wizard->auth
         = insight_ssh_auth_prepare (launcher, wizard->configdir, settings.host, settings.user, settings.port,
                                     settings.identity, helper, settings.remember, &error);
-    if (!error && *gtk_entry_get_text (GTK_ENTRY (wizard->password)))
-        insight_ssh_auth_seed (launcher, gtk_entry_get_text (GTK_ENTRY (wizard->password)), &error);
+    if (!error && *gtk_entry_get_text(GTK_ENTRY(wizard->password)))
+    {
+        if (insight_ssh_auth_seed(launcher, gtk_entry_get_text(GTK_ENTRY(wizard->password)), &error)
+            && settings.remember)
+            gtk_entry_set_text(GTK_ENTRY(wizard->password), "");
+    }
     if (!error && (kind == SETUP_GENERATE || kind == SETUP_PUBLIC))
     {
         if (!keygen)
@@ -183,6 +187,9 @@ setup_job_start (SshSetupWizard *wizard, SetupJob kind)
             argv = g_strdupv ((gchar **)args);
             g_free (path);
         }
+        else if (!*settings.identity || !g_file_test(settings.identity, G_FILE_TEST_IS_REGULAR))
+            g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                "Choose a valid SSH private key to obtain its public key.");
         else
         {
             const gchar *args[] = { keygen, "-y", "-f", settings.identity, NULL };
