@@ -26,14 +26,14 @@ static void settle(SshSetupWizard *wizard)
 static void capture(SshSetupWizard *wizard, const gchar *name)
 {
     const gchar *path = g_getenv(name);
-    if (!path)
-        return;
     for (guint i = 0; i < 50; i++)
     {
         while (g_main_context_iteration(NULL, FALSE))
             ;
         g_usleep(2000);
     }
+    if (!path)
+        return;
     GdkWindow *window = gtk_widget_get_window(wizard->window);
     GdkPixbuf *image =
         gdk_pixbuf_get_from_window(window, 0, 0, gdk_window_get_width(window), gdk_window_get_height(window));
@@ -88,6 +88,8 @@ static void wizard_flow(void)
                                 "#!/bin/sh\nfor last do :; done\ncase \"$last\" in\n"
                                 "*authorized_keys*) IFS= read -r public; test -n \"$public\" || exit "
                                 "2; printf 'GEANY-SSH-KEY-INSTALLED\\n';;\n"
+                                "*/missing/fixture-program*) printf 'GEANY-SSH-CHECK:login\\n'; printf "
+                                "'Remote program must be an executable file.\\n' >&2; exit 3;;\n"
                                 "*GEANY-SSH-READY*) printf 'GEANY-SSH-READY\\n';;\n"
                                 "*) exit 4;;\nesac\n",
                                 -1, NULL));
@@ -107,6 +109,7 @@ static void wizard_flow(void)
     GtkWidget *window = insight_ssh_setup_show(NULL, directory, external ? external : directory, &initial,
                                                FALSE, connected, &applied);
     g_object_ref_sink(window);
+    gtk_window_resize(GTK_WINDOW(window), 650, 480);
     SshSetupWizard *wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
     g_assert_false(gtk_entry_get_visibility(GTK_ENTRY(wizard->password)));
     gtk_entry_set_text(GTK_ENTRY(wizard->password), "isolated-тест-password");
@@ -148,17 +151,48 @@ static void wizard_flow(void)
     window = insight_ssh_setup_show(NULL, directory, external ? external : directory, &initial, TRUE,
                                     connected, &applied);
     g_object_ref_sink(window);
+    gtk_window_resize(GTK_WINDOW(window), 650, 480);
     wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
     gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
     gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
     capture(wizard, "INSIGHT_SSH_DEBUG_CAPTURE");
+    GtkWidget *scroll = gtk_widget_get_parent(wizard->stack);
+    if (!GTK_IS_SCROLLED_WINDOW(scroll))
+        scroll = gtk_widget_get_parent(scroll);
+    g_assert_true(GTK_IS_SCROLLED_WINDOW(scroll));
+    g_assert_cmpint(gtk_widget_get_allocated_height(window), <=, 560);
     g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wizard->start_server)));
     gtk_entry_set_text(GTK_ENTRY(wizard->program), "relative");
     gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
     g_assert_cmpuint(wizard->page, ==, 2);
     gtk_entry_set_text(GTK_ENTRY(wizard->program), "/opt/example/app");
+    gtk_entry_set_text(GTK_ENTRY(wizard->local_source), directory);
+    gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
+    g_assert_cmpuint(wizard->page, ==, 2);
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(wizard->remote_source)), ==, "");
+    gtk_entry_set_text(GTK_ENTRY(wizard->local_source), "");
     gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);
     setup_job_start(wizard, SETUP_TEST);
+    g_assert_cmpuint(wizard->timer, >, 0);
+    g_source_remove(wizard->timer);
+    wizard->timer = 0;
+    setup_timeout(window);
+    settle(wizard);
+    g_assert_false(wizard->verified);
+    g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(wizard->status)), "timed out"));
+    setup_job_start(wizard, SETUP_TEST);
+    settle(wizard);
+    g_assert_true(wizard->verified);
+    gtk_entry_set_text(GTK_ENTRY(wizard->program), "/missing/fixture-program");
+    setup_job_start(wizard, SETUP_TEST);
+    settle(wizard);
+    g_assert_false(wizard->verified);
+    const gchar *diagnostic = gtk_label_get_text(GTK_LABEL(wizard->status));
+    g_assert_nonnull(strstr(diagnostic, "executable file"));
+    g_assert_null(strstr(diagnostic, "GEANY-SSH-CHECK:"));
+    gtk_entry_set_text(GTK_ENTRY(wizard->program), "/opt/example/app");
+    setup_job_start(wizard, SETUP_TEST);
+    g_assert_false(wizard->verified);
     gtk_widget_destroy(window);
     settle(wizard);
     g_object_unref(window);

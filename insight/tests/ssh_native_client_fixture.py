@@ -89,6 +89,11 @@ def channel_worker(channel, server):
             channel.sendall(b'GEANY-GDB-SSH-READY\n')
             while channel.recv(4096):
                 pass
+        elif '/missing/fixture-program' in command:
+            channel.sendall(b'GEANY-SSH-CHECK:login\n')
+            channel.send_stderr(b'Remote program must be an executable file.\n')
+            channel.send_exit_status(3)
+            return
         elif 'GEANY-SSH-READY' in command:
             channel.sendall(b'GEANY-SSH-READY\n')
         else:
@@ -155,7 +160,7 @@ def main(argv):
             # EN/RU: Port override is supplied by the production form. / Порт задаётся производственной формой.
             environment = os.environ.copy()
             environment.update(INSIGHT_SSH_TEST_CLIENT_DIR=str(Path(argv[1]).resolve()),
-                               INSIGHT_SSH_TEST_CONFIG=str(config), INSIGHT_SSH_TEST_PORT=str(port),
+                               INSIGHT_SSH_TEST_CONFIG=str(config), INSIGHT_SSH_TEST_PORT="0",
                                GSETTINGS_BACKEND='memory', NO_AT_BRIDGE='1')
             subprocess.run([str(Path(argv[2]).resolve())], env=environment, check=True, timeout=60)
             subprocess.run([str(Path(argv[3]).resolve())], env=environment, check=True, timeout=30)

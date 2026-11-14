@@ -42,7 +42,7 @@ static gboolean native_ssh_setup_gui_step(GtkWidget *window, GtkWidget *tabs)
         remote_test_entry(wizard, "insight-ssh-setup-host", "INSIGHT_GDB_SSH_HOST");
         remote_test_entry(wizard, "insight-ssh-setup-user", "INSIGHT_GDB_SSH_USER");
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(find(wizard, "insight-ssh-setup-port")),
-                                  atoi(g_getenv("INSIGHT_GDB_SSH_PORT")));
+                                  0);
         gtk_dialog_response(GTK_DIALOG(wizard), GTK_RESPONSE_ACCEPT);
         remote_test_entry(wizard, "insight-ssh-setup-key", "INSIGHT_GDB_SSH_KEY");
         remote_test_entry(wizard, "insight-ssh-setup-config", "INSIGHT_GDB_SSH_CONFIG");

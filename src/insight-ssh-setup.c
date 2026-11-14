@@ -29,8 +29,8 @@ typedef struct
     GCancellable *cancel;
     InsightSshSetupDone done;
     gpointer data;
-    guint page;
-    gboolean debugging, verified, closed;
+    guint page, timer;
+    gboolean debugging, verified, closed, timed_out;
 } SshSetupWizard;
 typedef struct
 {
@@ -38,9 +38,9 @@ typedef struct
     gchar *input;
     SetupJob kind;
 } SetupTask;
-static void setup_update (SshSetupWizard *wizard);
-static void setup_job_start (SshSetupWizard *wizard, SetupJob kind);
-static gboolean setup_collect (SshSetupWizard *wizard, InsightSshSetup *settings, GError **error);
+static void setup_update(SshSetupWizard *wizard);
+static void setup_job_start(SshSetupWizard *wizard, SetupJob kind);
+static gboolean setup_collect(SshSetupWizard *wizard, InsightSshSetup *settings, GError **error);
 #include "insight-ssh-setup/jobs.inc"
 #include "insight-ssh-setup/keys.inc"
 #include "insight-ssh-setup/pages.inc"

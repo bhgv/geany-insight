@@ -3483,3 +3483,12 @@ Remote working directory (empty: program folder)	Рабочий каталог �
 Invalid SSH setup options in debugger profile.	Недопустимые параметры SSH в профиле отладчика.
 Invalid remote working directory in debugger profile.	Недопустимый рабочий каталог на сервере в профиле отладчика.
 For SSH debugging of a Linux program from Windows, choose gdb-multiarch.exe or a GDB built for that target.	Для отладки программы Linux через SSH из Windows выберите gdb-multiarch.exe или GDB, собранный для этой целевой системы.
+Port (0: SSH config)	Порт (0: из SSH config)
+port from SSH config	порт из SSH config
+Choose absolute program and working-directory paths on the server.	Укажите абсолютные пути программы и рабочего каталога на сервере.
+Remote program must be an executable file.	Программа на сервере должна быть исполняемым файлом.
+Remote working directory is missing or inaccessible.	Рабочий каталог на сервере отсутствует или недоступен.
+Install gdbserver on this server.	Установите gdbserver на этом сервере.
+SSH operation timed out. Check the network and server, then retry or go Back.	Время операции SSH истекло. Проверьте сеть и сервер, затем повторите проверку или нажмите «Назад».
+Set both source directories: an absolute remote build directory and an existing local folder, or leave both empty.	Укажите оба каталога исходников: абсолютный каталог удалённой сборки и существующий локальный каталог, либо оставьте оба поля пустыми.
+Verified: SSH login, executable file and working directory. Next: Connect.	Проверены вход по SSH, исполняемый файл и рабочий каталог. Далее: подключение.

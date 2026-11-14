@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Describe literal OpenSSH endpoints and transfer requests; port zero uses SSH configuration.
+ * RU: Описывает серверы и передачи OpenSSH; нулевой порт использует настройки SSH. */
 #ifndef INSIGHT_REMOTE_IO_H
 #define INSIGHT_REMOTE_IO_H
 #include <gio/gio.h>

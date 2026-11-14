@@ -1,5 +1,16 @@
 # SSH
 
+## Connection preflight
+
+SSH port **0** means use the Port from SSH config. Profiles retain this choice, including automatic gdbserver restarts. The separate gdbserver port remains positive. Checks and key installation do not open LocalForward/RemoteForward entries from the user SSH config.
+
+Before debugging, the wizard checks that the program is an executable file and that the working directory exists and is accessible. An empty working directory uses the program folder. The gdbserver command is required only when automatic startup is enabled; connecting to an existing service skips that lookup. Preflight does not run the program or probe the RSP port.
+
+Specify the remote build source directory explicitly: it may differ from the executable folder. Supply both source roots or leave both blank. The wizard no longer guesses the remote build directory.
+
+Network operations in the wizard have a two-minute deadline. A failed or timed-out retry clears the previous verification; correct the settings and check again. Long pages scroll while Back, Next and Cancel remain accessible in a small window.
+
+
 ## First connection: guided setup
 
 Open **File → SSH files / folders / projects…**, select **Connection**, then **Set up SSH step by step…**.

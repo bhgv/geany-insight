@@ -29,6 +29,7 @@ gchar **insight_ssh_setup_argv(const InsightRemote *remote, const gchar *client,
                 g_ptr_array_add(args, g_strdup("-oControlMaster=no"));
                 g_ptr_array_add(args, g_strdup("-oControlPath=none"));
                 g_ptr_array_add(args, g_strdup("-oRemoteCommand=none"));
+                g_ptr_array_add(args, g_strdup("-oClearAllForwardings=yes"));
             }
             if (!strcmp(base[i], "--") && config && *config)
             {
@@ -119,30 +120,50 @@ gchar *insight_ssh_install_key_command(const gchar *directory, GError **error)
     return command;
 }
 
-/* EN: Build the remote test for optional absolute program; return NULL/error
- * for invalid paths. RU: Формирует проверку удалённой абсолютной program при её
- * наличии; неверный путь даёт NULL/error. */
-gchar *insight_ssh_check_command(const gchar *program, GError **error)
+/* EN: Check absolute program and optional directory before connecting; start_server requires gdbserver in
+ * PATH. Return an owned POSIX command or NULL/error without starting the target or probing its debugger port.
+ * RU: Проверяет абсолютную program и необязательный directory; start_server требует gdbserver в PATH.
+ * Возвращает команду POSIX либо NULL/error без запуска программы и проверки порта отладчика. */
+gchar *insight_ssh_debug_check_command(const gchar *program, const gchar *directory, gboolean start_server,
+                                       GError **error)
 {
-    if (program && *program && (*program != '/' || strlen(program) > 4096 || strpbrk(program, "\r\n")))
+    if (!program || *program != '/' || strlen(program) > 4096 || strpbrk(program, "\r\n") ||
+        (directory && *directory &&
+         (*directory != '/' || strlen(directory) > 4096 || strpbrk(directory, "\r\n"))))
     {
         g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
-                            "Choose an absolute remote program path.");
+                            "Choose absolute program and working-directory paths on the server.");
         return NULL;
     }
-    if (program && *program)
-    {
-        gchar *quoted = g_shell_quote(program);
-        gchar *command = g_strdup_printf("command -v gdbserver >/dev/null || { printf 'Install "
-                                         "gdbserver on this server.\\n' >&2; exit 2; }; "
-                                         "test -x %s || { printf 'Remote program does not exist "
-                                         "or is not executable.\\n' >&2; exit 3; }; "
-                                         "printf 'GEANY-SSH-READY\\n'",
-                                         quoted);
-        g_free(quoted);
-        return command;
-    }
-    return g_strdup("printf 'GEANY-SSH-READY\\n'");
+    gchar *folder = directory && *directory ? g_strdup(directory) : g_path_get_dirname(program);
+    gchar *quoted_program = g_shell_quote(program);
+    gchar *quoted_directory = g_shell_quote(folder);
+    gchar *command = g_strdup_printf("printf 'GEANY-SSH-CHECK:login\\n'; "
+                                     "test -f %s && test -x %s || { printf 'Remote program must be an "
+                                     "executable file.\\n' >&2; exit 3; }; "
+                                     "printf 'GEANY-SSH-CHECK:program\\n'; "
+                                     "test -d %s && test -x %s || { printf 'Remote working directory is "
+                                     "missing or inaccessible.\\n' >&2; exit 4; }; "
+                                     "printf 'GEANY-SSH-CHECK:directory\\n'; %s"
+                                     "printf 'GEANY-SSH-READY\\n'",
+                                     quoted_program, quoted_program, quoted_directory, quoted_directory,
+                                     start_server ? "command -v gdbserver >/dev/null || { printf 'Install "
+                                                    "gdbserver on this server.\\n' >&2; exit 2; }; "
+                                                    "printf 'GEANY-SSH-CHECK:gdbserver\\n'; "
+                                                  : "");
+    g_free(quoted_program);
+    g_free(quoted_directory);
+    g_free(folder);
+    return command;
+}
+
+/* EN: Build the basic SSH check, or default debug checks for optional absolute program; invalid paths return
+ * NULL/error. RU: Формирует базовую проверку SSH либо отладки для абсолютной program; неверный путь даёт
+ * NULL/error. */
+gchar *insight_ssh_check_command(const gchar *program, GError **error)
+{
+    return program && *program ? insight_ssh_debug_check_command(program, NULL, TRUE, error)
+                               : g_strdup("printf 'GEANY-SSH-READY\\n'");
 }
 
 /* EN: Return an owned foreground gdbserver command for absolute directory/port;

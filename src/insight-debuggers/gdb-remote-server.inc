@@ -92,7 +92,7 @@ static void native_server_start(NativeDebug *session, const gchar *directory)
         command
             ? insight_remote_new(gtk_entry_get_text(GTK_ENTRY(remote->host)),
                                  gtk_entry_get_text(GTK_ENTRY(remote->user)),
-                                 MAX(1, gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port))),
+                                 gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(remote->port)),
                                  gtk_entry_get_text(GTK_ENTRY(remote->identity)), "/", app->configdir, &error)
             : NULL;
     if (!error && !ssh)

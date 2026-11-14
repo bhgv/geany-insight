@@ -241,6 +241,104 @@ static void server_lifetime(void)
 #endif
 }
 
+/* EN: Ensure a zero port leaves SSH-config ports untouched for SSH, SFTP and SCP.
+ * RU: Проверяет, что нулевой порт сохраняет настройки SSH config для SSH, SFTP и SCP. */
+static void config_port(void)
+{
+    gchar *local = g_get_current_dir();
+    InsightRemote *remote = insight_remote_new("alias", "", 0, "", "/app", local, NULL);
+    g_assert_nonnull(remote);
+    gchar **argv = insight_remote_argv(remote, FALSE);
+    g_assert_false(g_strv_contains((const gchar *const *)argv, "-p"));
+    g_strfreev(argv);
+    argv = insight_remote_argv(remote, TRUE);
+    g_assert_false(g_strv_contains((const gchar *const *)argv, "-P"));
+    g_strfreev(argv);
+    argv = insight_remote_scp_argv(remote, local, TRUE, FALSE, NULL);
+    g_assert_false(g_strv_contains((const gchar *const *)argv, "-P"));
+    g_strfreev(argv);
+    argv = insight_ssh_setup_argv(remote, "ssh", "", "printf ready", FALSE);
+    g_assert_false(g_strv_contains((const gchar *const *)argv, "-p"));
+    g_assert_true(g_strv_contains((const gchar *const *)argv, "-oClearAllForwardings=yes"));
+    g_strfreev(argv);
+    insight_remote_free(remote);
+    g_free(local);
+}
+
+/* EN: Run preflight command in a private directory-only PATH; return its actual status and owned output.
+ * RU: Выполняет preflight command с PATH собственного каталога; возвращает статус и принадлежащий вызывающему
+ * output. */
+static gint preflight_run(const gchar *shell, const gchar *directory, const gchar *command, gchar **output)
+{
+    GSubprocessLauncher *launcher =
+        g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    g_subprocess_launcher_setenv(launcher, "PATH", directory, TRUE);
+    const gchar *argv[] = {shell, "-c", command, NULL};
+    GError *error = NULL;
+    GSubprocess *process = g_subprocess_launcher_spawnv(launcher, argv, &error);
+    g_assert_no_error(error);
+    g_assert_true(g_subprocess_communicate_utf8(process, NULL, NULL, output, NULL, &error));
+    g_assert_no_error(error);
+    gint status = g_subprocess_get_exit_status(process);
+    g_object_unref(process);
+    g_object_unref(launcher);
+    return status;
+}
+
+/* EN: Exercise real preflight shell commands, diagnostics and literal paths without launching a target or
+ * gdbserver. RU: Проверяет настоящие команды preflight, диагностику и буквальные пути без запуска программы и
+ * gdbserver. */
+static void preflight(void)
+{
+#ifdef G_OS_WIN32
+    g_test_skip("POSIX remote command checks run on Linux");
+#else
+    gchar *directory = g_dir_make_tmp("insight-preflight-XXXXXX", NULL);
+    gchar *shell = g_find_program_in_path("sh");
+    gchar *program = g_build_filename(directory, "app '; touch injected; #", NULL);
+    gchar *server = g_build_filename(directory, "gdbserver", NULL);
+    g_file_set_contents(program, "#!/bin/sh\nexit 73\n", -1, NULL);
+    g_chmod(program, 0700);
+    gchar *output = NULL;
+    gchar *command = insight_ssh_debug_check_command(program, directory, FALSE, NULL);
+    g_assert_cmpint(preflight_run(shell, directory, command, &output), ==, 0);
+    g_assert_nonnull(strstr(output, "GEANY-SSH-CHECK:directory"));
+    g_assert_null(strstr(output, "GEANY-SSH-CHECK:gdbserver"));
+    g_free(command);
+    g_free(output);
+    command = insight_ssh_debug_check_command(program, directory, TRUE, NULL);
+    g_assert_cmpint(preflight_run(shell, directory, command, &output), ==, 2);
+    g_assert_nonnull(strstr(output, "Install gdbserver"));
+    g_free(output);
+    g_file_set_contents(server, "#!/bin/sh\nexit 74\n", -1, NULL);
+    g_chmod(server, 0700);
+    g_assert_cmpint(preflight_run(shell, directory, command, &output), ==, 0);
+    g_assert_nonnull(strstr(output, "GEANY-SSH-CHECK:gdbserver"));
+    g_free(command);
+    g_free(output);
+    gchar *missing = g_build_filename(directory, "missing", NULL);
+    command = insight_ssh_debug_check_command(program, missing, TRUE, NULL);
+    g_assert_cmpint(preflight_run(shell, directory, command, &output), ==, 4);
+    g_assert_nonnull(strstr(output, "working directory"));
+    g_free(command);
+    g_free(output);
+    command = insight_ssh_debug_check_command(directory, directory, TRUE, NULL);
+    g_assert_cmpint(preflight_run(shell, directory, command, &output), ==, 3);
+    g_assert_nonnull(strstr(output, "executable file"));
+    g_free(command);
+    g_free(output);
+    g_assert_null(insight_ssh_debug_check_command(program, "/bad\ncommand", TRUE, NULL));
+    g_remove(program);
+    g_remove(server);
+    g_rmdir(directory);
+    g_free(missing);
+    g_free(program);
+    g_free(server);
+    g_free(shell);
+    g_free(directory);
+#endif
+}
+
 /* EN: Register isolated SSH model checks using argc/argv for GLib test selection.
  * RU: Регистрирует изолированные проверки SSH; argc/argv выбирают тесты GLib. */
 int main(int argc, char **argv)
@@ -249,5 +347,7 @@ int main(int argc, char **argv)
     g_test_add_func("/ssh/private-credentials", credentials);
     g_test_add_func("/ssh/public-key-enrollment", keys);
     g_test_add_func("/ssh/owned-server-lifetime", server_lifetime);
+    g_test_add_func("/ssh/config-port", config_port);
+    g_test_add_func("/ssh/preflight", preflight);
     return g_test_run();
 }

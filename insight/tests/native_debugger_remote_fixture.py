@@ -64,7 +64,7 @@ def main():
             (root / 'known_hosts').write_text(f'[127.0.0.1]:{ssh_port} {public[0]} {public[1]}\n')
             client_config = root / 'client.conf'
             client_config.write_text(
-                f'Host *\n UserKnownHostsFile {root / "known_hosts"}\n'
+                f'Host *\n Port {ssh_port}\n UserKnownHostsFile {root / "known_hosts"}\n'
                 ' StrictHostKeyChecking yes\n PreferredAuthentications publickey\n'
                 ' PasswordAuthentication no\n BatchMode yes\n LogLevel ERROR\n'
                 f' ControlMaster auto\n ControlPath {root / "mux"}\n RemoteCommand false\n')
