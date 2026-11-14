@@ -232,6 +232,7 @@ static gboolean timeout(gpointer data)
     exit(1);
 }
 
+#include "native_debugger_exit_gui.inc"
 #include "native_debugger_catchpoints_gui.inc"
 #include "native_debugger_values_gui.inc"
 #include "native_debugger_disassembly_gui.inc"
@@ -269,6 +270,8 @@ static gboolean drive(gpointer data)
     if (!GTK_IS_NOTEBOOK(tabs))
         return G_SOURCE_CONTINUE;
 
+    if (g_getenv("INSIGHT_GDB_EXIT_GUI"))
+        return native_exit_gui_step(window, tabs);
     if (g_getenv("INSIGHT_GDB_SETUP_GUI"))
         return native_ssh_setup_gui_step(window, tabs);
     if (g_getenv("INSIGHT_GDB_REMOTE_GUI"))

@@ -53,6 +53,19 @@ static void native_target_clear(NativeDebug *session)
     native_watch_refresh(session, FALSE);
 }
 
+/* EN: Clear session's exited target using record and retain the readable exit reason across duplicate
+ * notifications; the caller updates controls. No-code group notifications preserve an existing detail.
+ * RU: Очищает завершённую цель session по record и сохраняет понятную причину при повторных
+ * уведомлениях; вызывающий обновляет кнопки. Групповое уведомление без кода сохраняет прежние сведения. */
+static void native_target_exited(NativeDebug *session, const gchar *record)
+{
+    gchar *detail = native_exit_detail(record);
+    if (!detail && !session->running && !session->stopped)
+        detail = g_strdup(session->stop_detail);
+    native_target_clear(session);
+    session->stop_detail = detail ? detail : g_strdup(insight_tr("Program exited."));
+}
+
 /* EN: Build MI argument command from text; return NULL and set error for invalid quoting.
  * RU: Создаёт команду аргументов MI из text; при неверных кавычках возвращает NULL и error. */
 static gchar *native_launch_arguments(const gchar *text, GError **error)

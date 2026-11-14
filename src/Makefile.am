@@ -330,6 +330,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-context.inc \
 	insight-debuggers/gdb-backtraces.inc \
 	insight-debuggers/gdb-source-markers.inc \
+	insight-debuggers/gdb-exit-model.inc \
 	insight-debuggers/gdb-lifecycle.inc \
 	insight-debuggers/gdb-catchpoints-model.inc \
 	insight-debuggers/gdb-catchpoints-ui.inc \

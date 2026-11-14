@@ -15,8 +15,10 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
     g_free(line);
     if (!session->stop_requested)
         native_source_stopped(session);
-    if (session->stop_requested || !insight_lua_debug_observer_active(session->observer) ||
-        !g_str_has_prefix(record, "*stopped,reason=\"breakpoint-hit\""))
+    gchar *reason = native_debug_field(record, "reason");
+    gboolean breakpoint = !g_strcmp0(reason, "breakpoint-hit");
+    g_free(reason);
+    if (session->stop_requested || !insight_lua_debug_observer_active(session->observer) || !breakpoint)
         return;
 
     gchar *point = native_debug_field(record, "bkptno");
@@ -73,10 +75,10 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             g_clear_pointer(&session->requested_frame, g_free);
             session->frame_select_needed = FALSE;
         }
-        else if (g_str_has_prefix(line, "*stopped"))
+        else if (g_str_has_prefix(line, "*stopped,"))
         {
             session->running = FALSE;
-            session->stopped = !g_str_has_prefix(line, "*stopped,reason=\"exited");
+            session->stopped = !native_exit_record(line);
             if (session->stopped)
             {
                 if (session->assembly)
@@ -98,9 +100,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 native_debug_observe(session, line);
             }
         }
-        if (g_str_has_prefix(line, "=thread-group-exited,") ||
-            g_str_has_prefix(line, "*stopped,reason=\"exited"))
-            native_target_clear(session);
+        if (native_exit_record(line))
+            native_target_exited(session, line);
         if (*line == '^')
         {
             quiet = native_assembly_reply(session, line);

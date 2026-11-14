@@ -1,5 +1,14 @@
 # C/C++ debugging with GDB
 
+## Program exit result
+
+After the program exits, the status retains its decimal exit code, for example **Program exited with code 31.** A terminating signal shows its name and description. The reason remains until the next run or disconnection; breakpoints and watches stay configured. **Run** starts a fresh process; **Restart** also applies the current launch settings.
+
+A signal stop differs from a signal exit: at a stop you can inspect the stack and variables; after exit the stopped context is cleared and stepping is unavailable. Code `0` usually indicates success; the program defines other codes. Windows exit codes are also displayed as decimal numbers.
+
+![Exit result and the next run](../media/native-exit-status.svg)
+
+
 ## Connection preflight
 
 SSH port **0** means use the Port from SSH config. Profiles retain this choice, including automatic gdbserver restarts. The separate gdbserver port remains positive. Checks and key installation do not open LocalForward/RemoteForward entries from the user SSH config.

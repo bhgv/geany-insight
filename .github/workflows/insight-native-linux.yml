@@ -216,6 +216,11 @@ jobs:
         run: |
           cc -g -O0 insight/tests/native-debug/main.c -o "$RUNNER_TEMP/native-gdb-program"
           LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-local.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-program" insight/tests/native-debug/observer.lua "$RUNNER_TEMP/native-gdb-profile"
+      - name: Verify normal, nonzero and signal exits in the debugger window
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          cc -g -O0 insight/tests/native-debug/exits.c -o "$RUNNER_TEMP/native-gdb-exits"
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_GDB_EXIT_GUI=1 INSIGHT_GDB_EXIT_CAPTURE="$PWD/native-gdb-exit.jpg" INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-exit.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-exits" insight/tests/native-debug/observer.lua "$RUNNER_TEMP/native-gdb-exit-profile"
       - name: Exercise GDB through an isolated real SSH gdbserver
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
@@ -228,6 +233,8 @@ jobs:
           name: native-gdb-remote-diagnostics
           path: |
             native-gdb-local.log
+            native-gdb-exit.log
+            native-gdb-exit.jpg
             native-gdb-remote.log
           retention-days: 3
           if-no-files-found: ignore

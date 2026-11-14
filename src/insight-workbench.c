@@ -306,6 +306,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/gdb-context.inc"
 #include "insight-debuggers/gdb-backtraces.inc"
 #include "insight-debuggers/gdb-source-markers.inc"
+#include "insight-debuggers/gdb-exit-model.inc"
 #include "insight-debuggers/gdb-lifecycle.inc"
 #include "insight-debuggers/gdb-catchpoints-model.inc"
 #include "insight-debuggers/gdb-catchpoints-ui.inc"

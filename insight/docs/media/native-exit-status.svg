@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 325" role="img" aria-labelledby="title desc">
+  <title id="title">C/C++ program exit status / Результат завершения C/C++</title>
+  <desc id="desc">Normal exit, nonzero exit and a terminating signal clear the stopped context while keeping their result visible. Run starts a new process.</desc>
+  <rect width="780" height="325" rx="14" fill="#edf3f8"/>
+  <g font-family="sans-serif" text-anchor="middle" fill="#18334d">
+    <text x="390" y="31" font-size="18">Program exit / Завершение программы</text>
+    <g fill="#fff" stroke="#7b93aa">
+      <rect x="18" y="55" width="236" height="105" rx="9"/>
+      <rect x="272" y="55" width="236" height="105" rx="9"/>
+      <rect x="526" y="55" width="236" height="105" rx="9"/>
+      <rect x="100" y="218" width="580" height="82" rx="9"/>
+    </g>
+    <g font-size="16">
+      <text x="136" y="85">Normal exit</text><text x="136" y="111">Обычный выход</text>
+      <text x="136" y="140" fill="#236d52">code / код: 0</text>
+      <text x="390" y="85">Nonzero exit</text><text x="390" y="111">Ненулевой код</text>
+      <text x="390" y="140" fill="#875713">037 (GDB) → 31</text>
+      <text x="644" y="85">Terminating signal</text><text x="644" y="111">Завершающий сигнал</text>
+      <text x="644" y="140" fill="#a33737">SIGTERM — Terminated</text>
+      <text x="390" y="247">Result stays visible · Step controls disabled</text>
+      <text x="390" y="270">Результат виден · Шаги недоступны</text>
+      <text x="390" y="291" fill="#236d52">Run → new process / новый процесс</text>
+    </g>
+  </g>
+  <g fill="none" stroke="#7b93aa" stroke-width="2">
+    <path d="M136 160v25h254v25m254-50v25H390m0-25v50"/>
+    <path d="m384 204 6 7 6-7"/>
+  </g>
+</svg>

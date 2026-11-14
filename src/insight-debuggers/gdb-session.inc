@@ -14,7 +14,7 @@ static void native_debug_update(NativeDebug *session)
         (!session->assembly || !session->assembly->active);
     const gchar *state = insight_tr(!session->ready ? "Starting or disconnected" :
         session->running ? "Running" : session->stopped ? "Paused" : "Ready");
-    gchar *status = session->stopped && session->stop_detail ?
+    gchar *status = !session->running && session->stop_detail ?
         g_strdup_printf("%s — %s", state, session->stop_detail) : g_strdup(state);
     gtk_label_set_text(GTK_LABEL(session->status), status);
     g_free(status);

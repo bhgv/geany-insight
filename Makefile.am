@@ -803,7 +803,7 @@ EXTRA_DIST += insight/tools/build_external_slang.py external/slang-compat/CMakeL
 
 EXTRA_DIST += external/slang-compat/CompatCharconv.h external/slang-compat/charconv-test.cpp
 
-dist_insightdocmedia_DATA += insight/docs/media/slang-compat.svg insight/docs/media/hdl-synchronous-stop.svg insight/docs/media/hdl-interface-flow.svg insight/docs/media/hdl-bit-mapping.svg insight/docs/media/native-debugger.svg insight/docs/media/hdl-instruments.svg
+dist_insightdocmedia_DATA += insight/docs/media/native-exit-status.svg insight/docs/media/slang-compat.svg insight/docs/media/hdl-synchronous-stop.svg insight/docs/media/hdl-interface-flow.svg insight/docs/media/hdl-bit-mapping.svg insight/docs/media/native-debugger.svg insight/docs/media/hdl-instruments.svg
 
 EXTRA_DIST += insight/tools/install_fonts.py insight/tools/install_slang.py insight/tools/select-windows-folders.ps1
 
@@ -891,3 +891,5 @@ EXTRA_DIST += insight/tests/ssh_setup_test.c insight/tests/ssh_setup_gui_test.c 
 EXTRA_DIST += insight/tests/ssh_native_client_fixture.py insight/tests/ssh_native_client_test.c
 
 EXTRA_DIST += insight/tests/ssh_askpass_dialog_test.c
+
+EXTRA_DIST += insight/tests/native_debugger_exit_test.py insight/tests/native_debugger_exit_gui.inc insight/tests/native-debug/exits.c
