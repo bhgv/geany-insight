@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """Package a complete native editor cross-build with a supplied GTK runtime."""
+# EN: Assemble a portable Windows editor, runtime and optional native OpenSSH clients.
+# RU: Собирает переносимый редактор Windows, runtime и нативные клиенты OpenSSH.
 import argparse
 import json
 import re
@@ -36,6 +38,8 @@ def install_editor_icons(destination):
         shutil.copy2(source, target / source.name)
 
 
+# EN: Package command-line-selected build/runtime paths, rejecting incomplete inputs.
+# RU: Упаковывает пути сборки/runtime из командной строки, отклоняя неполные данные.
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--runtime', type=Path, required=True)
@@ -88,7 +92,7 @@ def main():
         shutil.copy2(a.build / name, target)
         subprocess.run([a.strip, '--strip-unneeded', str(target)], check=True)
     if a.openssh:
-        for name in ['ssh.exe', 'sftp.exe', 'ssh-keygen.exe', 'ssh-keyscan.exe', 'ssh-add.exe', 'ssh-pkcs11-helper.exe', 'ssh-sk-helper.exe', 'libcrypto.dll']:
+        for name in ['ssh.exe', 'sftp.exe', 'scp.exe', 'ssh-keygen.exe', 'ssh-keyscan.exe', 'ssh-add.exe', 'ssh-pkcs11-helper.exe', 'ssh-sk-helper.exe', 'libcrypto.dll']:
             shutil.copy2(a.openssh / name, destination / 'bin' / name)
         for name in ['LICENSE.txt', 'NOTICE.txt']:
             shutil.copy2(a.openssh / name, destination / ('OpenSSH-' + name))

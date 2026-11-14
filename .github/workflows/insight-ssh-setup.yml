@@ -11,6 +11,9 @@ on:
       - 'insight/desktop/remote_*'
       - 'insight/tests/ssh_setup*'
       - 'insight/tests/ssh_auth_helper_test.py'
+      - 'insight/tests/ssh_native_client*'
+      - 'src/insight-debuggers/gdb-remote-model.inc'
+      - 'insight/tools/package_native_windows.py'
       - 'src/insight-askpass.c'
       - '.github/workflows/insight-ssh-setup.yml'
   workflow_dispatch:
@@ -41,3 +44,39 @@ jobs:
         with:
           name: ssh-setup-production-widget
           path: ssh-setup-*.jpg
+  windows-native:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-paramiko
+            mingw-w64-ucrt-x86_64-pkgconf
+      - name: Copy native Windows OpenSSH into a Unicode path with spaces
+        shell: pwsh
+        run: |
+          $bin = Join-Path $env:GITHUB_WORKSPACE 'native SSH клиент'
+          New-Item -ItemType Directory -Path $bin -Force | Out-Null
+          Copy-Item "$env:WINDIR\System32\OpenSSH\*" $bin -Recurse
+          "INSIGHT_NATIVE_SSH_BIN=$bin" >> $env:GITHUB_ENV
+      - name: Build Windows production wizard, askpass and debugger tunnel fixture
+        run: |
+          bin="$(cygpath -u "$INSIGHT_NATIVE_SSH_BIN")"
+          common="insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c"
+          cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c $common -o ssh-wizard-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
+          cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_native_client_test.c $common -o ssh-tunnel-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
+          cc -mwindows -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) src/insight-askpass.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o "$bin/geany-insight-askpass.exe" $(pkg-config --libs gtk+-3.0 gio-2.0)
+      - name: Verify saved passwords and legacy passphrases in Windows askpass
+        run: python insight/tests/ssh_auth_helper_test.py "$INSIGHT_NATIVE_SSH_BIN/geany-insight-askpass.exe"
+      - name: Drive Windows GTK through real native OpenSSH
+        run: python insight/tests/ssh_native_client_fixture.py "$INSIGHT_NATIVE_SSH_BIN" ./ssh-wizard-test.exe ./ssh-tunnel-test.exe

@@ -31,7 +31,7 @@ def main(argv):
     if len(argv) != 2:
         raise SystemExit('Usage: ssh_auth_helper_test.py ASKPASS_EXECUTABLE')
     helper = Path(argv[1]).resolve()
-    with tempfile.TemporaryDirectory(prefix='insight-askpass-test-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='insight askpass тест-') as temporary:
         root = Path(temporary)
         identity = root / 'example-key'
         account = hashlib.sha256(b'test-host:22:tester').hexdigest()
@@ -40,7 +40,7 @@ def main(argv):
         stable = hashlib.sha256(('private-key:' + str(identity)).encode()).hexdigest()
         vault = root / 'credentials.conf'
         vault.write_text(f'[insight-ssh-password-{account}]\npassword=fixture-password\n\n'
-                         f'[insight-ssh-password-{legacy}]\npassword=fixture-passphrase\n')
+                         f'[insight-ssh-password-{legacy}]\npassword=fixture-passphrase\n', encoding='utf-8')
         vault.chmod(0o600)
         for number in range(2):
             answer(helper, "tester@test-host's password:", vault, root / f'account-{number}',
@@ -48,7 +48,7 @@ def main(argv):
         for number in range(2):
             answer(helper, prompt, vault, root / f'key-{number}', account, identity, 'fixture-passphrase')
         saved = configparser.ConfigParser()
-        saved.read(vault)
+        saved.read(vault, encoding="utf-8")
         assert saved[f'insight-ssh-password-{stable}']['password'] == 'fixture-passphrase'
         assert not saved.has_section(f'insight-ssh-password-{legacy}')
     print('Production askpass: repeat account/key reuse and legacy passphrase migration passed')

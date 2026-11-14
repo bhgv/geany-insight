@@ -25,6 +25,12 @@ Production SSH wizard captured in an isolated GTK fixture with a test SSH client
 
 Remote files and commands through OpenSSH.
 
+## Connecting from Windows
+
+The same wizard works on Windows. Native OpenSSH clients are resolved from the editor bin directory, then PATH or system Windows OpenSSH. Key setup needs `ssh-keygen.exe`; file transfers use `sftp.exe`/`scp.exe`; graphical password prompts use `geany-insight-askpass.exe`. Bundled clients do not require MSYS2/WSL on the user computer. Key/settings paths may contain spaces and Cyrillic characters. Private settings default to `%APPDATA%\geany\insight`; a custom editor configuration directory takes precedence.
+
+SSH debugging from Windows targets a POSIX server, such as Linux, with `gdbserver`. Windows needs a compatible local GDB and matching local symbols for the target architecture. A Windows server using PowerShell instead of a POSIX shell cannot execute this wizard's automatic server/key-install commands.
+
 ## Controls
 
 Set host, user, port and key. Commands open a remote file, folder or project; Save uploads changes. Stop cancels a transfer. Connect/Disconnect controls the shell; Enter sends input and Ctrl+C interrupts. Input and output share one VT100/xterm-compatible terminal screen; screen dimensions follow the panel (see TTY / COM for history settings).
