@@ -3482,3 +3482,4 @@ SSH setup could not start.	Не удалось начать настройку S
 Remote working directory (empty: program folder)	Рабочий каталог на сервере (пусто: каталог программы)
 Invalid SSH setup options in debugger profile.	Недопустимые параметры SSH в профиле отладчика.
 Invalid remote working directory in debugger profile.	Недопустимый рабочий каталог на сервере в профиле отладчика.
+For SSH debugging of a Linux program from Windows, choose gdb-multiarch.exe or a GDB built for that target.	Для отладки программы Linux через SSH из Windows выберите gdb-multiarch.exe или GDB, собранный для этой целевой системы.

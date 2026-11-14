@@ -29,7 +29,7 @@ Remote files and commands through OpenSSH.
 
 The same wizard works on Windows. Native OpenSSH clients are resolved from the editor bin directory, then PATH or system Windows OpenSSH. Key setup needs `ssh-keygen.exe`; file transfers use `sftp.exe`/`scp.exe`; graphical password prompts use `geany-insight-askpass.exe`. Bundled clients do not require MSYS2/WSL on the user computer. Key/settings paths may contain spaces and Cyrillic characters. Private settings default to `%APPDATA%\geany\insight`; a custom editor configuration directory takes precedence.
 
-SSH debugging from Windows targets a POSIX server, such as Linux, with `gdbserver`. Windows needs a compatible local GDB and matching local symbols for the target architecture. A Windows server using PowerShell instead of a POSIX shell cannot execute this wizard's automatic server/key-install commands.
+SSH debugging from Windows targets a POSIX server, such as Linux, with `gdbserver`. Windows needs a compatible local GDB and matching local symbols for the target architecture. For Linux programs, prefer `gdb-multiarch.exe`: an ordinary MinGW GDB may support only Windows PE. The editor prefers an installed multiarch GDB; you can enter its full path in the GDB field when selecting the program. A Windows server using PowerShell instead of a POSIX shell cannot execute this wizard's automatic server/key-install commands.
 
 ## Controls
 

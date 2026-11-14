@@ -5,6 +5,7 @@
 import configparser
 import hashlib
 import os
+import ntpath
 from pathlib import Path
 import subprocess
 import sys
@@ -37,7 +38,10 @@ def main(argv):
         account = hashlib.sha256(b'test-host:22:tester').hexdigest()
         prompt = f"Enter passphrase for key '{identity}':"
         legacy = hashlib.sha256(prompt.encode()).hexdigest()
-        stable = hashlib.sha256(('private-key:' + str(identity)).encode()).hexdigest()
+        canonical = str(identity)
+        if os.name == 'nt' or sys.platform.startswith(('win', 'mingw')):
+            canonical = ntpath.normpath(canonical)
+        stable = hashlib.sha256(('private-key:' + canonical).encode()).hexdigest()
         vault = root / 'credentials.conf'
         vault.write_text(f'[insight-ssh-password-{account}]\npassword=fixture-пароль\n\n'
                          f'[insight-ssh-password-{legacy}]\npassword=fixture-passphrase\n', encoding='utf-8')
@@ -49,6 +53,7 @@ def main(argv):
             answer(helper, prompt, vault, root / f'key-{number}', account, identity, 'fixture-passphrase')
         saved = configparser.ConfigParser()
         saved.read(vault, encoding="utf-8")
+        assert saved.has_section(f'insight-ssh-password-{stable}'), (sys.platform, str(identity), canonical, saved.sections())
         assert saved[f'insight-ssh-password-{stable}']['password'] == 'fixture-passphrase'
         assert not saved.has_section(f'insight-ssh-password-{legacy}')
     print('Production askpass: repeat account/key reuse and legacy passphrase migration passed')

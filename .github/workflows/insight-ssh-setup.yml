@@ -73,6 +73,7 @@ jobs:
         run: |
           bin="$(cygpath -u "$INSIGHT_NATIVE_SSH_BIN")"
           common="insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c"
+          cc -fsyntax-only -DGTK -DGEANY_PRIVATE -I. -Isrc -Isrc/tagmanager -Ictags/main -Iscintilla/include $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/native_debugger_compile_fixture.c
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c $common -o ssh-wizard-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_native_client_test.c $common -o ssh-tunnel-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -mwindows -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) src/insight-askpass.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o ssh-askpass-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
@@ -82,4 +83,5 @@ jobs:
       - name: Verify saved passwords and legacy passphrases in Windows askpass
         run: python insight/tests/ssh_auth_helper_test.py "$INSIGHT_NATIVE_SSH_BIN/geany-insight-askpass.exe"
       - name: Drive Windows GTK through real native OpenSSH
+        if: ${{ !cancelled() }}
         run: python insight/tests/ssh_native_client_fixture.py "$INSIGHT_NATIVE_SSH_BIN" ./ssh-wizard-test.exe ./ssh-tunnel-test.exe

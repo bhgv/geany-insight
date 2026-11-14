@@ -214,18 +214,21 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     native_debug_send(dialog, "-gdb-set mi-async on");
 }
 
-/* EN: Pick local symbols and a GDB client from item; data is unused. Report a missing client without spawning.
- * RU: Выбирает локальные символы и клиент GDB по item; data не используется. Ошибка клиента показывается без запуска. */
+/* EN: Pick local symbols and a GDB client from item; data is unused. Prefer multiarch GDB on Windows; report a missing client without spawning.
+ * RU: Выбирает локальные символы и клиент GDB по item; data не используется. В Windows предпочитает multiarch GDB; ошибка клиента показывается без запуска. */
 static void debug_native_executable(GtkMenuItem *item, gpointer data)
 {
     (void)item;
     (void)data;
 #ifdef G_OS_WIN32
-    const gchar *gdb_name = "gdb.exe";
+    const gchar *gdb_name = "gdb-multiarch.exe";
+    gchar *gdb = g_find_program_in_path(gdb_name);
+    if (!gdb)
+        gdb = g_find_program_in_path("gdb.exe");
 #else
     const gchar *gdb_name = "gdb";
-#endif
     gchar *gdb = g_find_program_in_path(gdb_name);
+#endif
     if (!gdb)
         gdb = g_strdup(gdb_name);
     GtkWidget *chooser = gtk_file_chooser_dialog_new(insight_tr("Debug C/C++ Executable"),
@@ -236,6 +239,10 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
     GtkWidget *gdb_entry = gtk_entry_new();
     gtk_widget_set_name(gdb_entry, "insight-gdb-client-executable");
     gtk_entry_set_text(GTK_ENTRY(gdb_entry), gdb);
+#ifdef G_OS_WIN32
+    gtk_widget_set_tooltip_text(gdb_entry, insight_tr(
+        "For SSH debugging of a Linux program from Windows, choose gdb-multiarch.exe or a GDB built for that target."));
+#endif
     gtk_box_pack_start(GTK_BOX(options), label, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(options), gdb_entry, TRUE, TRUE, 0);
     gtk_widget_show_all(options);
