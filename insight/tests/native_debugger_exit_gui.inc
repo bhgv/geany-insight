@@ -2,17 +2,31 @@
 /* EN: Drive real GDB exit/relaunch states and capture the production debugger's human status.
  * RU: Проверяет настоящие выходы/повторные запуски GDB и снимает понятный статус окна отладчика. */
 
-/* EN: Capture window to INSIGHT_GDB_EXIT_CAPTURE when requested; assert a valid metadata-free JPEG.
- * RU: Снимает window в INSIGHT_GDB_EXIT_CAPTURE по запросу; проверяет создание JPEG без метаданных. */
-static void native_exit_gui_capture(GtkWidget *window)
+/* EN: Capture window to the path in variable when requested. Reject mostly black, occluded captures
+ * in the light-theme CI fixture; save only a real, readable production-window JPEG.
+ * RU: Снимает window в путь из variable по запросу. Отклоняет преимущественно чёрные перекрытые снимки
+ * в CI со светлой темой; сохраняет только читаемый JPEG настоящего окна. */
+static void native_exit_gui_capture(GtkWidget *window, const gchar *variable)
 {
-    const gchar *path = g_getenv("INSIGHT_GDB_EXIT_CAPTURE");
+    const gchar *path = g_getenv(variable);
     if (!path || !*path)
         return;
     GdkWindow *surface = gtk_widget_get_window(window);
     GdkPixbuf *pixels = gdk_pixbuf_get_from_window(surface, 0, 0, gdk_window_get_width(surface),
                                                    gdk_window_get_height(surface));
     g_assert_nonnull(pixels);
+    guint dark = 0, samples = 0;
+    guchar *bytes = gdk_pixbuf_get_pixels(pixels);
+    gint stride = gdk_pixbuf_get_rowstride(pixels);
+    gint channels = gdk_pixbuf_get_n_channels(pixels);
+    for (gint y = 0; y < gdk_pixbuf_get_height(pixels); y += 8)
+        for (gint x = 0; x < gdk_pixbuf_get_width(pixels); x += 8)
+        {
+            const guchar *sample = bytes + y * stride + x * channels;
+            dark += sample[0] < 8 && sample[1] < 8 && sample[2] < 8;
+            samples++;
+        }
+    g_assert_cmpuint(dark * 2, <, samples);
     GError *error = NULL;
     g_assert_true(gdk_pixbuf_save(pixels, path, "jpeg", &error, "quality", "88", NULL));
     g_assert_no_error(error);
@@ -39,20 +53,14 @@ static gboolean native_entry_gui_step(GtkWidget *window, GtkWidget *tabs)
     {
         GtkWidget *page = gtk_widget_get_parent(option);
         gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
         phase = 9;
     }
     else if (phase == 9 && gtk_widget_is_sensitive(resume))
     {
-        const gchar *path = g_getenv("INSIGHT_GDB_ENTRY_CAPTURE");
-        if (path && *path)
-        {
-            GdkWindow *surface = gtk_widget_get_window(window);
-            GdkPixbuf *pixels = gdk_pixbuf_get_from_window(surface, 0, 0, gdk_window_get_width(surface),
-                                                           gdk_window_get_height(surface));
-            g_assert_nonnull(pixels);
-            g_assert_true(gdk_pixbuf_save(pixels, path, "jpeg", NULL, "quality", "88", NULL));
-            g_object_unref(pixels);
-        }
+        native_exit_gui_capture(window, "INSIGHT_GDB_ENTRY_CAPTURE");
         g_assert_true(click(window, "Save debugger profile"));
         g_assert_true(click(window, "Stop"));
         phase = 10;
@@ -136,11 +144,14 @@ static gboolean native_exit_gui_step(GtkWidget *window, GtkWidget *tabs)
         g_assert_nonnull(source);
         g_assert_false(gtk_widget_is_sensitive(source));
         gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), 0);
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
         phase++;
     }
     else if (phase == 6)
     {
-        native_exit_gui_capture(window);
+        native_exit_gui_capture(window, "INSIGHT_GDB_EXIT_CAPTURE");
         gtk_entry_set_text(GTK_ENTRY(arguments), "0");
         g_assert_true(click(window, "Run"));
         phase++;
