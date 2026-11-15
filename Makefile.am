@@ -901,3 +901,5 @@ dist_insightdocmedia_DATA += insight/docs/media/native-debugger-exit.jpg
 dist_insightdocmedia_DATA += insight/docs/media/native-entry-stop.svg
 
 EXTRA_DIST += insight/tests/native-debug/entry-observer.lua
+
+dist_insightdocmedia_DATA += insight/docs/media/native-debugger-entry.jpg

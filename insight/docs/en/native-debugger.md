@@ -9,6 +9,10 @@ Open **Launch settings** and enable **Stop at main on Run / Restart**. Both **Ru
 Build with `-g -Og` for source stepping. C++ global constructors may run before `main`; this option does not stop before those constructors. If GDB cannot resolve `main`, inspect its console message. Signal stops show both name and description, such as `SIGSEGV — Segmentation fault`; they pause the program for inspection rather than reporting process exit.
 
 
+Actual editor window with GDB and a test program paused at entry; an auto-continuing Lua observer is loaded.
+
+![Stop-at-main launch settings](../media/native-debugger-entry.jpg)
+
 ![Entry stop and continuation](../media/native-entry-stop.svg)
 
 
