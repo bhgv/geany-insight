@@ -913,3 +913,5 @@ dist_insightdocmedia_DATA += insight/docs/media/native-data-refresh.jpg
 EXTRA_DIST += insight/tests/native-debug/threads.c insight/tests/native_debugger_threads_gui.inc
 
 dist_insightdocmedia_DATA += insight/docs/media/native-thread-context.svg
+
+dist_insightdocmedia_DATA += insight/docs/media/native-threads.jpg insight/docs/media/native-thread-values.jpg

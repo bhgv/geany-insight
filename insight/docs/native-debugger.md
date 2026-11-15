@@ -10,7 +10,13 @@ Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcar
 
 Selecting a frame inspects a saved call stack; it does not reverse execution or resume the target. Double-clicking the regular stack also reopens its confirmed source position. Fetching a frame list does not confirm a frame selection: source and values switch only after GDB accepts it. Rejected selections do not open an unconfirmed source position; the picker returns to its confirmed frame when still available. Late replies from an older context cannot replace newer data.
 
-The default is GDB all-stop mode: all threads stop together. Continue and stepping can let other threads run; selecting a thread does not itself lock the others. On supported targets, the console command `set scheduler-locking step` limits execution to the selected thread during stepping; `set scheduler-locking off` removes that restriction. The combined tree collects at most 64 threads and 64 frames per thread. Navigation needs available source/debug information; optimization can hide variables and frames.
+The default is GDB all-stop mode: all threads stop together. Continue and stepping can let other threads run; selecting a thread does not itself lock the others. On supported targets, the console command `set scheduler-locking step` limits execution to the selected thread for Step Into / Step Over; Continue and Step Out can run the other threads; `set scheduler-locking off` removes that restriction. The combined tree collects at most 64 threads and 64 frames per thread. Navigation needs available source/debug information; optimization can hide variables and frames.
+
+Actual editor with GDB and a multithreaded test program: the first worker caller frame is selected. The global status identifies the context; Variables shows its local `value = 111`.
+
+![Thread backtrace tree](media/native-threads.jpg)
+
+![Selected thread and frame locals](media/native-thread-values.jpg)
 
 ![Thread and frame value contexts](media/native-thread-context.svg)
 
