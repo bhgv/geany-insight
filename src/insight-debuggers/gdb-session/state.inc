@@ -69,7 +69,7 @@ typedef struct {
     guint value_generation, value_pending_generation, value_serial, value_offset, value_nodes;
     NativeDataAction value_path_action;
     gboolean value_reload, data_refresh_pending;
-    GtkWidget *launch_args, *launch_directory, *launch_status, *point_controls, *points_view;
+    GtkWidget *launch_args, *launch_directory, *launch_main, *launch_status, *point_controls, *points_view;
     GQueue launch_commands;
     gboolean stop_requested, kill_pending, points_needed, points_pending, console_pending;
     GPtrArray *point_markers, *stop_markers;
@@ -96,7 +96,7 @@ typedef struct {
     gboolean resume;
     GHashTable *editor_points;
     gchar *editor_point_pending;
-    gboolean closed, ready, running, stopped, pending, writing;
+    gboolean closed, ready, running, stopped, pending, writing, entry_pending;
 } NativeDebug;
 
 static void native_assembly_prepare(NativeDebug *session, gchar *request, const gchar *expression);

@@ -19,12 +19,78 @@ static void native_exit_gui_capture(GtkWidget *window)
     g_object_unref(pixels);
 }
 
+/* EN: Drive window/tabs through entry stop, profile save/restore and Restart using phases 8..12.
+ * Capture the real launch form after its allocation; return to the existing exit tests after Continue.
+ * RU: Проверяет в window/tabs вход, сохранение/восстановление профиля и Restart через фазы 8..12.
+ * Снимает настоящую форму после размещения; после Continue возвращается к проверкам завершения. */
+static gboolean native_entry_gui_step(GtkWidget *window, GtkWidget *tabs)
+{
+    GtkWidget *option = find(window, "insight-gdb-stop-at-main");
+    GtkWidget *resume = find(window, "Continue");
+    GtkWidget *run = find(window, "Run");
+    if (phase == 13 && find(window, "Lua observer loaded.") && gtk_widget_is_sensitive(run))
+    {
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-launch-arguments")), "0");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(option), TRUE);
+        g_assert_true(click(window, "Run"));
+        phase = 8;
+    }
+    else if (phase == 8 && gtk_widget_is_sensitive(resume))
+    {
+        GtkWidget *page = gtk_widget_get_parent(option);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        phase = 9;
+    }
+    else if (phase == 9 && gtk_widget_is_sensitive(resume))
+    {
+        const gchar *path = g_getenv("INSIGHT_GDB_ENTRY_CAPTURE");
+        if (path && *path)
+        {
+            GdkWindow *surface = gtk_widget_get_window(window);
+            GdkPixbuf *pixels = gdk_pixbuf_get_from_window(surface, 0, 0, gdk_window_get_width(surface),
+                                                           gdk_window_get_height(surface));
+            g_assert_nonnull(pixels);
+            g_assert_true(gdk_pixbuf_save(pixels, path, "jpeg", NULL, "quality", "88", NULL));
+            g_object_unref(pixels);
+        }
+        g_assert_true(click(window, "Save debugger profile"));
+        g_assert_true(click(window, "Stop"));
+        phase = 10;
+    }
+    else if (phase == 10 && gtk_widget_is_sensitive(run))
+    {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(option), FALSE);
+        g_assert_true(click(window, "Restore debugger profile"));
+        g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(option)));
+        phase = 12;
+    }
+    else if (phase == 12 && gtk_widget_is_sensitive(find(window, "Restart")))
+    {
+        g_assert_true(click(window, "Restart"));
+        phase = 11;
+    }
+    else if (phase == 11 && gtk_widget_is_sensitive(resume))
+    {
+        GtkWidget *points = find(window, "insight-gdb-breakpoints");
+        g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(points)), NULL),
+                        ==, 0);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(option), FALSE);
+        g_assert_true(click(window, "Continue"));
+        g_print(
+            "C/C++ GTK: stop at main, temporary breakpoint cleanup, profile restore and Restart passed.\n");
+        phase = 2;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
 /* EN: Advance normal/nonzero/signal/relaunch checks in window using shared phase; tabs selects Console
  * for the screenshot. End GTK only after status, inactive controls and empty stopped context agree.
  * RU: Продвигает проверки нормального/ненулевого/сигнального выхода и перезапуска в window через phase;
  * tabs выбирает консоль для снимка. Завершает GTK после согласования статуса, кнопок и пустого контекста. */
 static gboolean native_exit_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
+    if (phase >= 8)
+        return native_entry_gui_step(window, tabs);
     GtkWidget *run = find(window, "Run");
     GtkWidget *status = find(window, "insight-gdb-stop-reason");
     GtkWidget *arguments = find(window, "insight-gdb-launch-arguments");
@@ -33,9 +99,9 @@ static gboolean native_exit_gui_step(GtkWidget *window, GtkWidget *tabs)
     const gchar *text = gtk_label_get_text(GTK_LABEL(status));
     if (phase == 1)
     {
-        gtk_entry_set_text(GTK_ENTRY(arguments), "0");
-        g_assert_true(click(window, "Run"));
-        phase++;
+        phase = 13;
+        g_timeout_add(100, choose, observer);
+        g_assert_true(click(window, "Load Lua Observer…"));
     }
     else if (phase == 2 && strstr(text, "Program exited with code 0."))
     {

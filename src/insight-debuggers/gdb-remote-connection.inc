@@ -244,6 +244,7 @@ static gboolean native_remote_launch(NativeDebug *session)
     g_queue_push_tail(&session->launch_commands, executable);
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell on"));
     g_queue_push_tail(&session->launch_commands, arguments);
-    g_queue_push_tail(&session->launch_commands, g_strdup("-exec-run"));
+    g_queue_push_tail(&session->launch_commands, g_strdup(native_launch_run_command(
+        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(session->launch_main)))));
     return TRUE;
 }

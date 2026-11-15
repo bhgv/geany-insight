@@ -26,6 +26,7 @@ static void native_target_clear(NativeDebug *session)
     }
     session->running = session->stopped = session->resume = FALSE;
     session->stop_requested = FALSE;
+    session->entry_pending = FALSE;
     native_values_reset(session);
     g_clear_pointer(&session->stop_detail, g_free);
     g_clear_pointer(&session->data_command, g_free);
@@ -101,7 +102,8 @@ static gboolean native_launch_prepare(GtkWidget *dialog)
     g_queue_push_tail(&session->launch_commands, g_strdup_printf("-environment-cd \"%s\"", escaped));
     g_queue_push_tail(&session->launch_commands, g_strdup("-gdb-set startup-with-shell on"));
     g_queue_push_tail(&session->launch_commands, arguments);
-    g_queue_push_tail(&session->launch_commands, g_strdup("-exec-run"));
+    g_queue_push_tail(&session->launch_commands, g_strdup(native_launch_run_command(
+        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(session->launch_main)))));
     g_free(escaped);
     gtk_label_set_text(GTK_LABEL(session->launch_status), insight_tr("Launch settings accepted."));
     return TRUE;
@@ -190,8 +192,13 @@ static GtkWidget *native_launch_widget(NativeDebug *session, const gchar *target
     gtk_widget_set_hexpand(session->launch_directory, TRUE);
     gtk_grid_attach(GTK_GRID(grid), session->launch_args, 1, 1, 1, 1);
     gtk_grid_attach(GTK_GRID(grid), session->launch_directory, 1, 2, 1, 1);
+    session->launch_main = gtk_check_button_new_with_label(insight_tr("Stop at main on Run / Restart"));
+    gtk_widget_set_name(session->launch_main, "insight-gdb-stop-at-main");
+    gtk_widget_set_tooltip_text(session->launch_main, insight_tr(
+        "Use a temporary entry breakpoint. Continue resumes the same process; source stepping needs debug symbols."));
+    gtk_grid_attach(GTK_GRID(grid), session->launch_main, 0, 3, 2, 1);
     session->launch_status = gtk_label_new(insight_tr("Settings apply on Run or Restart. Breakpoints and watches are kept."));
     gtk_label_set_line_wrap(GTK_LABEL(session->launch_status), TRUE);
-    gtk_grid_attach(GTK_GRID(grid), session->launch_status, 0, 3, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), session->launch_status, 0, 4, 2, 1);
     return grid;
 }

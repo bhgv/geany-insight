@@ -22,7 +22,7 @@ typedef struct {gchar *value;} NativeWatch;
 typedef struct {
     NativeAssembly *assembly;
     Remote *remote;
-    gboolean running, stopped, resume, stop_requested, data_refresh_pending;
+    gboolean running, stopped, resume, stop_requested, data_refresh_pending, entry_pending;
     gboolean threads_needed, stack_needed, locals_needed, all_stacks_needed, frame_select_needed;
     gchar *stop_detail, *data_command, *selected_thread, *selected_frame, *requested_frame, *stop_file;
     guint stop_line, watch_next, value_generation;
@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 {
     assert(argc == 2);
     NativeAssembly assembly = {0};
-    NativeDebug session = {.assembly = &assembly, .running = TRUE, .stopped = TRUE, .resume = TRUE};
+    NativeDebug session = {.assembly = &assembly, .running = TRUE, .stopped = TRUE, .resume = TRUE, .entry_pending = TRUE};
     Remote remote = {.attached_pid = 123,
                      .interrupt_pending = TRUE,
                      .pause_requested = TRUE,
@@ -156,7 +156,7 @@ int main(int argc, char **argv)
     assert(strstr(rendered, "mov eax,[rax]") && strstr(rendered, "mov ebx,0x1000"));
     assert(assembly.rules->len == 1 && !strcmp(rule->name, "saved_rule"));
     assert(!assembly.history->len && !assembly.history_replaying && !assembly.instruction_pc_valid);
-    assert(!session.running && !session.stopped && !session.resume &&
+    assert(!session.running && !session.stopped && !session.resume && !session.entry_pending &&
            session.value_generation == (repeated ? 2u : 1u));
     assert(!strcmp(watch.value, "Unavailable"));
     if (session.remote)

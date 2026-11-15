@@ -161,6 +161,12 @@ int main(int argc, char **argv)
     char *reason = native_stop_detail("*stopped,reason=\"watchpoint-trigger\",wpt={exp=\"marker\"},value={old=\"41\",new=\"42\"}");
     assert(strstr(reason, "marker") && strstr(reason, "41") && strstr(reason, "42"));
     g_free(reason);
+    reason = native_stop_detail("*stopped,signal-name=\"SIGSEGV\",signal-meaning=\"Segmentation fault\",reason=\"signal-received\"");
+    assert(strstr(reason, "SIGSEGV") && strstr(reason, "Segmentation fault"));
+    g_free(reason);
+    reason = native_stop_detail("*stopped,reason=\"signal-received\"");
+    assert(strstr(reason, "?"));
+    g_free(reason);
     session.value_nodes = 4096;
     native_value_row(&session, &array, "{name=\"test.extra\",exp=\"extra\"}", NULL);
     assert(gtk_tree_model_iter_n_children(session.value_rows, &array) == 260);

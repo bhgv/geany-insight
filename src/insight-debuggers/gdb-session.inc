@@ -30,6 +30,7 @@ static void native_debug_update(NativeDebug *session)
                               session->stopped && !session->running));
     gtk_widget_set_sensitive(session->launch_args, idle && !session->running);
     gtk_widget_set_sensitive(session->launch_directory, idle && !session->running);
+    gtk_widget_set_sensitive(session->launch_main, idle && !session->running);
     gtk_widget_set_sensitive(session->point_controls, idle && !session->running);
     gtk_widget_set_sensitive(session->threads, idle && session->stopped);
     gtk_widget_set_sensitive(session->stack, idle && session->stopped);
@@ -347,6 +348,8 @@ static void native_debug_send(GtkWidget *dialog, const gchar *command)
         session->remote->pending = NATIVE_REMOTE_SYSROOT;
     if (session->remote && g_str_has_prefix(command, "-target-select "))
         session->remote->pending = NATIVE_REMOTE_CONNECT;
+    if (!strcmp(command, "-exec-run") || !strcmp(command, "-exec-run --start"))
+        session->entry_pending = !strcmp(command, "-exec-run --start");
     native_profile_command_sent(session, command);
     gchar *scoped = native_debug_scoped(session, command);
     gchar *line = g_strconcat(scoped, "\n", NULL);

@@ -897,3 +897,7 @@ EXTRA_DIST += insight/tests/native_debugger_exit_test.py insight/tests/native_de
 EXTRA_DIST += insight/tests/native_debugger_arguments_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/native-debugger-exit.jpg
+
+dist_insightdocmedia_DATA += insight/docs/media/native-entry-stop.svg
+
+EXTRA_DIST += insight/tests/native-debug/entry-observer.lua

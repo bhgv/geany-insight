@@ -60,6 +60,8 @@ static void native_profile_load(NativeDebug *session, gboolean automatic)
                                          g_key_file_get_boolean(profile, "debugger", "ssh-remember", NULL));
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(remote->start_server),
                                      g_key_file_get_boolean(profile, "debugger", "ssh-start-server", NULL));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(session->launch_main),
+                                     g_key_file_get_boolean(profile, "debugger", "stop-at-main", NULL));
         gchar *directory = g_key_file_get_string(profile, "debugger", "ssh-directory", NULL);
         gtk_entry_set_text(GTK_ENTRY(remote->directory), directory ? directory : "");
         g_free(directory);
@@ -98,6 +100,8 @@ static void native_profile_save(NativeDebug *session)
                            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(remote->start_server)));
     g_key_file_set_string(profile, "debugger", "ssh-directory",
                           gtk_entry_get_text(GTK_ENTRY(remote->directory)));
+    g_key_file_set_boolean(profile, "debugger", "stop-at-main",
+                           gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(session->launch_main)));
     native_profile_debug_store(session, profile);
     native_name_profile_store(session, profile);
     GError *error = NULL;

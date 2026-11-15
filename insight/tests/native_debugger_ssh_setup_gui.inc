@@ -16,6 +16,8 @@ static gboolean native_ssh_setup_gui_step(GtkWidget *window, GtkWidget *tabs)
             gtk_widget_is_sensitive(find(window, "Connect gdbserver via SSH")))
         {
             g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(start)));
+            g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(
+                find(window, "insight-gdb-stop-at-main"))));
             g_assert_true(
                 gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-ssh-remember"))));
             g_assert(click(window, "Connect gdbserver via SSH"));
@@ -27,6 +29,7 @@ static gboolean native_ssh_setup_gui_step(GtkWidget *window, GtkWidget *tabs)
         GtkWidget *location = find(window, "Function or file:line");
         if (location && gtk_widget_is_sensitive(location))
         {
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-stop-at-main")), TRUE);
             gtk_entry_set_text(GTK_ENTRY(location), "main");
             if (click(window, "Add Breakpoint"))
                 phase++;

@@ -20,7 +20,7 @@ SEND_STATE = r'''/* EN: Exercise real asynchronous GIO writes to a local echo pr
 enum {NATIVE_REMOTE_SYSROOT, NATIVE_REMOTE_CONNECT};
 typedef struct {int pending;} NativeRemote;
 typedef struct {
-    gboolean closed, pending, writing;
+    gboolean closed, pending, writing, entry_pending;
     guint value_generation, frame_pending_generation;
     NativeRemote *remote;
     GSubprocess *process;

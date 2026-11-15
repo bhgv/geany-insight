@@ -2,8 +2,8 @@
 /* EN: GDB events, breakpoints and user actions.
  * RU: События GDB, точки останова и действия пользователя. */
 
-/* EN: Read stop coordinates from record and notify observers of session.
- * RU: Читает позицию остановки из record и уведомляет наблюдателей session. */
+/* EN: Read stop coordinates from record and notify session observers; an explicit entry stop overrides auto-continue.
+ * RU: Читает позицию record и уведомляет наблюдателей session; явный вход сохраняет паузу при автопродолжении. */
 static void native_debug_observe(NativeDebug *session, const gchar *record)
 {
     g_free(session->stop_file);
@@ -18,11 +18,17 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
     gchar *reason = native_debug_field(record, "reason");
     gboolean breakpoint = !g_strcmp0(reason, "breakpoint-hit");
     g_free(reason);
+    gchar *function = native_debug_field(record, "func");
+    gboolean entry_stop = session->entry_pending && breakpoint && !g_strcmp0(function, "main");
+    if (entry_stop)
+        session->entry_pending = FALSE;
     if (session->stop_requested || !insight_lua_debug_observer_active(session->observer) || !breakpoint)
+    {
+        g_free(function);
         return;
+    }
 
     gchar *point = native_debug_field(record, "bkptno");
-    gchar *function = native_debug_field(record, "func");
     InsightObserverValue values[] = {
         {.type = 's', .name = "breakpoint", .text = point ? point : "", .length = point ? strlen(point) : 0},
         {.type = 's', .name = "reason", .text = "breakpoint-hit", .length = sizeof("breakpoint-hit") - 1}
@@ -33,6 +39,8 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
         .values = values, .count = G_N_ELEMENTS(values)
     };
     session->resume = insight_lua_debug_observe(session->observer, &event) == 0;
+    if (entry_stop)
+        session->resume = FALSE;
     const gchar *log = insight_lua_debug_observer_log(session->observer);
     gsize length = strlen(log);
     if (length > session->log_offset)

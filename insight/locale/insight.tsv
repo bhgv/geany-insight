@@ -3496,3 +3496,6 @@ Program exited with code %u.	Программа завершилась с код
 Program exited.	Программа завершилась.
 Program terminated by signal	Программа завершена сигналом
 Program arguments must not contain line breaks.	Аргументы программы не должны содержать переводы строк.
+Stop at main on Run / Restart	Остановиться в main при запуске / перезапуске
+Use a temporary entry breakpoint. Continue resumes the same process; source stepping needs debug symbols.	Использовать временную точку на входе. Продолжить возобновляет тот же процесс; для шагов по исходнику нужны отладочные символы.
+Invalid launch or SSH options in debugger profile.	Неверные параметры запуска или SSH в профиле отладчика.

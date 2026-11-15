@@ -31,6 +31,11 @@ class NativeArguments(unittest.TestCase):
 int main(int argc, char **argv)
 {
     g_assert_cmpint(argc, ==, 3);
+    if (!strcmp(argv[2], "entry") || !strcmp(argv[2], "run"))
+    {
+        puts(native_launch_run_command(!strcmp(argv[2], "entry")));
+        return 0;
+    }
     GError *error = NULL;
     gchar *command = native_launch_arguments(argv[1], !strcmp(argv[2], "windows"), &error);
     if (!command)
@@ -112,7 +117,7 @@ int main(int argc, char **argv)
             self.skipTest('Needs GDB.')
         expected = self.arguments()
         commands = ['-gdb-set startup-with-shell on', self.command(shlex.join(expected)),
-                    '-exec-run', '-gdb-exit']
+                    self.command('', 'run'), '-gdb-exit']
         result = subprocess.run([gdb, '--nx', '--quiet', '--interpreter=mi2', str(self.target)],
                                 input='\n'.join(commands) + '\n', cwd=self.root,
                                 text=True, capture_output=True, timeout=20, check=True)
@@ -120,6 +125,25 @@ int main(int argc, char **argv)
             self.skipTest('Sandbox blocks ptrace; actual argv runs in Linux CI.')
         self.assertEqual(self.arguments(result.stdout), expected, result.stdout)
         self.assertFalse((self.root / 'should-not-exist').exists())
+
+    # EN: Verify the production entry command stops in main without leaving a permanent breakpoint.
+    # RU: Проверяет остановку настоящей команды входа в main без оставшейся постоянной точки.
+    def test_real_entry_stop(self):
+        gdb = os.environ.get('GDB', shutil.which('gdb'))
+        if not gdb:
+            self.skipTest('Needs GDB.')
+        commands = [self.command('', 'entry'), '-stack-info-frame', '-break-list',
+                    '-exec-continue', '-gdb-exit']
+        result = subprocess.run([gdb, '--nx', '--quiet', '--interpreter=mi2', str(self.target)],
+                                input='\n'.join(commands) + '\n', text=True,
+                                capture_output=True, timeout=20, check=True)
+        if 'ptrace: Operation not permitted' in result.stdout + result.stderr:
+            self.skipTest('Sandbox blocks ptrace; entry stop runs in Linux CI.')
+        self.assertIn('func="main"', result.stdout)
+        self.assertIn('reason="breakpoint-hit"', result.stdout)
+        table = next(line for line in result.stdout.splitlines() if 'BreakpointTable=' in line)
+        self.assertIn('body=[]', table)
+        self.assertNotIn('^error', result.stdout)
 
 
 if __name__ == '__main__':

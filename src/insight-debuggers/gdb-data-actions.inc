@@ -198,8 +198,8 @@ static void native_run_to_cursor(GtkWidget *dialog)
     g_free(location);
 }
 
-/* EN: Summarize stop record, including watchpoint old/new values and signal names; caller frees the result.
- * RU: Кратко описывает record остановки, включая старое/новое значение и сигнал; результат освобождает вызывающий. */
+/* EN: Summarize stop record, including watchpoint old/new values and signal names/descriptions; caller frees the result.
+ * RU: Кратко описывает record остановки, включая старое/новое значение и имя/описание сигнала; результат освобождает вызывающий. */
 static gchar *native_stop_detail(const gchar *record)
 {
     gchar *reason = native_debug_field(record, "reason");
@@ -219,7 +219,10 @@ static gchar *native_stop_detail(const gchar *record)
     else if (!g_strcmp0(reason, "signal-received"))
     {
         gchar *name = native_debug_field(record, "signal-name");
-        result = g_strdup_printf("%s: %s", insight_tr("Paused by signal"), name ? name : "");
+        gchar *meaning = native_debug_field(record, "signal-meaning");
+        result = g_strdup_printf("%s: %.100s%s%.200s", insight_tr("Paused by signal"), name ? name : "?",
+                                 meaning && *meaning ? " — " : "", meaning ? meaning : "");
+        g_free(meaning);
         g_free(name);
     }
     else

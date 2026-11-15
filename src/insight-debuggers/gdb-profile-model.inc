@@ -40,7 +40,7 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
             return FALSE;
         }
     }
-    const gchar *options[] = {"ssh-remember", "ssh-start-server"};
+    const gchar *options[] = {"ssh-remember", "ssh-start-server", "stop-at-main"};
     for (guint i = 0; i < G_N_ELEMENTS(options); i++)
         if (g_key_file_has_key(profile, "debugger", options[i], NULL))
         {
@@ -50,7 +50,7 @@ static gboolean native_profile_validate(GKeyFile *profile, GError **error)
             {
                 g_clear_error(&failure);
                 g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
-                                    insight_tr("Invalid SSH setup options in debugger profile."));
+                                    insight_tr("Invalid launch or SSH options in debugger profile."));
                 return FALSE;
             }
         }

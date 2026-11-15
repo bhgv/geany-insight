@@ -63,3 +63,10 @@ static gchar *native_launch_arguments(const gchar *text, gboolean windows_target
     g_strfreev(arguments);
     return g_string_free(command, FALSE);
 }
+
+/* EN: Return the borrowed MI run command for stop_at_main; GDB owns the temporary entry breakpoint.
+ * RU: Возвращает команду MI по stop_at_main; временной точкой на входе управляет GDB. */
+static const gchar *native_launch_run_command(gboolean stop_at_main)
+{
+    return stop_at_main ? "-exec-run --start" : "-exec-run";
+}

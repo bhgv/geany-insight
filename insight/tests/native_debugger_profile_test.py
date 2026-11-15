@@ -86,6 +86,12 @@ int main(void)
     g_clear_error(&error);
     g_key_file_set_boolean(profile, "debugger", "ssh-start-server", TRUE);
     g_key_file_set_boolean(profile, "debugger", "ssh-remember", FALSE);
+    g_key_file_set_string(profile, "debugger", "stop-at-main", "broken");
+    assert(!native_profile_validate(profile, &error) && error);
+    g_clear_error(&error);
+    g_key_file_set_boolean(profile, "debugger", "stop-at-main", TRUE);
+    assert(native_profile_validate(profile, &error) && !error);
+    g_key_file_set_boolean(profile, "debugger", "stop-at-main", FALSE);
     g_key_file_set_string(profile, "debugger", "ssh-directory", "/opt/app");
     assert(native_profile_validate(profile, &error));
     g_key_file_set_string(profile, "debugger", "ssh-directory", "/opt/app\ncommand");

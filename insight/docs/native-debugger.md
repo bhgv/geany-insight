@@ -2,6 +2,16 @@
 
 Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcards, `$HOME` and command substitution stay literal. On Unix, GDB uses shell startup with each argument quoted; local Windows uses Windows command-line quoting and SSH targets use POSIX quoting. Line breaks are rejected.
 
+## Stop at main without a manual breakpoint
+
+Open **Launch settings** and enable **Stop at main on Run / Restart**. Both **Run** and **Restart** use GDB's temporary entry breakpoint; after it fires, **Continue** resumes the same process. No permanent breakpoint is added. The option also applies to SSH launches in extended-remote mode and is retained by **Save debugger profile**. Old profiles leave it disabled. Auto-continuing Lua observers do not override this explicitly requested entry stop.
+
+Build with `-g -Og` for source stepping. C++ global constructors may run before `main`; this option does not stop before those constructors. If GDB cannot resolve `main`, inspect its console message. Signal stops show both name and description, such as `SIGSEGV — Segmentation fault`; they pause the program for inspection rather than reporting process exit.
+
+
+![Entry stop and continuation](media/native-entry-stop.svg)
+
+
 ## Program exit result
 
 After the program exits, the status retains its decimal exit code, for example **Program exited with code 31.** A terminating signal shows its name and description. The reason remains until the next run or disconnection; breakpoints and watches stay configured. **Run** starts a fresh process; **Restart** also applies the current launch settings.
