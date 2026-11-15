@@ -13,7 +13,9 @@ from native_debugger_models_test import DECLARATIONS, function
 
 
 STATE = r'''typedef void GtkWidget;
+typedef void *gpointer;
 typedef void GtkTreeSelection;
+typedef void GtkTreeViewColumn;
 typedef unsigned long long guint64;
 typedef struct {void **pdata; guint len;} GPtrArray;
 typedef enum {
@@ -27,11 +29,13 @@ typedef struct {
     char *requested_frame, *selected_frame, *selected_thread, *stop_file;
     guint stop_line, watch_next;
     gboolean frame_select_needed, filling_context, stack_needed, locals_needed, stop_requested;
+    gboolean closed, ready, stopped, pending, writing;
     NativeContextRequest context_pending;
     GPtrArray *stop_markers;
 } NativeDebug;
 #define TRUE 1
 #define GTK_COMBO_BOX(value) (value)
+#define G_OBJECT(value) (value)
 #define G_MAXINT 2147483647
 #define g_clear_pointer(pointer, destroy) do {destroy(*(pointer)); *(pointer) = NULL;} while (0)
 #define g_steal_pointer(pointer) __extension__ ({void *value = *(pointer); *(pointer) = NULL; value;})
@@ -44,7 +48,33 @@ extern void g_ptr_array_set_size(GPtrArray *, guint);
 extern void g_ptr_array_unref(GPtrArray *);
 static NativeDebug *active;
 static char *picked_frame, *picked_thread;
-static guint reset_count, source_count, fill_count, all_stacks_count;
+static guint reset_count, source_count, fill_count, all_stacks_count, sent_count;
+extern GtkTreePath *gtk_tree_path_new_from_indices(int, ...);
+extern int gtk_tree_model_get_iter(GtkTreeModel *, GtkTreeIter *, GtkTreePath *);
+/* EN: Return the nonvisual dialog's session; object/key identify the normal GObject association.
+ * RU: Возвращает сеанс невизуального окна; object/key обозначают обычную связь GObject. */
+static void *g_object_get_data(void *object, const char *key)
+{
+    (void)object;
+    (void)key;
+    return active;
+}
+/* EN: Return view's real GTK model without constructing its display-dependent tree view.
+ * RU: Возвращает настоящую модель GTK для view без создания виджета дерева, требующего дисплея. */
+static GtkTreeModel *gtk_tree_view_get_model(GtkTreeView *view)
+{
+    (void)view;
+    return active->stack_rows;
+}
+/* EN: Count command dispatch for dialog; require an explicit frame-selection request.
+ * RU: Считает отправку command для dialog; требует явный запрос выбора кадра. */
+static void native_debug_send(GtkWidget *dialog, const char *command)
+{
+    (void)dialog;
+    assert(!strcmp(command, "-stack-select-frame 1"));
+    sent_count++;
+}
+
 
 /* EN: Return the fixture selection for view; display-dependent GTK widgets are not constructed.
  * RU: Возвращает выбор фикстуры view; виджеты GTK, требующие дисплея, не создаются. */
@@ -180,7 +210,7 @@ HARNESS = r'''
 int main(int argc, char **argv)
 {
     assert(argc == 2);
-    NativeDebug session = {0};
+    NativeDebug session = {.ready = TRUE, .stopped = TRUE};
     active = &session;
     session.stop_markers = g_ptr_array_new();
     g_ptr_array_add(session.stop_markers, (void *)1);
@@ -203,7 +233,7 @@ int main(int argc, char **argv)
     gboolean missing = strstr(argv[1], "missing") != NULL;
     gboolean no_source = strstr(argv[1], "nosource") != NULL;
     gboolean stack = strstr(argv[1], "stack") != NULL;
-    gboolean success = strstr(argv[1], "success") != NULL || no_source;
+    gboolean success = strstr(argv[1], "success") != NULL || no_source || stack;
     if (no_source)
     {
         GtkTreeIter row;
@@ -217,9 +247,34 @@ int main(int argc, char **argv)
         g_free(*confirmed);
         *confirmed = g_strdup("99");
     }
+    if (strstr(argv[1], "navigation"))
+    {
+        session.pending = strstr(argv[1], "busy") != NULL;
+        GtkTreePath *path = gtk_tree_path_new_from_indices(1, -1);
+        native_open_frame((GtkTreeView *)session.stack_rows, path, NULL, (GtkWidget *)&session);
+        gtk_tree_path_free(path);
+        assert(!source_count && !reset_count && !strcmp(session.selected_frame, "0"));
+        if (session.pending)
+        {
+            assert(!sent_count);
+            goto cleanup;
+        }
+        assert(sent_count == 1 && session.context_pending == NATIVE_CONTEXT_SELECT_FRAME);
+    }
     session.context_pending = stack ? NATIVE_CONTEXT_STACK :
         thread ? NATIVE_CONTEXT_SELECT_THREAD : NATIVE_CONTEXT_SELECT_FRAME;
     native_context_reply(&session, success ? "^done" : "^error,msg=\"No such context\"");
+    if (stack)
+    {
+        assert(!strcmp(session.selected_frame, "0"));
+        assert(!strcmp(session.stop_file, "/frame0.cpp") && session.stop_line == 11);
+        assert(!reset_count && !source_count && !session.locals_needed && session.watch_next == 9);
+        assert(session.frame_select_needed);
+        session.frame_select_needed = FALSE;
+        session.context_pending = NATIVE_CONTEXT_SELECT_FRAME;
+        success = strstr(argv[1], "rejected") == NULL;
+        native_context_reply(&session, success ? "^done" : "^error,msg=\"No such frame\"");
+    }
     assert(session.context_pending == NATIVE_CONTEXT_NONE && !session.filling_context);
     if (!success)
     {
@@ -234,11 +289,12 @@ int main(int argc, char **argv)
     }
     else
     {
-        assert(reset_count == (stack ? 0u : 1u) && session.locals_needed && session.watch_next == 0);
+        assert(reset_count == 1 && session.locals_needed && session.watch_next == 0);
         if (thread)
         {
             assert(!strcmp(session.selected_thread, "3") && !session.selected_frame);
             assert(!session.stop_file && !session.stop_line && session.stack_needed);
+            assert(!session.stop_markers->len && !source_count);
         }
         else
         {
@@ -258,6 +314,7 @@ int main(int argc, char **argv)
         }
     }
     assert(fill_count == (stack ? 1u : 0u) && !all_stacks_count);
+cleanup:
     g_free(session.selected_thread);
     g_free(session.selected_frame);
     g_free(session.requested_frame);
@@ -282,7 +339,9 @@ class NativeContextRequests(unittest.TestCase):
         declarations += STATE
         helpers = [function('src/insight-debuggers/gdb-source-markers.inc', 'native_source_stopped')]
         helpers += [function('src/insight-debuggers/gdb-context.inc', name)
-                   for name in ('native_selected_frame', 'native_context_restore', 'native_context_reply')]
+                   for name in ('native_selected_frame', 'native_context_restore', 'native_context_reply', 'native_context_id')]
+        helpers += [function('src/insight-debuggers/gdb-context-navigation.inc', name)
+                    for name in ('native_select_frame', 'native_open_frame')]
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             source = folder / 'context.c'
@@ -332,6 +391,31 @@ class NativeContextRequests(unittest.TestCase):
     # RU: Проверяет удаление прежней подсветки исходника self и при обновлении стека без исходника.
     def test_stack_without_source(self):
         self.exercise('stack-nosource')
+
+    # EN: Reject a frame after its stack row was fetched; preserve the previous confirmed source and values.
+    # RU: Отклоняет кадр после загрузки строки стека; сохраняет прежние подтверждённые исходник и значения.
+    def test_stack_selection_rejected(self):
+        self.exercise('stack-rejected')
+
+    # EN: Commit a requested frame only after its separate GDB frame-selection result succeeds.
+    # RU: Подтверждает запрошенный кадр только после отдельного успешного ответа выбора кадра GDB.
+    def test_stack_selection_confirmed(self):
+        self.exercise('stack-confirmed')
+
+    # EN: Confirm source navigation only after GDB accepts the requested frame.
+    # RU: Подтверждает переход к исходнику только после принятия кадра GDB.
+    def test_navigation_success(self):
+        self.exercise('navigation-success')
+
+    # EN: Reject navigation without opening the failed frame's source or replacing its locals.
+    # RU: Отклоняет переход без открытия исходника отвергнутого кадра или замены переменных.
+    def test_navigation_failure(self):
+        self.exercise('navigation-failure')
+
+    # EN: Ignore a queued double click while a context command is already pending.
+    # RU: Игнорирует двойной щелчок, пока команда контекста ожидает ответа.
+    def test_navigation_busy(self):
+        self.exercise('navigation-busy')
 
 
 if __name__ == '__main__':

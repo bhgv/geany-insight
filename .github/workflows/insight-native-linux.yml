@@ -216,6 +216,11 @@ jobs:
         run: |
           cc -g -O0 insight/tests/native-debug/main.c -o "$RUNNER_TEMP/native-gdb-program"
           LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_GDB_REFRESH_CAPTURE="$PWD/native-gdb-refresh.jpg" INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-local.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-program" insight/tests/native-debug/observer.lua "$RUNNER_TEMP/native-gdb-profile"
+      - name: Verify thread-local values and backtrace navigation in the debugger window
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          cc -g -O0 -pthread insight/tests/native-debug/threads.c -o "$RUNNER_TEMP/native-gdb-threads"
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_GDB_THREADS_GUI=1 INSIGHT_GDB_THREADS_CAPTURE="$PWD/native-gdb-threads.jpg" INSIGHT_GDB_THREAD_VALUES_CAPTURE="$PWD/native-gdb-thread-values.jpg" INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-threads.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-threads" insight/tests/native-debug/observer.lua "$RUNNER_TEMP/native-gdb-threads-profile"
       - name: Verify normal, nonzero and signal exits in the debugger window
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
@@ -233,6 +238,9 @@ jobs:
           name: native-gdb-remote-diagnostics
           path: |
             native-gdb-local.log
+            native-gdb-threads.log
+            native-gdb-threads.jpg
+            native-gdb-thread-values.jpg
             native-gdb-refresh.jpg
             native-gdb-exit.log
             native-gdb-exit.jpg

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 360" role="img" aria-labelledby="title desc">
+  <title id="title">Thread and frame context / Контекст потока и кадра</title>
+  <desc id="desc">Two workers have different locals in each frame and different thread-local storage, while both share one global variable.</desc>
+  <rect width="720" height="360" rx="14" fill="#edf3f8"/>
+  <g font-family="sans-serif" fill="#18334d">
+    <text x="360" y="31" text-anchor="middle" font-size="19">Selected thread + frame / Выбранные поток + кадр</text>
+    <g fill="#fff" stroke="#7892aa">
+      <rect x="24" y="60" width="320" height="180" rx="9"/>
+      <rect x="376" y="60" width="320" height="180" rx="9"/>
+      <rect x="170" y="285" width="380" height="52" rx="9"/>
+    </g>
+    <g font-size="17">
+      <text x="44" y="91" fill="#167c70">worker-one</text>
+      <text x="44" y="125">#0 thread_checkpoint: value = 122</text>
+      <text x="44" y="159">#1 worker_leaf: value = 111</text>
+      <text x="44" y="193">#2 worker_entry: value = 101</text>
+      <text x="44" y="223" fill="#8a50ae">thread_local tls_value = 1007</text>
+      <text x="396" y="91" fill="#167c70">worker-two</text>
+      <text x="396" y="125">#0 thread_checkpoint: value = 222</text>
+      <text x="396" y="159">#1 worker_leaf: value = 211</text>
+      <text x="396" y="193">#2 worker_entry: value = 201</text>
+      <text x="396" y="223" fill="#8a50ae">thread_local tls_value = 2007</text>
+      <text x="360" y="318" text-anchor="middle">Shared global / Общая: shared_value = 7</text>
+    </g>
+  </g>
+  <path d="M184 240v22h352v-22m-176 22v21" stroke="#7892aa" stroke-width="2" fill="none"/>
+</svg>

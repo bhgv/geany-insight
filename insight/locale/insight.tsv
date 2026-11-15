@@ -3501,3 +3501,4 @@ Use a temporary entry breakpoint. Continue resumes the same process; source step
 Invalid launch or SSH options in debugger profile.	Неверные параметры запуска или SSH в профиле отладчика.
 Refresh paused data	Обновить данные на паузе
 Reread locals, watches and the open value tree without continuing. Memory follows its refresh setting.	Перечитать локальные переменные, наблюдения и открытое дерево без продолжения. Память обновляется по её настройке.
+%s — Thread #%s / frame #%s	%s — Поток №%s / кадр №%s

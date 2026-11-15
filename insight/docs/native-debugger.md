@@ -2,6 +2,19 @@
 
 Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcards, `$HOME` and command substitution stay literal. On Unix, GDB uses shell startup with each argument quoted; local Windows uses Windows command-line quoting and SSH targets use POSIX quoting. Line breaks are rejected.
 
+## Threads, frames and backtrace navigation
+
+1. Stop at a breakpoint or use **Pause**. In **Threads and stack**, choose a thread and then a call frame. `#0` is the current function, `#1` its caller, and so on.
+2. **All thread stacks** shows a thread → frames tree. Expand a thread and double-click a frame. After GDB confirms the context, the editor opens its file and line. A frame without source coordinates remains inspectable but cannot open a source line.
+3. Use **Variables**, **Watches**, **Inspect values** and **Memory** in that context. Their requests specify the selected thread/frame; the global status displays both IDs (GDB thread IDs, not OS PIDs/LWPs). Locals depend on both, `thread_local` depends on the thread, and globals are shared. For example, a caller's `value` can be 111 in one worker and 211 in another.
+
+Selecting a frame inspects a saved call stack; it does not reverse execution or resume the target. Double-clicking the regular stack also reopens its confirmed source position. Fetching a frame list does not confirm a frame selection: source and values switch only after GDB accepts it. Rejected selections do not open an unconfirmed source position; the picker returns to its confirmed frame when still available. Late replies from an older context cannot replace newer data.
+
+The default is GDB all-stop mode: all threads stop together. Continue and stepping can let other threads run; selecting a thread does not itself lock the others. On supported targets, the console command `set scheduler-locking step` limits execution to the selected thread during stepping; `set scheduler-locking off` removes that restriction. The combined tree collects at most 64 threads and 64 frames per thread. Navigation needs available source/debug information; optimization can hide variables and frames.
+
+![Thread and frame value contexts](media/native-thread-context.svg)
+
+
 ## Refresh data without stepping
 
 **Variables** and **Inspect values** provide **Refresh paused data**. It rereads locals, watches and the open tree root in the selected thread/frame. It sends no Run, Continue or stepping command; expand the tree members again after refreshing. The button is unavailable while running, disconnected or busy.

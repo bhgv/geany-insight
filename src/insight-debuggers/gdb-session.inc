@@ -16,7 +16,15 @@ static void native_debug_update(NativeDebug *session)
         session->running ? "Running" : session->stopped ? "Paused" : "Ready");
     gchar *status = !session->running && session->stop_detail ?
         g_strdup_printf("%s — %s", state, session->stop_detail) : g_strdup(state);
+    if (session->stopped && native_context_id(session->selected_thread))
+    {
+        gchar *context = g_strdup_printf(insight_tr("%s — Thread #%s / frame #%s"), status,
+            session->selected_thread, session->selected_frame ? session->selected_frame : "?");
+        g_free(status);
+        status = context;
+    }
     gtk_label_set_text(GTK_LABEL(session->status), status);
+    gtk_widget_set_tooltip_text(session->status, status);
     g_free(status);
     for (guint i = 0; i < session->paused_controls->len; i++)
         gtk_widget_set_sensitive(session->paused_controls->pdata[i], idle && session->stopped);

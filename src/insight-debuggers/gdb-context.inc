@@ -246,23 +246,29 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         g_clear_pointer(&session->selected_frame, g_free);
         g_clear_pointer(&session->stop_file, g_free);
         session->stop_line = 0;
+        native_source_stopped(session);
     }
     if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_STACK)
     {
         gchar *path = NULL, *line = NULL;
         gchar *level = native_selected_frame(session, &path, &line);
+        if (request == NATIVE_CONTEXT_STACK && session->requested_frame)
+        {
+            session->frame_select_needed = level && !strcmp(level, session->requested_frame);
+            if (!session->frame_select_needed)
+            {
+                g_clear_pointer(&session->requested_frame, g_free);
+                native_context_restore(session, NATIVE_CONTEXT_SELECT_FRAME);
+            }
+            g_free(level);
+            g_free(path);
+            g_free(line);
+            return;
+        }
         if (level)
         {
             g_free(session->selected_frame);
             session->selected_frame = g_strdup(level);
-            if (request == NATIVE_CONTEXT_STACK && session->requested_frame)
-            {
-                session->locals_needed = TRUE;
-                session->watch_next = 0;
-                session->frame_select_needed = !strcmp(level, session->requested_frame);
-                if (!session->frame_select_needed)
-                    g_clear_pointer(&session->requested_frame, g_free);
-            }
             g_free(session->stop_file);
             session->stop_file = g_steal_pointer(&path);
             guint64 number = 0;
@@ -283,66 +289,6 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         session->locals_needed = TRUE;
         session->watch_next = 0;
     }
-}
-
-/* EN: Select the GDB thread chosen in combo for the dialog in data.
- * RU: Выбирает поток GDB из combo для диалога из data. */
-static void native_select_thread(GtkComboBox *combo, gpointer data)
-{
-    GtkWidget *dialog = data;
-    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
-    const gchar *id = gtk_combo_box_get_active_id(combo);
-    if (session->filling_context || !session->stopped || session->pending || session->writing ||
-        !native_context_id(id))
-        return;
-    gchar *command = g_strdup_printf("-thread-select %s", id);
-    session->context_pending = NATIVE_CONTEXT_SELECT_THREAD;
-    native_debug_send(dialog, command);
-    g_free(command);
-}
-
-/* EN: Select the GDB frame in selection for the dialog in data.
- * RU: Выбирает кадр GDB из selection для диалога из data. */
-static void native_select_frame(GtkTreeSelection *selection, gpointer data)
-{
-    (void)selection;
-    GtkWidget *dialog = data;
-    NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
-    if (session->filling_context || !session->stopped || session->pending || session->writing)
-        return;
-    gchar *level = native_selected_frame(session, NULL, NULL);
-    if (native_context_id(level))
-    {
-        gchar *command = g_strdup_printf("-stack-select-frame %s", level);
-        session->context_pending = NATIVE_CONTEXT_SELECT_FRAME;
-        native_debug_send(dialog, command);
-        g_free(command);
-    }
-    g_free(level);
-}
-
-/* EN: Open the activated row's source location in the editor.
- * RU: Открывает исходник активированной строки стека в редакторе. */
-static void native_open_frame(GtkTreeView *view, GtkTreePath *path, GtkTreeViewColumn *column,
-                              gpointer data)
-{
-    (void)column;
-    (void)data;
-    GtkTreeModel *model = gtk_tree_view_get_model(view);
-    GtkTreeIter row;
-    if (!gtk_tree_model_get_iter(model, &row, path))
-        return;
-    gchar *filename = NULL, *line = NULL;
-    gtk_tree_model_get(model, &row, 4, &filename, 3, &line, -1);
-    guint64 number;
-    if (filename && line && g_ascii_string_to_unsigned(line, 10, 1, G_MAXINT, &number, NULL))
-    {
-        gchar *native = utils_get_locale_from_utf8(filename);
-        diff_source_open(native, (guint)number);
-        g_free(native);
-    }
-    g_free(filename);
-    g_free(line);
 }
 
 /* EN: Read GDB MI variable tuples from record into session's table and frame cache.

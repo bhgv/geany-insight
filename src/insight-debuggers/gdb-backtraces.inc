@@ -61,7 +61,7 @@ static void native_all_stacks_activate(GtkTreeView *view, GtkTreePath *path,
     (void)column;
     GtkWidget *dialog = data;
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
-    if (!session->ready || !session->stopped || session->pending || session->writing)
+    if (session->closed || !session->ready || !session->stopped || session->pending || session->writing)
         return;
     GtkTreeModel *model = gtk_tree_view_get_model(view);
     GtkTreeIter row;
@@ -81,14 +81,18 @@ static void native_all_stacks_activate(GtkTreeView *view, GtkTreePath *path,
         gboolean same_thread = !g_strcmp0(session->selected_thread, thread);
         g_free(session->requested_frame);
         session->requested_frame = g_strdup(level);
-        if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), thread))
+        session->filling_context = TRUE;
+        gboolean selected = gtk_combo_box_set_active_id(GTK_COMBO_BOX(session->threads), thread);
+        session->filling_context = FALSE;
+        if (!selected)
             g_clear_pointer(&session->requested_frame, g_free);
         else if (same_thread)
         {
             session->stack_needed = TRUE;
             native_debug_resume(dialog, session);
         }
-        native_open_frame(view, path, NULL, NULL);
+        else
+            native_select_thread(GTK_COMBO_BOX(session->threads), dialog);
     }
     g_free(level);
     g_free(thread);

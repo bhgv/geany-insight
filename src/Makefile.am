@@ -328,6 +328,7 @@ libgeany_la_SOURCES += \
 	insight-debuggers/gdb-session/state.inc \
 	insight-debuggers/gdb-watches.inc \
 	insight-debuggers/gdb-context.inc \
+	insight-debuggers/gdb-context-navigation.inc \
 	insight-debuggers/gdb-backtraces.inc \
 	insight-debuggers/gdb-source-markers.inc \
 	insight-debuggers/gdb-arguments-model.inc \

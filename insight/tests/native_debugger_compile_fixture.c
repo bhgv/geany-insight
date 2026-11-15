@@ -42,6 +42,7 @@ void insight_panel_help_attach(GtkWidget *, const gchar *);
 #include "insight-debuggers/gdb-session.inc"
 #include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
+#include "insight-debuggers/gdb-context-navigation.inc"
 #include "insight-debuggers/gdb-backtraces.inc"
 #include "insight-debuggers/gdb-source-markers.inc"
 #include "insight-debuggers/gdb-exit-model.inc"
