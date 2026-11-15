@@ -142,6 +142,7 @@ static GtkWidget *native_memory_widget(NativeDebug *session)
             g_signal_connect_swapped(session->memory_expression, "activate", G_CALLBACK(gtk_button_clicked), button);
     }
     session->memory_auto = gtk_check_button_new_with_label(insight_tr("Refresh memory at each stop"));
+    gtk_widget_set_name(session->memory_auto, "insight-gdb-memory-auto");
     gtk_container_add(GTK_CONTAINER(bar), session->memory_auto);
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
     g_ptr_array_add(session->paused_controls, bar);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
-/* EN: Native data watchpoints, value assignment and execution to the editor caret.
- * RU: Точки останова по данным, изменение значений и выполнение до курсора редактора. */
+/* EN: Native data watchpoints, assignment, paused-data refresh and execution to the editor caret.
+ * RU: Точки по данным, присваивание, обновление на паузе и выполнение до курсора редактора. */
 
 /* EN: Return a quoted MI watchpoint command for expression and action, or NULL for other actions.
  * RU: Возвращает экранированную команду точки по expression и action либо NULL для иных действий. */
@@ -15,8 +15,9 @@ static gchar *native_data_watch_command(const gchar *expression, NativeDataActio
     return command;
 }
 
-/* EN: Refresh session's locals, watches and an existing inspection after a successful write.
- * RU: Обновляет переменные, наблюдения и открытое дерево session после успешной записи. */
+/* EN: Refresh session data after a write or manual request; invalidate dependent address/register caches.
+ * RU: Обновляет данные session после записи или ручного запроса; сбрасывает зависимые кэши адресов/регистров.
+ */
 static void native_data_refresh(NativeDebug *session)
 {
     gboolean reload = session->value_root != NULL;
@@ -24,10 +25,48 @@ static void native_data_refresh(NativeDebug *session)
     session->value_reload = reload;
     session->locals_needed = TRUE;
     session->watch_next = 0;
+    native_assembly_invalidate(session);
+    if (session->assembly)
+    {
+        session->assembly->follow_needed = TRUE;
+        if (session->assembly->register_rows)
+            gtk_list_store_clear(session->assembly->register_rows);
+    }
+}
+
+/* EN: Reread data for the paused session in data without executing the inferior; button is unused.
+ * Busy, disconnected, running and active-disassembly sessions ignore the request.
+ * RU: Перечитывает данные приостановленного сеанса data без исполнения программы; button не используется.
+ * Занятый, отключённый, работающий сеанс и активное чтение инструкций отклоняют запрос. */
+static void native_data_refresh_clicked(GtkButton *button, gpointer data)
+{
+    (void)button;
+    NativeDebug *session = data;
+    if (session->closed || !session->ready || !session->stopped || session->running || session->pending ||
+        session->writing || (session->assembly && session->assembly->active))
+        return;
+    native_data_refresh(session);
+    native_debug_update(session);
+    native_debug_resume(session->window, session);
+}
+
+/* EN: Build a paused-only refresh button for session with stable widget name; return the owned GTK widget.
+ * RU: Создаёт кнопку обновления на паузе для session со стабильным name; возвращает виджет GTK. */
+static GtkWidget *native_data_refresh_button(NativeDebug *session, const gchar *name)
+{
+    GtkWidget *button = gtk_button_new_with_label(insight_tr("Refresh paused data"));
+    gtk_widget_set_name(button, name);
+    gtk_widget_set_halign(button, GTK_ALIGN_START);
+    gtk_widget_set_tooltip_text(button, insight_tr("Reread locals, watches and the open value tree without "
+                                                   "continuing. Memory follows its refresh setting."));
+    g_signal_connect(button, "clicked", G_CALLBACK(native_data_refresh_clicked), session);
+    g_ptr_array_add(session->paused_controls, button);
+    return button;
 }
 
 /* EN: Apply action to expression in session; queue watchpoints when called from an async path reply.
- * RU: Применяет action к expression в session; ставит точки по данным в очередь при асинхронном ответе пути. */
+ * RU: Применяет action к expression в session; ставит точки по данным в очередь при асинхронном ответе пути.
+ */
 static void native_data_use_expression(NativeDebug *session, const gchar *expression, NativeDataAction action)
 {
     if (!session->ready || !session->stopped || !expression || !*expression)
@@ -69,14 +108,15 @@ static void native_assign_dialog(NativeDebug *session, const gchar *expression, 
         return;
     GtkWidget *window = g_object_ref(session->window);
     guint generation = session->value_generation;
-    GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("Change Value"), GTK_WINDOW(window),
-        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+    GtkWidget *dialog = gtk_dialog_new_with_buttons(
+        insight_tr("Change Value"), GTK_WINDOW(window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
         "_Cancel", GTK_RESPONSE_CANCEL, "_Apply", GTK_RESPONSE_ACCEPT, NULL);
     GtkWidget *box = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     GtkWidget *label = gtk_label_new(expression);
     gtk_label_set_selectable(GTK_LABEL(label), TRUE);
     gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 8);
-    GtkWidget *hint = gtk_label_new(insight_tr("Enter a C/C++ value expression. This changes the paused program."));
+    GtkWidget *hint =
+        gtk_label_new(insight_tr("Enter a C/C++ value expression. This changes the paused program."));
     gtk_label_set_line_wrap(GTK_LABEL(hint), TRUE);
     gtk_box_pack_start(GTK_BOX(box), hint, FALSE, FALSE, 8);
     GtkWidget *entry = gtk_entry_new();
@@ -161,18 +201,26 @@ static GtkWidget *native_data_buttons(NativeDebug *session, gboolean locals)
 {
     GtkWidget *bar = gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(bar), GTK_SELECTION_NONE);
-    const gchar *labels[] = {"Inspect selected value", "Watch selected value", "Change selected value",
-                             "Break on Write", "Break on Read", "Break on Access", "View Memory"};
+    const gchar *labels[] = {"Inspect selected value",
+                             "Watch selected value",
+                             "Change selected value",
+                             "Break on Write",
+                             "Break on Read",
+                             "Break on Access",
+                             "View Memory"};
     const NativeDataAction actions[] = {NATIVE_DATA_INSPECT, NATIVE_DATA_WATCH, NATIVE_DATA_ASSIGN,
-                                        NATIVE_DATA_WRITE, NATIVE_DATA_READ, NATIVE_DATA_ACCESS, NATIVE_DATA_MEMORY};
+                                        NATIVE_DATA_WRITE,   NATIVE_DATA_READ,  NATIVE_DATA_ACCESS,
+                                        NATIVE_DATA_MEMORY};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         if (!locals && (i == 1 || i == 2))
             continue;
-        GtkWidget *button = gtk_button_new_with_label(insight_tr(!locals && i == 0 ? "Inspect watch expression" : labels[i]));
+        GtkWidget *button =
+            gtk_button_new_with_label(insight_tr(!locals && i == 0 ? "Inspect watch expression" : labels[i]));
         g_object_set_data(G_OBJECT(button), "data-action", GUINT_TO_POINTER(actions[i]));
-        g_signal_connect(button, "clicked", locals ? G_CALLBACK(native_local_action) :
-                                                   G_CALLBACK(native_watch_data_action), session);
+        g_signal_connect(button, "clicked",
+                         locals ? G_CALLBACK(native_local_action) : G_CALLBACK(native_watch_data_action),
+                         session);
         gtk_container_add(GTK_CONTAINER(bar), button);
     }
     g_ptr_array_add(session->paused_controls, bar);
@@ -185,10 +233,12 @@ static void native_run_to_cursor(GtkWidget *dialog)
 {
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
     GeanyDocument *document = document_get_current();
-    if (!session->stopped || session->pending || session->writing || !DOC_VALID(document) || !document->file_name)
+    if (!session->stopped || session->pending || session->writing || !DOC_VALID(document) ||
+        !document->file_name)
         return;
-    guint line = sci_get_line_from_position(document->editor->sci,
-                                            sci_get_current_position(document->editor->sci)) + 1;
+    guint line =
+        sci_get_line_from_position(document->editor->sci, sci_get_current_position(document->editor->sci)) +
+        1;
     gchar *location = g_strdup_printf("%s:%u", document->file_name, line);
     gchar *escaped = g_strescape(location, NULL);
     gchar *command = g_strdup_printf("-exec-until \"%s\"", escaped);
@@ -198,8 +248,9 @@ static void native_run_to_cursor(GtkWidget *dialog)
     g_free(location);
 }
 
-/* EN: Summarize stop record, including watchpoint old/new values and signal names/descriptions; caller frees the result.
- * RU: Кратко описывает record остановки, включая старое/новое значение и имя/описание сигнала; результат освобождает вызывающий. */
+/* EN: Summarize stop record, including watchpoint old/new values and signal names/descriptions; caller frees
+ * the result. RU: Кратко описывает record остановки, включая старое/новое значение и имя/описание сигнала;
+ * результат освобождает вызывающий. */
 static gchar *native_stop_detail(const gchar *record)
 {
     gchar *reason = native_debug_field(record, "reason");
@@ -210,8 +261,8 @@ static gchar *native_stop_detail(const gchar *record)
         gchar *old = native_debug_field(record, "old");
         gchar *value = native_debug_field(record, "new");
         result = g_strdup_printf("%s: %.200s%s%.300s%s%.300s", insight_tr("Data watchpoint"),
-            expression ? expression : "", old ? " — " : "", old ? old : "",
-            value ? " → " : "", value ? value : "");
+                                 expression ? expression : "", old ? " — " : "", old ? old : "",
+                                 value ? " → " : "", value ? value : "");
         g_free(value);
         g_free(old);
         g_free(expression);
@@ -226,9 +277,10 @@ static gchar *native_stop_detail(const gchar *record)
         g_free(name);
     }
     else
-        result = g_strdup(insight_tr(!g_strcmp0(reason, "breakpoint-hit") ? "Breakpoint hit" :
-            !g_strcmp0(reason, "end-stepping-range") ? "Step complete" :
-            !g_strcmp0(reason, "function-finished") ? "Function returned" : "Stopped"));
+        result = g_strdup(insight_tr(!g_strcmp0(reason, "breakpoint-hit")       ? "Breakpoint hit"
+                                     : !g_strcmp0(reason, "end-stepping-range") ? "Step complete"
+                                     : !g_strcmp0(reason, "function-finished")  ? "Function returned"
+                                                                                : "Stopped"));
     g_free(reason);
     gchar *valid = g_utf8_make_valid(result, -1);
     g_free(result);

@@ -131,6 +131,7 @@ static void native_values_reset(NativeDebug *session);
 static gchar *native_values_next(NativeDebug *session, gboolean cleanup);
 static gboolean native_values_reply(NativeDebug *session, const gchar *record);
 static void native_data_refresh(NativeDebug *session);
+static GtkWidget *native_data_refresh_button(NativeDebug *session, const gchar *name);
 static void native_data_use_expression(NativeDebug *session, const gchar *expression, NativeDataAction action);
 static void native_assign_dialog(NativeDebug *session, const gchar *expression, const gchar *value,
                                  const gchar *object);

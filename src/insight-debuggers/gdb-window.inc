@@ -141,6 +141,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     session->observer_log = debug_create_view(log, TRUE);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), log, gtk_label_new(insight_tr("Observer log")));
     GtkWidget *local_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_start(GTK_BOX(local_page), native_data_refresh_button(session, "insight-gdb-refresh-locals"),
+                       FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(local_page), local_scroll, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(local_page), native_data_buttons(session, TRUE), FALSE, FALSE, 0);
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), local_page, gtk_label_new(insight_tr("Variables")));

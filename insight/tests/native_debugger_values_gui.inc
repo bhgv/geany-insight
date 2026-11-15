@@ -254,8 +254,45 @@ static gboolean native_values_gui_step(GtkWidget *window, GtkWidget *tabs)
                 phase++;
         }
     }
-    else if (phase == 34 && find(window, " | GDB memory") && click(window, "Stop"))
+    else if (phase == 34 && find(window, " | GDB memory"))
+    {
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-inspect-expression")), "debug_sample");
+        if (click(window, "Inspect Expression"))
+            phase = 35;
+    }
+    else if (phase == 35 && expand_value(window, "0"))
+        phase = 36;
+    else if (phase == 36 && value_member(window, "0", "count", "13", FALSE))
+    {
+        g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-memory-auto"))));
+        if (click(window, "insight-gdb-refresh-inspection"))
+            phase = 37;
+    }
+    else if (phase == 37 && !find(window, " | GDB memory") && expand_value(window, "0"))
+        phase = 38;
+    else if (phase == 38 && value_member(window, "0", "count", "13", FALSE) &&
+             has_local(window, "marker", "102"))
+    {
+        GtkWidget *page = values_page(find(window, "insight-gdb-value-tree"), tabs);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
+        phase = 39;
+    }
+    else if (phase == 39)
+    {
+        native_exit_gui_capture(window, "INSIGHT_GDB_REFRESH_CAPTURE");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-memory-auto")), TRUE);
+        if (click(window, "insight-gdb-refresh-locals"))
+            phase = 40;
+    }
+    else if (phase == 40 && find(window, " | GDB memory") && has_local(window, "marker", "102") &&
+             click(window, "Stop"))
+    {
+        g_print("C/C++ GTK: paused refresh, value-tree reload, unchanged program state and memory policies passed.\n");
         phase = 29;
+    }
     else if (phase == 29)
     {
         GtkWidget *run = find(window, "Run");

@@ -194,6 +194,8 @@ static GtkWidget *native_values_widget(NativeDebug *session)
     g_signal_connect_swapped(session->value_expression, "activate", G_CALLBACK(gtk_button_clicked), inspect);
     gtk_box_pack_start(GTK_BOX(bar), session->value_expression, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(bar), inspect, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), native_data_refresh_button(session, "insight-gdb-refresh-inspection"),
+                       FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
     g_ptr_array_add(session->paused_controls, bar);
     session->value_rows = gtk_tree_store_new(8, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,

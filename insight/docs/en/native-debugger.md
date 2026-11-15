@@ -2,6 +2,17 @@
 
 Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcards, `$HOME` and command substitution stay literal. On Unix, GDB uses shell startup with each argument quoted; local Windows uses Windows command-line quoting and SSH targets use POSIX quoting. Line breaks are rejected.
 
+## Refresh data without stepping
+
+**Variables** and **Inspect values** provide **Refresh paused data**. It rereads locals, watches and the open tree root in the selected thread/frame. It sends no Run, Continue or stepping command; expand the tree members again after refreshing. The button is unavailable while running, disconnected or busy.
+
+Both assignment and manual refresh invalidate dependent address annotations and the register snapshot. Manual naming rules remain. Fresh instructions/registers use the normal automatic-follow policy or a manual instruction read.
+
+The memory snapshot also becomes stale: with **Refresh memory at each stop** enabled the block is reread; otherwise it is cleared until **Read Memory**. Old bytes are therefore not presented as current after values or pointers change.
+
+![Refresh dependent snapshots](../media/native-data-refresh.svg)
+
+
 ## Stop at main without a manual breakpoint
 
 Open **Launch settings** and enable **Stop at main on Run / Restart**. Both **Run** and **Restart** use GDB's temporary entry breakpoint; after it fires, **Continue** resumes the same process. No permanent breakpoint is added. The option also applies to SSH launches in extended-remote mode and is retained by **Save debugger profile**. Old profiles leave it disabled. Auto-continuing Lua observers do not override this explicitly requested entry stop.
