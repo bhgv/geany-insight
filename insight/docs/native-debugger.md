@@ -10,6 +10,10 @@ Both assignment and manual refresh invalidate dependent address annotations and 
 
 The memory snapshot also becomes stale: with **Refresh memory at each stop** enabled the block is reread; otherwise it is cleared until **Read Memory**. Old bytes are therefore not presented as current after values or pointers change.
 
+Actual editor and GDB window with a test program after refreshing: the tree was reread without stepping.
+
+![Value tree after paused refresh](media/native-data-refresh.jpg)
+
 ![Refresh dependent snapshots](media/native-data-refresh.svg)
 
 
