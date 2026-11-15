@@ -32,6 +32,8 @@ static void native_select_frame(GtkTreeSelection *selection, gpointer data)
     if (native_context_id(level))
     {
         gchar *command = g_strdup_printf("-stack-select-frame %s", level);
+        g_free(session->requested_frame);
+        session->requested_frame = g_strdup(level);
         session->context_pending = NATIVE_CONTEXT_SELECT_FRAME;
         native_debug_send(dialog, command);
         g_free(command);

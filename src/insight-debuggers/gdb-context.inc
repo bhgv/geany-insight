@@ -242,11 +242,23 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
     {
         session->stack_needed = TRUE;
         g_free(session->selected_thread);
-        session->selected_thread = g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(session->threads)));
+        gchar *confirmed = native_debug_field(record, "new-thread-id");
+        session->selected_thread = native_context_id(confirmed) ? g_strdup(confirmed) :
+            g_strdup(gtk_combo_box_get_active_id(GTK_COMBO_BOX(session->threads)));
+        g_free(confirmed);
+        native_context_restore(session, NATIVE_CONTEXT_SELECT_THREAD);
         g_clear_pointer(&session->selected_frame, g_free);
         g_clear_pointer(&session->stop_file, g_free);
         session->stop_line = 0;
         native_source_stopped(session);
+    }
+    if (request == NATIVE_CONTEXT_SELECT_FRAME && session->requested_frame)
+    {
+        g_free(session->selected_frame);
+        session->selected_frame = g_strdup(session->requested_frame);
+        native_context_restore(session, NATIVE_CONTEXT_SELECT_FRAME);
+        g_clear_pointer(&session->stop_file, g_free);
+        session->stop_line = 0;
     }
     if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_STACK)
     {

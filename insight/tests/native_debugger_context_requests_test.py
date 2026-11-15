@@ -234,6 +234,8 @@ int main(int argc, char **argv)
     gboolean no_source = strstr(argv[1], "nosource") != NULL;
     gboolean stack = strstr(argv[1], "stack") != NULL;
     gboolean success = strstr(argv[1], "success") != NULL || no_source || stack;
+    gboolean queued_frame = strstr(argv[1], "queued-frame") != NULL;
+    gboolean queued_thread = strstr(argv[1], "queued-thread") != NULL;
     if (no_source)
     {
         GtkTreeIter row;
@@ -261,9 +263,15 @@ int main(int argc, char **argv)
         }
         assert(sent_count == 1 && session.context_pending == NATIVE_CONTEXT_SELECT_FRAME);
     }
+    if (queued_frame)
+    {
+        g_free(picked_frame);
+        picked_frame = g_strdup("0");
+    }
     session.context_pending = stack ? NATIVE_CONTEXT_STACK :
         thread ? NATIVE_CONTEXT_SELECT_THREAD : NATIVE_CONTEXT_SELECT_FRAME;
-    native_context_reply(&session, success ? "^done" : "^error,msg=\"No such context\"");
+    native_context_reply(&session, queued_thread ? "^done,new-thread-id=\"2\"" :
+        success ? "^done" : "^error,msg=\"No such context\"");
     if (stack)
     {
         assert(!strcmp(session.selected_frame, "0"));
@@ -292,7 +300,8 @@ int main(int argc, char **argv)
         assert(reset_count == 1 && session.locals_needed && session.watch_next == 0);
         if (thread)
         {
-            assert(!strcmp(session.selected_thread, "3") && !session.selected_frame);
+            assert(!strcmp(session.selected_thread, queued_thread ? "2" : "3") && !session.selected_frame);
+            assert(!strcmp(picked_thread, queued_thread ? "2" : "3"));
             assert(!session.stop_file && !session.stop_line && session.stack_needed);
             assert(!session.stop_markers->len && !source_count);
         }
@@ -339,7 +348,7 @@ class NativeContextRequests(unittest.TestCase):
         declarations += STATE
         helpers = [function('src/insight-debuggers/gdb-source-markers.inc', 'native_source_stopped')]
         helpers += [function('src/insight-debuggers/gdb-context.inc', name)
-                   for name in ('native_selected_frame', 'native_context_restore', 'native_context_reply', 'native_context_id')]
+                   for name in ('native_debug_field', 'native_context_id', 'native_selected_frame', 'native_context_restore', 'native_context_reply')]
         helpers += [function('src/insight-debuggers/gdb-context-navigation.inc', name)
                     for name in ('native_select_frame', 'native_open_frame')]
         with tempfile.TemporaryDirectory() as directory:
@@ -416,6 +425,16 @@ class NativeContextRequests(unittest.TestCase):
     # RU: Игнорирует двойной щелчок, пока команда контекста ожидает ответа.
     def test_navigation_busy(self):
         self.exercise('navigation-busy')
+
+    # EN: Use the dispatched frame ID even if the visible picker changed before GDB replied.
+    # RU: Использует отправленный номер кадра, даже если список изменился до ответа GDB.
+    def test_queued_frame_picker(self):
+        self.exercise('queued-frame-success')
+
+    # EN: Use GDB's returned thread ID instead of a newer visible picker selection.
+    # RU: Использует номер потока из ответа GDB вместо более нового выбора в списке.
+    def test_queued_thread_picker(self):
+        self.exercise('queued-thread-success')
 
 
 if __name__ == '__main__':
