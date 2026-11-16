@@ -67,6 +67,7 @@ on:
       - src/insight-project-membership.h
       - src/project.c
       - src/insight-workbench.*
+      - src/insight-workbench/**
       - insight/desktop/window_motion.*
       - src/highlighting.c
       - src/insight-languages.c
@@ -211,6 +212,19 @@ jobs:
               assert rows and all(str(root / 'lib/geany/clang') in line for line in rows), (name, output)
           subprocess.run([str(root / 'bin/geany'), '--version'], check=True)
           PY
+      - name: Verify search commands before optional integrations
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          INSIGHT_SEARCH_COMMANDS_CAPTURE="$PWD/search-commands.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight native search commands GUI' 'Insight context search' 'Insight keyword search' 'Insight search state' 'Insight unified file search and symbols GUI' 'Insight native incremental search GUI' 'Insight native selection search and match list GUI' 'Insight reference comment regions GUI'
+      - name: Publish search diagnostics
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: insight-search-checks
+          path: |
+            search-commands.jpg
+            _native/meson-logs/testlog.txt
+          retention-days: 3
       - name: Exercise native GDB values and data watchpoints
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |

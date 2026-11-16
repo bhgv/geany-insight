@@ -23,3 +23,7 @@ Background search refreshes (Follow, source edits and index updates) keep the se
 
 
 [Search and copy the list](list-tools.md): context menu and F4/Shift+F4 within already collected results.
+
+Project text search and Find File include every language in the selected scope, regardless of the active editor language. File masks still apply. Lexical symbol usages retain their language compatibility rules.
+
+Текстовый поиск по проекту и поиск имени файла включают все языки выбранной области, независимо от активного редактора. Маски файлов учитываются. Поиск использований символа сохраняет правила совместимости языков.

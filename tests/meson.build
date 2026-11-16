@@ -1015,3 +1015,6 @@ ssh_setup_gui_test = executable('test_insight_ssh_setup_gui', '../insight/tests/
   '../insight/desktop/remote_io.c', '../insight/desktop/remote_credentials.c',
   include_directories: include_directories('../insight/desktop'), dependencies: deps)
 test('Insight production SSH setup wizard GUI', ssh_setup_gui_test, timeout: 45)
+
+search_commands_gui_test = executable('test_insight_search_commands_gui', '../insight/tests/search_commands_gui_test.c', dependencies: test_deps)
+test('Insight native search commands GUI', search_commands_gui_test, timeout: 45, is_parallel: false)

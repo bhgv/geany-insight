@@ -232,8 +232,10 @@ static void symbol_list_job_done(GObject *source, GAsyncResult *result, gpointer
     g_object_unref(store);
 }
 
-/* EN: Create a query for store from entry with limit and files mode.
- * RU: Создаёт запрос для store из entry с limit и режимом files. */
+/* EN: Return a query for store from entry with limit and files mode, or NULL
+ * on an invalid filter. Cancel the previous query. File queries span all languages.
+ * RU: Возвращает запрос store из entry с limit и режимом files либо NULL при
+ * неверном фильтре. Отменяет прежний запрос. Файлы ищутся среди всех языков. */
 static SymbolListJob *symbol_list_begin(GtkListStore *store, GtkWidget *entry, guint limit, gboolean files)
 {
     SymbolListState *s = symbol_list_state(store);
@@ -277,7 +279,8 @@ static SymbolListJob *symbol_list_begin(GtkListStore *store, GtkWidget *entry, g
     j->generation = s->generation;
     j->epoch = workbench_epoch;
     GeanyDocument *active = document_get_current();
-    if (active && (store == wb.symbols || store == wb.file_store)) j->language = insight_language_filter_new(active->file_name, active->file_type);
+    if (active && store == wb.symbols)
+        j->language = insight_language_filter_new(active->file_name, active->file_type);
     return j;
 }
 

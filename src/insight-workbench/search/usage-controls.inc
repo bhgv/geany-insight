@@ -3,8 +3,12 @@
  * RU: Команды поиска использований и навигация по результатам. */
 
 
-/* EN: Start a usage search using widget and its associated data.
- * RU: Запускает поиск использований с параметрами widget и data. */
+/* EN: Start asynchronous usage or text search. widget reveals explicit results;
+ * data is unused. Text scopes use masks, not the active source language.
+ * Invalid queries report a status and start no worker.
+ * RU: Запускает асинхронный поиск использований или текста. widget открывает
+ * явные результаты; data не используется. Текст ограничивается маской, а не
+ * языком активного исходника. Неверный запрос выводит статус без запуска. */
 static void usage_start(GtkWidget *widget, gpointer data)
 {
     (void)data;
@@ -112,7 +116,7 @@ static void usage_start(GtkWidget *widget, gpointer data)
         {
             const char *path = g_ptr_array_index(paths, i);
             GeanyDocument *active = document_get_current();
-            if (active && !insight_languages_search_path(active->file_name, active->file_type, path)) continue;
+            if (mode != 3 && active && !insight_languages_search_path(active->file_name, active->file_type, path)) continue;
             if (g_hash_table_contains(seen, path) || (mode == 3 && !search_path_matches(path))) continue;
             Location *next = g_new0(Location, 1);
             next->path = g_strdup(path);
@@ -125,7 +129,7 @@ static void usage_start(GtkWidget *widget, gpointer data)
         GeanyDocument *doc = g_ptr_array_index(documents_array, i);
         if (!doc->is_valid || (scope == 2 && doc != document_get_current()) || (mode == 3 && (scope == 0 || scope == 3)) || (mode == 3 && doc->file_name && !search_path_matches(doc->file_name))) continue;
         GeanyDocument *active = document_get_current();
-        if (active && doc->file_name && !insight_languages_search_path(active->file_name, active->file_type, doc->file_name)) continue;
+        if (mode != 3 && active && doc->file_name && !insight_languages_search_path(active->file_name, active->file_type, doc->file_name)) continue;
         if (doc->file_name && g_hash_table_contains(seen, doc->file_name)) continue;
         Location *next = g_new0(Location, 1);
         next->path = g_strdup(doc->file_name);

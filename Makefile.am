@@ -919,3 +919,5 @@ dist_insightdocmedia_DATA += insight/docs/media/native-threads.jpg insight/docs/
 EXTRA_DIST += insight/tests/native_debugger_thread_policy_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/native-thread-policy.jpg
+
+EXTRA_DIST += insight/tests/search_commands_gui_test.c

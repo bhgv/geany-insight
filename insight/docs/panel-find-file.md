@@ -1,6 +1,8 @@
 # Quick find in file
 
-Find text in the current editor buffer without opening a separate results list. Open Quick find in file from Search/Replace. Ctrl+F opens Geany’s regular Find dialog.
+Find text in the current editor buffer without opening a separate results list. Open Quick find in file from Search/Replace. Ctrl+F opens the File Search row. Enter or F3 finds the next match; Shift+F3 goes backwards.
+
+Ctrl+F открывает строку поиска в файле. Enter или F3 — следующее совпадение, Shift+F3 — предыдущее.
 
 ## Controls
 
