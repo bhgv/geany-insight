@@ -286,7 +286,7 @@ GHashTable *insight_include_graph_resolve(InsightIncludeGraph *g)
         }
         g_free((gpointer)owner);
     }
-    GHashTable *result = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    GHashTable *result = g_hash_table_new_full(path_hash, path_equal, g_free, g_free);
     g_hash_table_iter_init(&iter, g->families);
     while (g_hash_table_iter_next(&iter, &key, &value))
     {

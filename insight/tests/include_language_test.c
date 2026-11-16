@@ -56,6 +56,15 @@ int main(void)
     language(result, root, "quoted.inc", NULL);
     language(result, root, "hdl-nested.inc", "SystemVerilog");
     language(result, root, "подключение.inc", "C++");
+    gchar *canonical = g_build_filename(root, "подключение.inc", NULL);
+    gchar *upper = g_utf8_strup(canonical, -1);
+#ifdef G_OS_WIN32
+    g_assert_cmpstr(g_hash_table_lookup(result, upper), ==, "C++");
+#else
+    g_assert_null(g_hash_table_lookup(result, upper));
+#endif
+    g_free(upper);
+    g_free(canonical);
     g_hash_table_unref(result);
     insight_include_graph_add(graph, g_ptr_array_index(paths, 0), "#include \"cr.inc\"\n");
     result = insight_include_graph_resolve(graph);
