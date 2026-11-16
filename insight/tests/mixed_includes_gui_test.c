@@ -99,6 +99,16 @@ static gboolean profile_options(gpointer data)
     else if (profile_step == 1)
     {
         if (!saved_profile("C++")) return G_SOURCE_CONTINUE;
+        gtk_combo_box_set_active_id(GTK_COMBO_BOX(choice), "SystemVerilog");
+        const gchar *compatible = gtk_entry_get_text(GTK_ENTRY(named(dialog, "insight-language-compatible")));
+        g_assert_nonnull(strstr(compatible, "svh"));
+        g_assert_nonnull(strstr(compatible, "inc"));
+        profile_step++;
+        /* Let GTK paint the chosen profile before the next timer capture. */
+    }
+    else if (profile_step == 2)
+    {
+        g_assert_cmpstr(gtk_combo_box_get_active_id(GTK_COMBO_BOX(choice)), ==, "SystemVerilog");
         const gchar *capture = g_getenv("INSIGHT_INCLUDE_PROFILE_CAPTURE");
         if (capture)
         {
@@ -109,10 +119,6 @@ static gboolean profile_options(gpointer data)
             g_assert_true(gdk_pixbuf_save(image, capture, "jpeg", NULL, "quality", "88", NULL));
             g_object_unref(image);
         }
-        gtk_combo_box_set_active_id(GTK_COMBO_BOX(choice), "SystemVerilog");
-        const gchar *compatible = gtk_entry_get_text(GTK_ENTRY(named(dialog, "insight-language-compatible")));
-        g_assert_nonnull(strstr(compatible, "svh"));
-        g_assert_nonnull(strstr(compatible, "inc"));
         gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_APPLY);
         profile_step++;
     }
