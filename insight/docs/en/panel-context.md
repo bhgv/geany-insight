@@ -213,3 +213,5 @@ The central editor/Context column can be collapsed to a narrow strip even in a n
 ![Compact shelves](../media/compact-shelves-regression.jpg)
 
 Real Linux editor captured by the GUI regression in an isolated test profile: 180 px File Symbols and 177 px Project shelves.
+
+Context highlighting respects the open buffer’s individual language-profile binding. Distant jumps lex from the beginning through the target region, preserving multiline comment and preprocessor state. Colouring does not wait for indexed source links to finish.

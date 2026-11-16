@@ -68,12 +68,25 @@ static GeanyFiletype *preview_filetype(const gchar *path) {
  GeanyFiletype *ft=path ? insight_languages_detect(path) : NULL;
  return ft ? ft : (path ? filetypes_detect_from_file(path) : NULL);
 }
-static void render_source(const char *text,GeanyFiletype *filetype,gulong line,const gchar *path) {
+/* EN: Render text with filetype/profile from path and centre one-based line.
+ * Preserve open-buffer bindings; lex through the target before publishing links.
+ * NULL path uses filetype defaults. Source text and undo history stay unchanged.
+ * RU: Показывает text с filetype/профилем path и строкой line (от единицы).
+ * Сохраняет привязку открытого буфера; раскрашивает до цели до создания ссылок.
+ * При NULL path использует filetype. Исходник и история отмены не изменяются. */
+static void render_source(const char *text,GeanyFiletype *filetype,gulong line,const gchar *path)
+{
+ GeanyDocument *source=path ? document_find_by_filename(path) : NULL;
+ const gchar *binding=source ? g_object_get_data(G_OBJECT(source->editor->sci),"insight-language-binding") : NULL;
+ const gchar *previous_binding=g_object_get_data(G_OBJECT(wb.preview),"insight-language-binding");
+ gboolean binding_changed=g_strcmp0(binding,previous_binding)!=0;
  gchar *previous=sci_get_contents(wb.preview,sci_get_length(wb.preview)+1);
  gboolean unchanged=!strcmp(previous,text);
- gboolean restyle=!wb.preview_styles_ready || wb.preview_filetype!=filetype || g_strcmp0(wb.source_path,path);
+ gboolean restyle=!wb.preview_styles_ready || wb.preview_filetype!=filetype ||
+  g_strcmp0(wb.source_path,path) || binding_changed;
  g_free(previous);
  if(restyle) {
+  g_object_set_data_full(G_OBJECT(wb.preview),"insight-language-binding",g_strdup(binding),g_free);
   wb.preview_filetype=filetype;wb.preview_styles_ready=TRUE;wb.preview_links_valid=FALSE;
   highlighting_set_styles(wb.preview,filetype ? filetype : filetypes[GEANY_FILETYPES_NONE]);
   insight_languages_apply(wb.preview,path,filetype);
@@ -85,10 +98,16 @@ static void render_source(const char *text,GeanyFiletype *filetype,gulong line,c
   SSM(wb.preview,SCI_EMPTYUNDOBUFFER,0,0);sci_set_readonly(wb.preview,TRUE);
   decorate_match(wb.preview,0,0);
  }
- /* Colour the first chunk before symbol-link indexing, even for a large index.
-  * Scintilla styles the remaining visible range on demand. */
- if(restyle || !unchanged) SSM(wb.preview,SCI_COLOURISE,0,MIN(sci_get_length(wb.preview),16384));
- gint target=(gint)MIN(line ? line-1 : 0,(gulong)MAX(0,sci_get_line_count(wb.preview)-1));
+ gint length=sci_get_length(wb.preview), lines=sci_get_line_count(wb.preview);
+ gint target=(gint)MIN(line ? line-1 : 0,(gulong)MAX(0,lines-1));
+ /* EN: Start at zero to preserve multiline comments/preprocessor state. Do not
+  * leave a distant target unstyled while background symbol links are pending.
+  * RU: Начинаем с нуля для состояния многострочных комментариев/препроцессора.
+  * Дальняя цель не должна ждать фонового построения ссылок для подсветки. */
+ gint end=target+64<lines ? sci_get_position_from_line(wb.preview,target+64) : length;
+ end=MAX(end,MIN(length,16384));
+ if(restyle || !unchanged || SSM(wb.preview,SCI_GETENDSTYLED,0,0)<end)
+  SSM(wb.preview,SCI_COLOURISE,0,end);
  if(unchanged && sci_get_current_line(wb.preview)==target) return;
  SSM(wb.preview,SCI_GOTOLINE,target,0);
  SSM(wb.preview,SCI_VERTICALCENTRECARET,0,0);

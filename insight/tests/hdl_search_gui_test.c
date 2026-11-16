@@ -2,6 +2,8 @@
 /* EN: Verify HDL membership, indexing, region searches and included .inc symbols.
  * RU: Проверяет состав HDL-проекта, индекс, области поиска и символы из .inc. */
 #include "geany.h"
+#include "SciLexer.h"
+#include "highlighting.h"
 #include "document.h"
 #include "editor.h"
 #include "filetypes.h"
@@ -92,7 +94,13 @@ static gboolean tick(gpointer data)
     if (!window) window = gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));
     if (!phase)
     {
-        document_open_file(top, FALSE, NULL, NULL);
+        GeanyDocument *doc=document_open_file(top, FALSE, NULL, NULL);
+        g_object_set_data_full(G_OBJECT(doc->editor->sci),"insight-language-binding",g_strdup("Context Verilog"),g_free);
+        highlighting_set_styles(doc->editor->sci,doc->file_type);
+        gchar *text=sci_get_contents(doc->editor->sci,sci_get_length(doc->editor->sci)+1);
+        sci_set_current_position(doc->editor->sci,strstr(text,"wire needle")-text+1,FALSE);
+        gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
+        g_free(text);
         gtk_entry_set_text(GTK_ENTRY(named(window, "insight-file-query")), "*.inc");
         gtk_entry_set_text(GTK_ENTRY(named(window, "insight-symbol-query")), "unit_");
         phase++;
@@ -102,6 +110,26 @@ static gboolean tick(gpointer data)
         if (gtk_tree_model_iter_n_children(model("insight-project-files"), NULL) != 1 ||
             gtk_tree_model_iter_n_children(model("insight-project-symbols"), NULL) != 5)
             return G_SOURCE_CONTINUE;
+        ScintillaObject *preview=SCINTILLA(named(window,"insight-context-code"));
+        if(sci_get_current_line(preview)<900) return G_SOURCE_CONTINUE;
+        GeanyDocument *doc=document_get_current();
+        g_assert_cmpint(SSM(preview,SCI_GETLEXER,0,0),==,SCLEX_VERILOG);
+        g_assert_cmpstr(g_object_get_data(G_OBJECT(preview),"insight-language-binding"),==,"Context Verilog");
+        gchar *text=sci_get_contents(preview,sci_get_length(preview)+1);
+        SSM(doc->editor->sci,SCI_COLOURISE,0,-1);
+        const gchar *samples[]={"padding comment","module unit_0","1'b0"};
+        for(guint i=0;i<G_N_ELEMENTS(samples);i++) {
+            gint offset=strstr(text+(i ? 0 : sci_get_position_from_line(preview,880)),samples[i])-text;
+            gint style=SSM(preview,SCI_GETSTYLEAT,offset,0);
+            g_assert_cmpint(style,!=,SCE_V_DEFAULT);
+            g_assert_cmpint(style,==,SSM(doc->editor->sci,SCI_GETSTYLEAT,offset,0));
+            g_assert_cmpint(SSM(preview,SCI_STYLEGETFORE,style,0),==,
+                SSM(doc->editor->sci,SCI_STYLEGETFORE,style,0));
+        }
+        g_free(text);
+        g_object_set_data(G_OBJECT(doc->editor->sci),"insight-language-binding",NULL);
+        highlighting_set_styles(doc->editor->sci,doc->file_type);
+        g_print("Verilog Context: long-file target, lexical styles/colours and buffer profile binding passed\n");
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(window, "insight-search-keywords")), FALSE);
         search("needle", 0);
         phase++;
@@ -220,6 +248,16 @@ int main(void)
     root = g_dir_make_tmp("hdl-search-XXXXXX", NULL);
     profile = g_build_filename(root, "profile", NULL);
     g_assert_cmpint(g_mkdir_with_parents(profile, 0700), ==, 0);
+    gchar *custom=g_build_filename(profile,"languages","Context Verilog",NULL);
+    g_assert_cmpint(g_mkdir_with_parents(custom,0700),==,0);
+    gchar *custom_file=g_build_filename(custom,"language.conf",NULL);
+    g_assert_true(g_file_set_contents(custom_file,
+        "[language]\nname=Context Verilog\nparser=Verilog\nextensions=ctxv\ncompatible=v;vh;sv;svh;inc\nseeded=false\n",-1,NULL));
+    g_free(custom_file);
+    custom_file=g_build_filename(custom,"style.css",NULL);
+    g_assert_true(g_file_set_contents(custom_file,
+        ".comment { color: #147d33; }\n.number { color: #965a25; }\n",-1,NULL));
+    g_free(custom_file);g_free(custom);
     gchar *config = g_build_filename(profile, "geany.conf", NULL);
     g_assert_true(g_file_set_contents(config, "[geany]\nconfirm_exit=false\n", -1, NULL));
     g_free(config);
@@ -236,6 +274,13 @@ int main(void)
             n == 0 ? "`include \"unit.inc\"\n" : "", n,
             n == 0 ? "unit_4 u(); initial $display(u.marker_inc);\n" :
             n == 4 ? "wire marker_inc; assign marker_inc = 1'b0;\n" : "");
+        if(!n) {
+            GString *long_text=g_string_new(NULL);
+            for(guint line=0;line<900;line++)
+                g_string_append(long_text,"// padding comment for distant Context highlighting\n");
+            g_string_append(long_text,text);g_free(text);
+            text=g_string_free(long_text,FALSE);
+        }
         g_assert_true(g_file_set_contents(path, text, -1, NULL));
         if (!n) top = g_strdup(path);
         if (n == 4) include_path = g_strdup(path);

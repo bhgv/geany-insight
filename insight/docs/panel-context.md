@@ -219,3 +219,5 @@ The central editor/Context column can be collapsed to a narrow strip even in a n
 ![Compact shelves](media/compact-shelves-regression.jpg)
 
 Real Linux editor captured by the GUI regression in an isolated test profile: 180 px File Symbols and 177 px Project shelves.
+
+Подсветка контекста учитывает индивидуальную привязку языкового профиля открытого документа. При переходе далеко вниз по файлу лексер обрабатывает текст от начала до целевой области, сохраняя состояние многострочных комментариев и препроцессора. Цвета не зависят от завершения построения ссылок по индексу.
