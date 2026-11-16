@@ -1,13 +1,22 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Bounded process adapter for HDL completion, indexes and source headers.
+ * RU: Ограниченный адаптер процессов HDL-дополнения, индексов и заголовков. */
 #include "slang_completion.h"
 #include "index_cache.h"
 #include <stdlib.h>
 #include <glib/gstdio.h>
 #include <string.h>
 
-gboolean insight_slang_source(const gchar *path) {
- const gchar *dot=path ? strrchr(path,'.'):NULL;
- return dot && (!g_ascii_strcasecmp(dot,".v") || !g_ascii_strcasecmp(dot,".sv") || !g_ascii_strcasecmp(dot,".vh") || !g_ascii_strcasecmp(dot,".svh"));
+/* EN: Return whether path is an HDL source/header candidate, including .inc.
+ * No disk access; the project compiler resolves included header contents.
+ * RU: Сообщает, является ли path кандидатом HDL-исходника/заголовка, включая .inc.
+ * Без чтения диска; содержимое подключений разрешает компилятор проекта. */
+gboolean insight_slang_source(const gchar *path)
+{
+    const gchar *dot = path ? strrchr(path, '.') : NULL;
+    return dot && (!g_ascii_strcasecmp(dot, ".v") ||
+        !g_ascii_strcasecmp(dot, ".sv") || !g_ascii_strcasecmp(dot, ".vh") ||
+        !g_ascii_strcasecmp(dot, ".svh") || !g_ascii_strcasecmp(dot, ".inc"));
 }
 static void candidate_free(gpointer data) {
  InsightClangCompletion *c=data;g_free(c->name);g_free(c->signature);g_free(c->type);g_free(c->comment);g_ptr_array_unref(c->parameters);g_free(c);

@@ -102,8 +102,10 @@ static void search_job_done(GObject *source, GAsyncResult *result, gpointer data
     }
 }
 
-/* EN: Advance the reference search by one idle slice. data is unused.
- * RU: Продвигает поиск ссылок за один проход. data не используется. */
+/* EN: Advance reference/text search by one idle slice; data is unused.
+ * Capture buffers and language-specific masks, then queue a worker.
+ * RU: Продвигает поиск ссылок/текста за проход; data не используется.
+ * Сохраняет буферы и языковые маски, затем запускает фоновую задачу. */
 static gboolean usage_step(gpointer data)
 {
     (void)data;
@@ -206,6 +208,11 @@ static gboolean usage_step(gpointer data)
         }
     }
     j->have_dialect = source_dialect(ft, &j->dialect);
+    if (ft && (!strcmp(ft->name, "Verilog") || !strcmp(ft->name, "SystemVerilog")))
+    {
+        j->dialect = INSIGHT_CODE_VERILOG;
+        j->have_dialect = TRUE;
+    }
     j->cached_language = g_strdup(ft ? ft->name:NULL);
     wb.search_worker = g_cancellable_new();
     GTask *task = g_task_new(NULL, wb.search_worker, search_job_done, NULL);

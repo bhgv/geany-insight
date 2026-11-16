@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-// Read-only, process-isolated native AST service. stdout is one protocol record.
+// EN: Read-only, process-isolated native AST service; stdout carries protocol records.
+// RU: Отдельный процесс анализа AST только для чтения; stdout содержит записи протокола.
 #include "slang/ast/ASTVisitor.h"
 #include "slang/ast/Statements.h"
 #include "slang/ast/TimingControl.h"
@@ -988,10 +989,12 @@ int main(int argc, char** argv) {
             normalized[name] = overlay.second;
         }
         for (const auto& overlay : normalized) sources.assignText(overlay.first, overlay.second);
+        // EN: Return whether name is an include header, not a standalone unit.
+        // RU: Проверяет, является ли name подключаемым заголовком, а не единицей компиляции.
         auto header = [](const char* name) {
             std::string extension = ghc::filesystem::path(name).extension().string();
             for (char& c : extension) if (c >= 'A' && c <= 'Z') c += 'a' - 'A';
-            return extension == ".vh" || extension == ".svh";
+            return extension == ".vh" || extension == ".svh" || extension == ".inc";
         };
         bool hasUnit = false;
         for (int i = first; i < argc; ++i) if (!header(argv[i])) hasUnit = true;

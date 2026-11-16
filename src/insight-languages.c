@@ -1,3 +1,5 @@
+/* EN: Language profiles, file detection and editor presentation settings.
+ * RU: Языковые профили, определение файлов и настройки редактора. */
 #define INSIGHT_LOCALIZE_FORMATS
 #include "insight-i18n.h"
 #include "../insight/desktop/glib_compat.h"
@@ -61,17 +63,62 @@ static gboolean native_pattern_match(const gchar *path,gboolean exact) {
 #endif
  } }g_free(base);return found;
 }
-static Language *for_path(const gchar *path) {
- if(!path) return NULL;
- gchar *canonical=insight_canonicalize_filename(path,NULL);Language *found=NULL;
- if(!path_cache) path_cache=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,NULL);
- gpointer cached=NULL;if(g_hash_table_lookup_extended(path_cache,canonical,NULL,&cached)) { g_free(canonical);return cached; }
- for(guint n=0;languages && n<languages->len && !found;n++) { Language *p=g_ptr_array_index(languages,n);for(guint k=0;p->files && p->files[k];k++) if(binding_path_equal(p->files[k],canonical)) { found=p;break; } }
- if(found) { g_hash_table_insert(path_cache,canonical,found);return found; }
- for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(insight_file_patterns_match(p->patterns,path,INSIGHT_FILE_PATTERN_EXACT)) { found=p;break; } }
- if(!found && !native_pattern_match(path,TRUE)) for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(extensions_match(p->extensions,path) || insight_file_patterns_match(p->patterns,path,INSIGHT_FILE_PATTERN_GLOB)) { found=p;break; } }
- if(!found) for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(insight_file_patterns_match(p->patterns,path,INSIGHT_FILE_PATTERN_DEFAULT)) { if(!native_pattern_match(path,FALSE)) found=p;break; } }
- g_hash_table_insert(path_cache,canonical,found);return found;
+#include "insight-languages-hdl.inc"
+
+/* EN: Return the profile for path, honoring explicit bindings before patterns.
+ * Cache project-independent matches; ambiguous HDL includes use live membership.
+ * RU: Возвращает профиль path с приоритетом явных привязок над масками.
+ * Кэширует независимые от проекта совпадения; HDL-подключения сверяет с проектом. */
+static Language *for_path(const gchar *path)
+{
+    if (!path) return NULL;
+    gchar *canonical = insight_canonicalize_filename(path, NULL);
+    Language *found = NULL;
+    if (!path_cache)
+        path_cache = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    gpointer cached = NULL;
+    if (g_hash_table_lookup_extended(path_cache, canonical, NULL, &cached))
+    {
+        g_free(canonical);
+        return language_include_context(cached, path);
+    }
+    for (guint n = 0; languages && n < languages->len && !found; n++)
+    {
+        Language *p = g_ptr_array_index(languages, n);
+        for (guint k = 0; p->files && p->files[k]; k++)
+            if (binding_path_equal(p->files[k], canonical)) { found = p; break; }
+    }
+    if (found)
+    {
+        g_hash_table_insert(path_cache, canonical, found);
+        return found;
+    }
+    for (guint n = 0; languages && n < languages->len; n++)
+    {
+        Language *p = g_ptr_array_index(languages, n);
+        if (insight_file_patterns_match(p->patterns, path, INSIGHT_FILE_PATTERN_EXACT))
+        { found = p; break; }
+    }
+    if (!found && !native_pattern_match(path, TRUE))
+        for (guint n = 0; languages && n < languages->len; n++)
+        {
+            Language *p = g_ptr_array_index(languages, n);
+            if (extensions_match(p->extensions, path) ||
+                insight_file_patterns_match(p->patterns, path, INSIGHT_FILE_PATTERN_GLOB))
+            { found = p; break; }
+        }
+    if (!found)
+        for (guint n = 0; languages && n < languages->len; n++)
+        {
+            Language *p = g_ptr_array_index(languages, n);
+            if (insight_file_patterns_match(p->patterns, path, INSIGHT_FILE_PATTERN_DEFAULT))
+            {
+                if (!native_pattern_match(path, FALSE)) found = p;
+                break;
+            }
+        }
+    g_hash_table_insert(path_cache, canonical, found);
+    return language_include_context(found, path);
 }
 static Language *for_editor(ScintillaObject *sci,const gchar *path,GeanyFiletype *ft) {
  const gchar *forced=sci ? g_object_get_data(G_OBJECT(sci),"insight-language-binding") : NULL;Language *p=by_name(forced);if(p) return p;
@@ -140,10 +187,34 @@ InsightMasterTypes *insight_languages_master_types(void) {
  g_ptr_array_add(patterns,NULL);g_ptr_array_add(extensions,NULL);g_ptr_array_add(files,NULL);InsightMasterTypes *types=g_new0(InsightMasterTypes,1);types->patterns=(const gchar *const *)g_ptr_array_free(patterns,FALSE);types->extensions=(const gchar *const *)g_ptr_array_free(extensions,FALSE);types->files=(const gchar *const *)g_ptr_array_free(files,FALSE);return types;
 }
 struct InsightLanguageFilter { gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted;InsightFilePatterns *patterns; };
-InsightLanguageFilter *insight_language_filter_new(const gchar *from,GeanyFiletype *ft) {
- InsightLanguageFilter *filter=g_new0(InsightLanguageFilter,1);Language *p=for_path(from);if(!p && !from) { GeanyDocument *doc=document_get_current();p=doc ? for_editor(doc->editor->sci,from,ft) : by_name(ft ? ft->name : NULL); }filter->unrestricted=!p;filter->own=g_ptr_array_new_with_free_func(g_free);filter->excluded=g_ptr_array_new_with_free_func(g_free);filter->patterns=insight_file_patterns_new(p ? p->file_filters : "",NULL);filter->extensions=g_strdup(p ? p->extensions : "");filter->compatible=g_strdup(p ? p->compatible : "");
- if(p) for(guint n=0;n<languages->len;n++) { Language *other=g_ptr_array_index(languages,n);GPtrArray *paths=other==p ? filter->own : filter->excluded;for(guint k=0;other->files && other->files[k];k++) g_ptr_array_add(paths,g_strdup(other->files[k])); }
- return filter;
+/* EN: Allocate a worker-safe filter for from/ft, including compatible HDL
+ * extensions and explicit bindings. The caller releases it with filter_free.
+ * RU: Выделяет безопасный для потока фильтр from/ft с совместимыми HDL-
+ * расширениями и явными привязками. Вызывающий освобождает его через filter_free. */
+InsightLanguageFilter *insight_language_filter_new(const gchar *from, GeanyFiletype *ft)
+{
+    InsightLanguageFilter *filter = g_new0(InsightLanguageFilter, 1);
+    Language *p = for_path(from);
+    if (!p && !from)
+    {
+        GeanyDocument *doc = document_get_current();
+        p = doc ? for_editor(doc->editor->sci, from, ft) : by_name(ft ? ft->name : NULL);
+    }
+    filter->unrestricted = !p;
+    filter->own = g_ptr_array_new_with_free_func(g_free);
+    filter->excluded = g_ptr_array_new_with_free_func(g_free);
+    filter->patterns = insight_file_patterns_new(p ? p->file_filters : "", NULL);
+    filter->extensions = g_strdup(p ? p->extensions : "");
+    filter->compatible = g_strdup(p ? language_compatible_extensions(p) : "");
+    if (p)
+        for (guint n = 0; n < languages->len; n++)
+        {
+            Language *other = g_ptr_array_index(languages, n);
+            GPtrArray *paths = other == p ? filter->own : filter->excluded;
+            for (guint k = 0; other->files && other->files[k]; k++)
+                g_ptr_array_add(paths, g_strdup(other->files[k]));
+        }
+    return filter;
 }
 gboolean insight_language_filter_match(const InsightLanguageFilter *filter,const gchar *path) {
  if(!filter || filter->unrestricted) return TRUE;
@@ -156,11 +227,40 @@ gboolean insight_language_filter_match(const InsightLanguageFilter *filter,const
 }
 void insight_language_filter_free(InsightLanguageFilter *filter) { if(!filter) return;insight_file_patterns_free(filter->patterns);g_free(filter->extensions);g_free(filter->compatible);g_ptr_array_free(filter->own,TRUE);g_ptr_array_free(filter->excluded,TRUE);g_free(filter); }
 GeanyFiletype *insight_languages_detect(const gchar *path) { Language *p=for_path(path);return p ? p->parser : NULL; }
-gboolean insight_languages_compatible(const gchar *from,GeanyFiletype *fallback,const gchar *to) {
- Language *p=for_path(from);if(!p && !from) { GeanyDocument *current=document_get_current();p=current ? for_editor(current->editor->sci,NULL,fallback) : by_name(fallback ? fallback->name : NULL); }
- if(p) { Language *target=for_path(to);if(target && target!=p) { gchar *canonical=to ? insight_canonicalize_filename(to,NULL) : NULL;for(guint n=0;canonical && target->files && target->files[n];n++) if(binding_path_equal(target->files[n],canonical)) { g_free(canonical);return FALSE; }g_free(canonical); }return target==p || insight_file_patterns_match(p->patterns,to,INSIGHT_FILE_PATTERN_ANY) || extensions_match(p->extensions,to) || extensions_match(p->compatible,to); }
- GeanyDocument *d=to ? document_find_by_filename(to) : NULL;GeanyFiletype *ft=d ? d->file_type : (to ? filetypes_detect_from_extension(to) : NULL);
- return fallback && ft && insight_native_language_compatible(fallback->lang,ft->lang);
+/* EN: Test language compatibility from/ fallback to path to. Explicit bindings
+ * exclude other profiles; generated HDL profiles share their source family.
+ * RU: Проверяет совместимость языка from/fallback с путём to. Явные привязки
+ * исключают чужие профили; созданные HDL-профили разделяют семейство исходников. */
+gboolean insight_languages_compatible(const gchar *from, GeanyFiletype *fallback, const gchar *to)
+{
+    Language *p = for_path(from);
+    if (!p && !from)
+    {
+        GeanyDocument *current = document_get_current();
+        p = current ? for_editor(current->editor->sci, NULL, fallback) :
+            by_name(fallback ? fallback->name : NULL);
+    }
+    if (p)
+    {
+        Language *target = for_path(to);
+        if (target && target != p)
+        {
+            gchar *canonical = to ? insight_canonicalize_filename(to, NULL) : NULL;
+            for (guint n = 0; canonical && target->files && target->files[n]; n++)
+                if (binding_path_equal(target->files[n], canonical))
+                {
+                    g_free(canonical);
+                    return FALSE;
+                }
+            g_free(canonical);
+        }
+        return target == p || insight_file_patterns_match(p->patterns, to, INSIGHT_FILE_PATTERN_ANY) ||
+            extensions_match(p->extensions, to) ||
+            extensions_match(language_compatible_extensions(p), to);
+    }
+    GeanyDocument *d = to ? document_find_by_filename(to) : NULL;
+    GeanyFiletype *ft = d ? d->file_type : (to ? filetypes_detect_from_extension(to) : NULL);
+    return fallback && ft && insight_native_language_compatible(fallback->lang, ft->lang);
 }
 gboolean insight_languages_search_path(const gchar *from,GeanyFiletype *fallback,const gchar *to) {
  if(!for_path(from) && (from || !by_name(fallback ? fallback->name : NULL))) return TRUE;

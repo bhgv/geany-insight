@@ -27,3 +27,7 @@ Background search refreshes (Follow, source edits and index updates) keep the se
 Project text search and Find File include every language in the selected scope, regardless of the active editor language. File masks still apply. Lexical symbol usages retain their language compatibility rules.
 
 Текстовый поиск по проекту и поиск имени файла включают все языки выбранной области, независимо от активного редактора. Маски файлов учитываются. Поиск использований символа сохраняет правила совместимости языков.
+
+Verilog/SystemVerilog: all-text, skip-comments, comments-only and code-only searches cover `.v`, `.sv`, `.vh`, `.svh` and `.inc`. Generated HDL profiles share these extensions for symbol queries. In an HDL project, `.inc` uses SystemVerilog for indexing unless a custom language profile overrides it. The slang index treats `.inc` as an include header, avoiding a second standalone compilation of included fragments. HDL semantic references require the slang backend and a valid include/project configuration.
+
+Verilog/SystemVerilog: поиск всего текста, без комментариев, только комментариев и только кода поддерживает `.v`, `.sv`, `.vh`, `.svh`, `.inc`. Созданные HDL-профили совместимы при поиске символов. В HDL-проекте `.inc` индексируется как SystemVerilog, если пользователь не назначил другой профиль. Для slang это подключаемый заголовок, а не повторно компилируемая единица. Семантические ссылки требуют slang и корректной настройки подключений проекта.
