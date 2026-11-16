@@ -188,7 +188,15 @@ InsightMasterTypes *insight_languages_master_types(void) {
  }
  g_ptr_array_add(patterns,NULL);g_ptr_array_add(extensions,NULL);g_ptr_array_add(files,NULL);InsightMasterTypes *types=g_new0(InsightMasterTypes,1);types->patterns=(const gchar *const *)g_ptr_array_free(patterns,FALSE);types->extensions=(const gchar *const *)g_ptr_array_free(extensions,FALSE);types->files=(const gchar *const *)g_ptr_array_free(files,FALSE);return types;
 }
-struct InsightLanguageFilter { GHashTable *include_languages; guint family; gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted;InsightFilePatterns *patterns; };
+struct InsightLanguageFilter
+{
+    GHashTable *include_languages;
+    guint family;
+    gchar *extensions, *compatible;
+    GPtrArray *own, *excluded;
+    gboolean unrestricted;
+    InsightFilePatterns *patterns;
+};
 /* EN: Allocate a worker-safe filter for from/ft, including compatible HDL
  * extensions and explicit bindings. The caller releases it with filter_free.
  * RU: Выделяет безопасный для потока фильтр from/ft с совместимыми HDL-

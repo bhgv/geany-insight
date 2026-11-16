@@ -134,6 +134,10 @@ static void focus_search_results(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; gtk_widget_show(wb.search_page);msgwin_show_hide(TRUE);
  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.search_page)); gtk_widget_grab_focus(wb.search_view);
 }
+/* EN: Apply notification nt for editor to source links and visible HDL spans;
+ * only the resolved source language selects HDL invalidation.
+ * RU: Применяет уведомление nt редактора editor к ссылкам и видимой HDL-подсветке;
+ * сброс HDL выбирается только по определённому языку файла. */
 void insight_workbench_source_link_notify(GeanyEditor *editor,SCNotification *nt) {
  if(wb.alive) {
   if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT)) &&

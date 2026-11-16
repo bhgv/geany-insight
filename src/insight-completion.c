@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Native completion UI and bounded Clang/HDL requests using resolved language profiles.
+ * RU: Интерфейс дополнения и ограниченные запросы Clang/HDL по определённым языковым профилям. */
 #include "geany.h"
 #include "insight-completion.h"
 #include "insight-languages.h"
@@ -183,6 +185,10 @@ static void semantic_run(GTask *task,gpointer source,gpointer data,GCancellable 
  }
  j->results=j->slang_incomplete ? NULL:j->slang ? insight_slang_complete_configured(j->slang,j->path,j->text,j->offset,j->rootlen,j->paths,j->buffers,j->vivado,cancel):insight_clang_complete(j->path,j->text,j->offset,j->root,j->resources,j->buffers,cancel,NULL);g_task_return_boolean(task,j->results!=NULL);
 }
+/* EN: Compare j's source snapshot with current HDL membership on the GUI thread;
+ * C/C++ include headers are excluded. Return TRUE only for the same source set.
+ * RU: Сравнивает снимок j с текущим составом HDL в потоке интерфейса;
+ * заголовки C/C++ исключаются. Возвращает TRUE только для одинакового состава. */
 static gboolean slang_membership_current(const SemanticJob *j) {
  GPtrArray *paths=insight_workbench_source_paths(insight_languages_is_hdl,257);GHashTable *current=g_hash_table_new(g_str_hash,g_str_equal);
  for(guint i=0;i<paths->len;i++) g_hash_table_add(current,g_ptr_array_index(paths,i));
@@ -221,6 +227,10 @@ static void semantic_done(GObject *source,GAsyncResult *result,gpointer unused) 
   selection(NULL,c);g_object_set_data(G_OBJECT(sci),"insight-semantic-completion-count",GUINT_TO_POINTER(tags->len));g_ptr_array_unref(tags);g_ptr_array_unref(chosen);
  }else if(same && !ok) {c->bypass=TRUE;editor_start_auto_complete(doc->editor,j->offset,FALSE);c->bypass=FALSE;}g_object_unref(sci);
 }
+/* EN: Capture Completion data and queue a bounded semantic request for its
+ * resolved source language. Return CONTINUE while busy, REMOVE when queued/rejected.
+ * RU: Сохраняет Completion data и запускает ограниченный семантический запрос по
+ * языку файла. Возвращает CONTINUE при занятости, REMOVE при запуске/отказе. */
 static gboolean semantic_start(gpointer data) {
  Completion *c=data;if(semantic_workers>=2) return G_SOURCE_CONTINUE;c->semantic_idle=0;GeanyDocument *doc=document_find_by_id(c->document);if(!DOC_VALID(doc) || doc!=document_get_current() || (!c->definition && (!settings.semantic || !settings.detailed))) return G_SOURCE_REMOVE;gint length=sci_get_length(c->sci),offset=sci_get_current_position(c->sci);if(length<0 || length>2*1024*1024 || offset<(gint)c->semantic_root || sci_has_selection(c->sci)) return G_SOURCE_REMOVE;
  SemanticJob *j=g_new0(SemanticJob,1);g_weak_ref_init(&j->sci,c->sci);j->serial=c->semantic_serial;j->definition=c->definition;j->document=doc->id;j->offset=offset;j->rootlen=c->semantic_root;j->path=g_strdup(doc->file_name);j->text=sci_get_contents(c->sci,length+1);j->project=g_strdup(app->project ? app->project->file_name:NULL);j->resources=g_build_filename(app->datadir,"insight","clang","resources",NULL);gchar *native=app->project ? project_get_base_path():NULL;j->root=native ? utils_get_utf8_from_locale(native):g_path_get_dirname(doc->file_name);g_free(native);j->buffers=g_hash_table_new_full(g_str_hash,g_str_equal,g_free,g_free);
@@ -237,12 +247,20 @@ static gboolean semantic_start(gpointer data) {
  if(memchr(j->text,0,length) || !g_utf8_validate(j->text,length,NULL)) {semantic_job_free(j);return G_SOURCE_REMOVE;}
  semantic_workers++;c->pending=g_cancellable_new();GTask *task=g_task_new(NULL,c->pending,semantic_done,NULL);g_task_set_task_data(task,j,semantic_job_free);g_task_run_in_thread(task,semantic_run);g_object_unref(task);return G_SOURCE_REMOVE;
 }
+/* EN: Queue HDL definition navigation for editor and return TRUE if handled;
+ * return FALSE to preserve native fallback for other languages or missing service.
+ * RU: Запускает переход к HDL-определению editor и возвращает TRUE при обработке;
+ * возвращает FALSE для обычного поиска другого языка или отсутствующего сервиса. */
 gboolean insight_completion_definition(GeanyEditor *editor) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;if(!DOC_VALID(doc) || !insight_languages_is_hdl(doc->file_name) || sci_get_length(editor->sci)>2*1024*1024) return FALSE;
  gchar word[1025]={0};editor_find_current_word_sciwc(editor,sci_get_current_position(editor->sci),word,sizeof word);if(!*word) return FALSE;
  gchar *service=insight_completion_slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;
  Completion *c=create(editor);hide(c);c->definition=TRUE;c->semantic_root=0;c->semantic_idle=g_timeout_add(150,semantic_start,c);ui_set_statusbar(TRUE,"%s",insight_tr("Resolving HDL declaration with slang..."));return TRUE;
 }
+/* EN: Schedule semantic completion for editor with rootlen prefix; force allows
+ * explicit invocation. Return whether member completion is handled; reject invalid input.
+ * RU: Планирует семантическое дополнение editor с префиксом rootlen; force разрешает
+ * явный вызов. Возвращает признак дополнения члена; неверные данные отклоняются. */
 gboolean insight_completion_semantic(GeanyEditor *editor,gsize rootlen,gboolean force) {
  load();GeanyDocument *doc=editor ? editor->document:NULL;Completion *existing=state(editor);if((existing && existing->bypass) || !settings.semantic || !settings.detailed || !DOC_VALID(doc) || !doc->file_name || (!insight_languages_is_hdl(doc->file_name) && (!insight_clang_available() || !insight_clang_source(doc->file_name))) || SEND(editor->sci,SCI_GETREADONLY,0,0) || SEND(editor->sci,SCI_GETSELECTIONS,0,0)!=1 || sci_has_selection(editor->sci)) return FALSE;
  if(insight_languages_is_hdl(doc->file_name)) {gchar *service=insight_completion_slang_service();gboolean present=g_file_test(service,G_FILE_TEST_IS_EXECUTABLE);g_free(service);if(!present) return FALSE;}

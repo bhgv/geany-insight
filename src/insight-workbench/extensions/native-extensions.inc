@@ -91,6 +91,10 @@ static void native_commands_rebuild(void) {
  gtk_widget_show_all(wb.lua_commands);
 }
 static gboolean file_event_refresh(gpointer data) { (void)data;wb.file_event_idle=0;if(wb.alive) { files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL);disk_current_file(); }return G_SOURCE_REMOVE; }
+/* EN: Dispatch document event name data for doc; object is unused. Update HDL
+ * painting only for resolved HDL sources and queue workspace/UI refreshes.
+ * RU: Обрабатывает событие data документа doc; object не используется. Обновляет
+ * HDL-подсветку только для определённых HDL-файлов и планирует обновление интерфейса. */
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;
  if(DOC_VALID(doc) && insight_languages_is_hdl(doc->file_name)) {
