@@ -186,6 +186,24 @@ static gboolean tick(gpointer data)
 static gboolean timeout(gpointer data)
 {
     (void)data;
+    if (window)
+    {
+        const gchar *views[] = {"insight-project-files", "insight-project-symbols", "insight-search-results"};
+        for (guint n = 0; n < G_N_ELEMENTS(views); n++)
+        {
+            GtkTreeModel *rows = model(views[n]);
+            g_printerr("%s: %d rows\n", views[n], gtk_tree_model_iter_n_children(rows, NULL));
+            GtkTreeIter iter;
+            for (gboolean ok = gtk_tree_model_get_iter_first(rows, &iter); ok;
+                 ok = gtk_tree_model_iter_next(rows, &iter))
+            {
+                gchar *name = NULL;
+                gtk_tree_model_get(rows, &iter, 0, &name, -1);
+                g_printerr("  %s\n", name ? name : "(null)");
+                g_free(name);
+            }
+        }
+    }
     g_error("HDL search timeout at phase %u", phase);
     return G_SOURCE_REMOVE;
 }
@@ -226,9 +244,9 @@ int main(void)
     g_free(sources);
     project = g_build_filename(root, "hdl.geany", NULL);
     g_assert_true(g_file_set_contents(project, "[project]\nname=HDL search\nbase_path=sources\n", -1, NULL));
-    gchar *argv[] = {"hdl-search", "--new-instance", "--no-session", "--config", profile, project, NULL};
+    gchar *argv[] = {"hdl-search", "--new-instance", "--no-session", "--config", profile, project, include_path, NULL};
     g_timeout_add(200, tick, NULL);
     g_timeout_add_seconds(45, timeout, NULL);
     g_log_set_always_fatal(G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL);
-    return main_lib(6, argv);
+    return main_lib(7, argv);
 }

@@ -923,3 +923,5 @@ dist_insightdocmedia_DATA += insight/docs/media/native-thread-policy.jpg
 EXTRA_DIST += insight/tests/search_commands_gui_test.c
 
 EXTRA_DIST += src/insight-languages-hdl.inc insight/tests/hdl_search_gui_test.c insight/tests/source_mask_verilog_test.c
+
+EXTRA_DIST += src/insight-languages-seed.inc

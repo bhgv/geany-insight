@@ -32,6 +32,7 @@ typedef struct { gchar *name,*folder,*file_filters,*extensions,*compatible,*word
 static GPtrArray *languages;static GHashTable *path_cache;static gchar *root;static gboolean applying;static gulong save_handler;
 static void binding_saved(GObject *,GeanyDocument *,gpointer);
 static void seed_languages(void);
+
 static void free_language(gpointer data) { Language *p=data;g_free(p->name);g_free(p->folder);g_free(p->file_filters);insight_file_patterns_free(p->patterns);g_free(p->extensions);g_free(p->compatible);g_free(p->words);g_free(p->css);g_free(p->theme);g_strfreev(p->files);g_free(p); }
 static gchar *get(GKeyFile *key,const gchar *field) { gchar *s=g_key_file_get_string(key,"language",field,NULL);return s ? s : g_strdup(""); }
 static gboolean extensions_match(const gchar *list,const gchar *path) {
@@ -381,16 +382,8 @@ static void repair_seed(ScintillaObject *sci,GeanyFiletype *ft) {
  }
  g_free(legacy);
 }
-static void seed_languages(void) {
- /* Seed absent folders once. Existing profiles and hand-written CSS win. */
- ScintillaObject *sci=SCINTILLA(scintilla_new());g_object_ref_sink(sci);
- for(guint n=0;n<filetypes_array->len;n++) { GeanyFiletype *ft=filetypes[n];if(ft->lang<0) continue;gchar *folder=g_build_filename(root,ft->name,NULL),*config=g_build_filename(folder,"language.conf",NULL);if(g_file_test(config,G_FILE_TEST_EXISTS)) { repair_seed(sci,ft);g_free(folder);g_free(config);continue; }
-  Language p={0};insight_filetype_options_default(&p.editing);p.name=ft->name;p.folder=folder;p.parser=ft;p.extensions=default_extensions(ft);p.compatible=insight_native_language_compatible(TM_PARSER_C,ft->lang) ? "c;c++;C;cpp;cxx;cc;h;hpp;hxx;h++;hh;asm;ASM;s;S;sx" : "";p.theme="current";p.seeded=TRUE;
-  highlighting_set_styles(sci,ft);p.words=(gchar *)highlighting_primary_keywords(ft);PangoFontDescription *font=pango_font_description_from_string(interface_prefs.editor_font ? interface_prefs.editor_font : "Monospace 12");const gchar *family=pango_font_description_get_family(font);gchar *escaped=font_family_escape(family ? family : "Monospace");gchar size[G_ASCII_DTOSTR_BUF_SIZE];g_ascii_dtostr(size,sizeof size,pango_font_description_get_size(font)/(double)PANGO_SCALE);GString *css=g_string_new(NULL);g_string_append_printf(css,"editor { font-family: \"%s\"; font-size: %spt; }\n",escaped,size);g_free(escaped);pango_font_description_free(font);
-  gchar *rules=seed_style_rules(sci);g_string_append(css,rules);g_free(rules);
-  p.css=css->str;GError *error=NULL;if(!write_language(&p,&error)) g_warning("Cannot seed language %s: %s",ft->name,error ? error->message : "write failed");g_clear_error(&error);g_string_free(css,TRUE);g_free(p.extensions);g_free(folder);g_free(config);
- }gtk_widget_destroy(GTK_WIDGET(sci));g_object_unref(sci);
-}
+#include "insight-languages-seed.inc"
+
 static void binding_saved(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;(void)data;if(!doc || !doc->is_valid || !doc->file_name) return;Language *p=by_name(g_object_get_data(G_OBJECT(doc->editor->sci),"insight-language-binding"));if(!p) return;
  g_clear_pointer(&path_cache,g_hash_table_destroy);gchar *path=insight_canonicalize_filename(doc->file_name,NULL);for(guint n=0;p->files && p->files[n];n++) if(binding_path_equal(p->files[n],path)) { g_free(path);return; }

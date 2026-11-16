@@ -70,6 +70,7 @@ on:
       - src/insight-workbench/**
       - insight/desktop/window_motion.*
       - src/highlighting.c
+      - src/insight-languages-seed.inc
       - src/insight-languages-hdl.inc
       - src/insight-languages.c
       - src/insight-symbol-view.*

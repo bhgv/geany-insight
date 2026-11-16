@@ -14,8 +14,10 @@ static gboolean scan_continue(void)
     return G_SOURCE_CONTINUE;
 }
 
-/* EN: Check path and schedule indexing when needed.
- * RU: Проверяет path и при необходимости запускает индексацию. */
+/* EN: Check path and schedule indexing. Load custom filetype parsers before
+ * capturing language IDs, including unopened SystemVerilog sources.
+ * RU: Проверяет path и запускает индексацию. Загружает парсеры пользовательских
+ * типов до сохранения ID языка, включая закрытые SystemVerilog-исходники. */
 static void scan_source_file(const char *path)
 {
     if (!wb.scan_indexing)
@@ -47,6 +49,7 @@ static void scan_source_file(const char *path)
         return;
     }
     GeanyFiletype *ft = filetypes_detect_from_extension(utf8);
+    if (ft) filetypes_load_config(ft->id, FALSE);
     /* A cached shebang language avoids reopening extensionless source on every
   * validation. Detect content only for a genuinely new/changed file. */
     const gchar *stored = g_hash_table_lookup(wb.file_stamps, utf8);
@@ -70,6 +73,7 @@ static void scan_source_file(const char *path)
         return;
     }
     ft = filetypes_detect_from_file(utf8);
+    if (ft) filetypes_load_config(ft->id, FALSE);
     g_free(stamp);
     stamp = source_stamp(path, ft ? ft->name:NULL, file_prefs.default_open_encoding);
     IndexJob *j = g_new0(IndexJob, 1);
@@ -96,8 +100,10 @@ static void scan_source_file(const char *path)
     g_object_unref(task);
 }
 
-/* EN: Advance the directory scan by one idle slice. data is unused.
- * RU: Продвигает обход каталогов за один проход. data не используется. */
+/* EN: Advance the directory scan; data is unused. Publish membership before
+ * indexing and update default .inc session buffers to their HDL project type.
+ * RU: Продвигает обход; data не используется. Публикует состав до индексации
+ * и обновляет тип открытых .inc по HDL-проекту вместо исходного Pascal. */
 static gboolean scan_step(gpointer data)
 {
     (void)data;
@@ -111,6 +117,20 @@ static gboolean scan_step(gpointer data)
             g_ptr_array_set_size(wb.files, 0);
             for (guint n = 0;n<wb.scan_members->len;n++)
                 g_ptr_array_add(wb.files, g_strdup(g_ptr_array_index(wb.scan_members, n)));
+            /* Reclassify session buffers after HDL membership becomes known.
+             * An .inc opened before enumeration initially has the Pascal default. */
+            for (guint n = 0; n < documents_array->len; n++)
+            {
+                GeanyDocument *doc = g_ptr_array_index(documents_array, n);
+                if (!DOC_VALID(doc) || !doc->file_name || !doc->file_type) continue;
+                const gchar *dot = strrchr(doc->file_name, '.');
+                if (!dot || g_ascii_strcasecmp(dot, ".inc") ||
+                    (doc->file_type->id != GEANY_FILETYPES_PASCAL &&
+                     doc->file_type->id != GEANY_FILETYPES_NONE)) continue;
+                GeanyFiletype *detected = insight_languages_detect(doc->file_name);
+                if (detected && !strcmp(detected->name, "SystemVerilog"))
+                    document_set_filetype(doc, detected);
+            }
             files_filter(NULL, NULL);
             tree_refresh();
             hdl_invalidate_colors();
