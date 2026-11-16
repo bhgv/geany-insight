@@ -54,6 +54,7 @@
 #include "insight-symbol-view.h"
 #include "toolbar.h"
 #include "search.h"
+#include "callbacks.h"
 #include "sidebar.h"
 #include "symbols.h"
 #include "ui_utils.h"

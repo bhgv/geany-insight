@@ -387,14 +387,7 @@ static GtkWidget *field(GtkGrid *grid,gint row,const gchar *label,const gchar *n
 static gchar *text_value(GtkWidget *view) { GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));GtkTextIter a,b;gtk_text_buffer_get_bounds(buffer,&a,&b);return gtk_text_buffer_get_text(buffer,&a,&b,FALSE); }
 static GtkWidget *text_editor(GtkWidget *box,const gchar *name) { GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*view=gtk_text_view_new();gtk_widget_set_name(view,name);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view),TRUE);gtk_container_add(GTK_CONTAINER(scroll),view);gtk_widget_set_size_request(scroll,-1,180);gtk_box_pack_start(GTK_BOX(box),scroll,TRUE,TRUE,0);return view; }
 static gchar *default_extensions(GeanyFiletype *ft) { GString *out=g_string_new(NULL);for(guint n=0;ft && ft->pattern && ft->pattern[n];n++) { const gchar *pattern=ft->pattern[n];if(g_str_has_prefix(pattern,"*.") && !strpbrk(pattern+2,"*?[]")) { if(out->len) g_string_append_c(out,';');g_string_append(out,pattern+2); } }return g_string_free(out,FALSE); }
-static void choice_changed(GtkComboBox *choice,gpointer data) {
- LanguageDialog *d=data;if(d->filling || insight_i18n_is_applying()) return;const gchar *name=gtk_combo_box_get_active_id(choice);if(!name) return;Language *p=by_name(name);GeanyFiletype *ft=p ? p->parser : filetypes_lookup_by_name(name);if(!ft) return;d->filling=TRUE;g_free(d->original);d->original=p ? g_strdup(p->name) : NULL;
- gtk_entry_set_text(GTK_ENTRY(d->name),p ? p->name : ft->name);gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->parser),ft->name);gchar *extensions=p ? g_strdup(p->extensions) : default_extensions(ft);gtk_entry_set_text(GTK_ENTRY(d->extensions),extensions);g_free(extensions);
- gtk_entry_set_text(GTK_ENTRY(d->file_filters),p ? p->file_filters : "");
- InsightFiletypeOptions options;insight_filetype_options_default(&options);insight_filetype_editing_set(d->editing,p ? &p->editing : &options);
- gtk_entry_set_text(GTK_ENTRY(d->compatible),p ? p->compatible : ((ft->lang==TM_PARSER_C || ft->lang==TM_PARSER_CPP || ft->lang==TM_PARSER_CUDA) ? "c;c++;C;cpp;cxx;cc;h;hpp;hxx;h++;hh;asm;ASM;s;S;sx" : ""));
- gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->words)),p ? p->words : "",-1);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(d->css)),p ? p->css : "",-1);gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->theme),p && *p->theme ? p->theme : "current");d->filling=FALSE;
-}
+#include "insight-languages-choice.inc"
 static void refresh_choices(LanguageDialog *d,const gchar *selected) {
  gchar *name=g_strdup(selected);d->filling=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(d->choice));for(guint n=0;n<filetypes_array->len;n++) gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->choice),filetypes[n]->name,filetypes[n]->name);
  for(guint n=0;languages && n<languages->len;n++) { Language *p=g_ptr_array_index(languages,n);if(!filetypes_lookup_by_name(p->name)) gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(d->choice),p->name,p->name); }gtk_combo_box_set_active_id(GTK_COMBO_BOX(d->choice),name);d->filling=FALSE;choice_changed(GTK_COMBO_BOX(d->choice),d);g_free(name);

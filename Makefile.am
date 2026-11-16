@@ -931,3 +931,6 @@ EXTRA_DIST += insight/tests/include_language_test.c
 EXTRA_DIST += insight/tests/mixed_includes_gui_test.c
 
 EXTRA_DIST += src/insight-workbench/workspace/include-context.inc
+
+EXTRA_DIST += src/insight-languages-choice.inc
+dist_insightdocmedia_DATA += insight/docs/media/include-refresh.svg

@@ -99,8 +99,6 @@ InsightIncludeGraph *insight_include_graph_new(GPtrArray *paths, const gchar *ro
         if (g_hash_table_contains(g->basenames, base))
             g_hash_table_replace(g->basenames, base, g_strdup(""));
         else g_hash_table_insert(g->basenames, base, g_strdup(path));
-        guint family = source_family(path);
-        if (family) g_hash_table_insert(g->families, g_strdup(path), GUINT_TO_POINTER(family));
     }
     return g;
 }
@@ -162,29 +160,54 @@ static gchar *include_path(InsightIncludeGraph *g, const gchar *owner, const gch
     return result;
 }
 
-/* EN: Add literal directives from text belonging to path. Ignore commented
- * directives and macro includes; preserve # versus backtick include families.
- * RU: Добавляет буквальные подключения из text файла path. Пропускает комментарии
- * и макросы; различает семейства #include и подключения с обратной кавычкой. */
-void insight_include_graph_add(InsightIncludeGraph *g, const gchar *path, const gchar *text)
+/* EN: Normalize text line endings and, for C/C++ splice, join escaped lines.
+ * Return an owned buffer; offsets are local to ownership parsing, not UI results.
+ * RU: Нормализует переводы строк text и при splice склеивает продолжения C/C++.
+ * Возвращает свой буфер; позиции используются только для определения принадлежности. */
+static gchar *include_source_lines(const gchar *text, gboolean splice)
 {
-    if (!text || !g_hash_table_contains(g->paths, path)) return;
-    InsightCodeDialect dialect = source_family(path) == FAMILY_HDL ? INSIGHT_CODE_VERILOG : INSIGHT_CODE_C;
-    /* Unclassified include fragments can contain HDL numeric apostrophes. */
-    if (!source_family(path)) dialect = INSIGHT_CODE_VERILOG;
-    gchar *mask = insight_source_region_mask(text, strlen(text), dialect, INSIGHT_REGION_SKIP_COMMENTS, NULL);
-    if (!mask) return;
-    guchar *code = insight_source_region_membership(text, strlen(text), dialect, INSIGHT_REGION_CODE, NULL);
-    GPtrArray *edges = g_ptr_array_new_with_free_func(edge_free);
+    GString *out = g_string_sized_new(strlen(text));
+    for (gsize n = 0; text[n]; n++)
+    {
+        if (splice && text[n] == '\\' && (text[n + 1] == '\r' || text[n + 1] == '\n'))
+        {
+            n++;
+            if (text[n] == '\r' && text[n + 1] == '\n') n++;
+            continue;
+        }
+        if (text[n] == '\r')
+        {
+            g_string_append_c(out, '\n');
+            if (text[n + 1] == '\n') n++;
+        }
+        else g_string_append_c(out, text[n]);
+    }
+    return g_string_free(out, FALSE);
+}
+
+/* EN: Append literal edges from text/path for marker using dialect into edges.
+ * Strings/comments cannot introduce directives; enforce graph resource bounds.
+ * RU: Добавляет буквальные связи text/path для marker с dialect в edges.
+ * Строки/комментарии не создают подключений; соблюдает ограничения графа. */
+static void include_directives_scan(InsightIncludeGraph *g, const gchar *path,
+    const gchar *text, InsightCodeDialect dialect, gchar marker, GPtrArray *edges)
+{
+    gchar *normalized = include_source_lines(text, marker == '#');
+    gchar *mask = insight_source_region_mask(normalized, strlen(normalized), dialect,
+        INSIGHT_REGION_SKIP_COMMENTS, NULL);
+    if (!mask) { g_free(normalized); return; }
+    guchar *code = insight_source_region_membership(normalized, strlen(normalized), dialect,
+        INSIGHT_REGION_CODE, NULL);
     GMatchInfo *match = NULL;
     g_regex_match(g->directive, mask, 0, &match);
     while (g_match_info_matches(match))
     {
-        gchar *marker = g_match_info_fetch(match, 1);
+        gchar *found = g_match_info_fetch(match, 1);
         gchar *name = g_match_info_fetch(match, 2);
         gint marker_start = 0;
         g_match_info_fetch_pos(match, 1, &marker_start, NULL);
-        gchar *target = code && code[marker_start] ? include_path(g, path, name) : NULL;
+        gchar *target = *found == marker && code && code[marker_start] ?
+            include_path(g, path, name) : NULL;
         if (target && (edges->len >= 4096 || g->edge_count >= 65536))
         {
             g->limited = TRUE;
@@ -196,16 +219,31 @@ void insight_include_graph_add(InsightIncludeGraph *g, const gchar *path, const 
             g->edge_count++;
             IncludeEdge *edge = g_new0(IncludeEdge, 1);
             edge->path = target;
-            edge->allowed = *marker == '`' ? FAMILY_HDL : FAMILY_C | FAMILY_CPP;
+            edge->allowed = marker == '`' ? FAMILY_HDL : FAMILY_C | FAMILY_CPP;
             g_ptr_array_add(edges, edge);
         }
-        g_free(marker);
+        g_free(found);
         g_free(name);
         if (!g_match_info_next(match, NULL)) break;
     }
     g_match_info_free(match);
     g_free(code);
     g_free(mask);
+    g_free(normalized);
+}
+
+/* EN: Replace literal directives for path from text. Each directive uses its
+ * own C/C++ or HDL grammar, including nested .inc fragments of either language.
+ * RU: Заменяет подключения path из text. Каждая директива использует грамматику
+ * C/C++ либо HDL, включая вложенные фрагменты .inc обоих языков. */
+void insight_include_graph_add(InsightIncludeGraph *g, const gchar *path, const gchar *text)
+{
+    if (!text || !g_hash_table_contains(g->paths, path)) return;
+    GPtrArray *old = g_hash_table_lookup(g->edges, path);
+    if (old) g->edge_count -= old->len;
+    GPtrArray *edges = g_ptr_array_new_with_free_func(edge_free);
+    if (strchr(text, '#')) include_directives_scan(g, path, text, INSIGHT_CODE_C, '#', edges);
+    if (strchr(text, '`')) include_directives_scan(g, path, text, INSIGHT_CODE_VERILOG, '`', edges);
     g_hash_table_replace(g->edges, g_strdup(path), edges);
 }
 
@@ -221,8 +259,15 @@ GHashTable *insight_include_graph_resolve(InsightIncludeGraph *g)
     GQueue queue = G_QUEUE_INIT;
     GHashTableIter iter;
     gpointer key, value;
-    g_hash_table_iter_init(&iter, g->families);
-    while (g_hash_table_iter_next(&iter, &key, NULL)) g_queue_push_tail(&queue, g_strdup(key));
+    g_hash_table_remove_all(g->families);
+    g_hash_table_iter_init(&iter, g->paths);
+    while (g_hash_table_iter_next(&iter, &key, NULL))
+    {
+        guint family = source_family(key);
+        if (!family) continue;
+        g_hash_table_insert(g->families, g_strdup(key), GUINT_TO_POINTER(family));
+        g_queue_push_tail(&queue, g_strdup(key));
+    }
     while (!g_queue_is_empty(&queue))
     {
         const gchar *owner = g_queue_pop_head(&queue);

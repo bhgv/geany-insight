@@ -155,3 +155,34 @@ GHashTable *insight_workbench_include_languages(void)
 {
     return wb.alive && wb.include_languages ? g_hash_table_ref(wb.include_languages) : NULL;
 }
+
+/* EN: Refresh inferred ownership after editing an include directive in editor.
+ * nt supplies the modified text/position. Debounce full scans, keeping disk files
+ * untouched; ordinary source edits do not request an include scan.
+ * RU: Обновляет принадлежность после правки include в editor. nt содержит текст/
+ * позицию изменения. Откладывает обход без записи файлов; обычные правки его не запускают. */
+static void include_context_edited(GeanyEditor *editor, SCNotification *nt)
+{
+    if (ignore_callback || !wb.root || !editor || !DOC_VALID(editor->document) ||
+        !insight_include_graph_candidate(editor->document->file_name)) return;
+    gboolean directive = nt->text && nt->length > 0 &&
+        (memchr(nt->text, '#', nt->length) || memchr(nt->text, '`', nt->length));
+    gint line = (gint)SSM(editor->sci, SCI_LINEFROMPOSITION, nt->position, 0);
+    for (guint n = 0; !directive && line >= 0 && n < 16; n++, line--)
+    {
+        gchar *text = sci_get_line(editor->sci, line);
+        gchar *start = text;
+        while (*start == ' ' || *start == '\t') start++;
+        directive = *start == '#' || *start == '`';
+        g_free(text);
+        if (!line || directive) break;
+        gchar *previous = sci_get_line(editor->sci, line - 1);
+        g_strchomp(previous);
+        gboolean continued = *previous && previous[strlen(previous) - 1] == '\\';
+        g_free(previous);
+        if (!continued) break;
+    }
+    if (!directive) return;
+    if (wb.watch_idle) g_source_remove(wb.watch_idle);
+    wb.watch_idle = g_timeout_add(800, rescan_changed, NULL);
+}

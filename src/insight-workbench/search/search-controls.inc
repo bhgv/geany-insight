@@ -134,26 +134,36 @@ static void focus_search_results(GtkWidget *widget,gpointer data) {
  (void)widget; (void)data; gtk_widget_show(wb.search_page);msgwin_show_hide(TRUE);
  gtk_notebook_set_current_page(GTK_NOTEBOOK(main_widgets.message_window_notebook),gtk_notebook_page_num(GTK_NOTEBOOK(main_widgets.message_window_notebook),wb.search_page)); gtk_widget_grab_focus(wb.search_view);
 }
-/* EN: Apply notification nt for editor to source links and visible HDL spans;
- * only the resolved source language selects HDL invalidation.
- * RU: Применяет уведомление nt редактора editor к ссылкам и видимой HDL-подсветке;
- * сброс HDL выбирается только по определённому языку файла. */
-void insight_workbench_source_link_notify(GeanyEditor *editor,SCNotification *nt) {
- if(wb.alive) {
-  if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT)) &&
-     insight_languages_is_hdl(editor->document->file_name)) hdl_invalidate_colors();
-  if(nt->nmhdr.code==SCN_UPDATEUI && (nt->updated&SC_UPDATE_V_SCROLL)) hdl_queue_paint(editor->sci);
-  if(nt->nmhdr.code==SCN_PAINTED && g_object_get_data(G_OBJECT(editor->sci),"insight-hdl-spans")) {
-   GObject *view=G_OBJECT(editor->sci);
-   gpointer styled=GINT_TO_POINTER((gint)SSM(editor->sci,SCI_GETENDSTYLED,0,0));
-   gpointer height=GINT_TO_POINTER((gint)SSM(editor->sci,SCI_LINESONSCREEN,0,0));
-   if(styled!=g_object_get_data(view,"insight-hdl-styled") || height!=g_object_get_data(view,"insight-hdl-height")) {
-    g_object_set_data(view,"insight-hdl-styled",styled);g_object_set_data(view,"insight-hdl-height",height);
-    hdl_queue_paint(editor->sci);
-   }
-  }
-  insight_search_links_notify(wb.search_links,editor,nt);
- }
+/* EN: Apply nt for editor to source links, include ownership and visible HDL
+ * spans. Resolve the actual source language before scheduling HDL work.
+ * RU: Применяет nt редактора editor к ссылкам, принадлежности include и видимой
+ * HDL-подсветке. Перед HDL-задачами определяет действительный язык исходника. */
+void insight_workbench_source_link_notify(GeanyEditor *editor, SCNotification *nt)
+{
+    if (!wb.alive) return;
+    if (nt->nmhdr.code == SCN_MODIFIED &&
+        (nt->modificationType & (SC_MOD_INSERTTEXT | SC_MOD_DELETETEXT)))
+    {
+        include_context_edited(editor, nt);
+        if (insight_languages_is_hdl(editor->document->file_name)) hdl_invalidate_colors();
+    }
+    if (nt->nmhdr.code == SCN_UPDATEUI && (nt->updated & SC_UPDATE_V_SCROLL))
+        hdl_queue_paint(editor->sci);
+    if (nt->nmhdr.code == SCN_PAINTED &&
+        g_object_get_data(G_OBJECT(editor->sci), "insight-hdl-spans"))
+    {
+        GObject *view = G_OBJECT(editor->sci);
+        gpointer styled = GINT_TO_POINTER((gint)SSM(editor->sci, SCI_GETENDSTYLED, 0, 0));
+        gpointer height = GINT_TO_POINTER((gint)SSM(editor->sci, SCI_LINESONSCREEN, 0, 0));
+        if (styled != g_object_get_data(view, "insight-hdl-styled") ||
+            height != g_object_get_data(view, "insight-hdl-height"))
+        {
+            g_object_set_data(view, "insight-hdl-styled", styled);
+            g_object_set_data(view, "insight-hdl-height", height);
+            hdl_queue_paint(editor->sci);
+        }
+    }
+    insight_search_links_notify(wb.search_links, editor, nt);
 }
 gboolean insight_workbench_source_link_key(GdkEventKey *event) {
  if(!wb.alive || !wb.search_links || (event->state & gtk_accelerator_get_default_mod_mask())!=GEANY_PRIMARY_MOD_MASK || (event->keyval!=GDK_KEY_l && event->keyval!=GDK_KEY_L)) return FALSE;

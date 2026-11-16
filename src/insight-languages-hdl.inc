@@ -31,11 +31,14 @@ static const gchar *language_compatible_extensions(const Language *profile)
     return profile->compatible;
 }
 
-/* EN: Return the generated profile's family: native=1, HDL=2, custom/other=0.
- * RU: Возвращает семейство созданного profile: C/C++=1, HDL=2, своё/прочее=0. */
+/* EN: Return the built-in profile family, including saved style edits:
+ * native=1, HDL=2, separately named custom/other=0 for explicit compatibility.
+ * RU: Возвращает семейство встроенного profile, включая сохранённый стиль:
+ * C/C++=1, HDL=2, отдельный пользовательский/прочий=0 с явной совместимостью. */
 static guint language_profile_family(const Language *profile)
 {
-    if (!profile || !profile->seeded || !profile->parser) return 0;
+    if (!profile || !profile->parser) return 0;
+    if (!profile->seeded && strcmp(profile->name, profile->parser->name)) return 0;
     const gchar *name = profile->parser->name;
     if (!strcmp(name, "Verilog") || !strcmp(name, "SystemVerilog")) return 2;
     if (!strcmp(name, "C") || !strcmp(name, "C++")) return 1;
