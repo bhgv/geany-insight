@@ -3,6 +3,7 @@
  * RU: Распространяет принадлежность C/C++ и HDL по цепочкам буквальных include. */
 #include "include_language.h"
 #include "source_mask.h"
+#include "glib_compat.h"
 #include <string.h>
 enum { FAMILY_C = 1, FAMILY_CPP = 2, FAMILY_HDL = 4 };
 typedef struct { gchar *path; guint allowed; } IncludeEdge;
@@ -32,10 +33,11 @@ static guint source_family(const gchar *path)
     if (!dot) return 0;
     if (!g_ascii_strcasecmp(dot, ".v") || !g_ascii_strcasecmp(dot, ".sv") ||
         !g_ascii_strcasecmp(dot, ".vh") || !g_ascii_strcasecmp(dot, ".svh")) return FAMILY_HDL;
-    if (!strcmp(dot, ".c") || !strcmp(dot, ".h")) return FAMILY_C;
+    if (!strcmp(dot, ".C")) return FAMILY_CPP;
+    if (!g_ascii_strcasecmp(dot, ".c") || !g_ascii_strcasecmp(dot, ".h")) return FAMILY_C;
     const gchar *native[] = {".C", ".cpp", ".cc", ".cxx", ".c++", ".hpp", ".hh", ".hxx"};
     for (guint n = 0; n < G_N_ELEMENTS(native); n++)
-        if (!strcmp(dot, native[n])) return FAMILY_CPP;
+        if (!g_ascii_strcasecmp(dot, native[n])) return FAMILY_CPP;
     return 0;
 }
 
@@ -47,6 +49,35 @@ gboolean insight_include_graph_candidate(const gchar *path)
     return path && (source_family(path) || (dot && !g_ascii_strcasecmp(dot, ".inc")));
 }
 
+/* EN: Hash project paths using the host filesystem case convention.
+ * RU: Хэширует пути value с учётом правил регистра файловой системы платформы. */
+static guint path_hash(gconstpointer value)
+{
+#ifdef G_OS_WIN32
+    gchar *folded = g_utf8_casefold(value, -1);
+    guint hash = g_str_hash(folded);
+    g_free(folded);
+    return hash;
+#else
+    return g_str_hash(value);
+#endif
+}
+
+/* EN: Compare path keys a/b using host case conventions.
+ * RU: Сравнивает ключи путей a/b по правилам регистра платформы. */
+static gboolean path_equal(gconstpointer a, gconstpointer b)
+{
+#ifdef G_OS_WIN32
+    gchar *left = g_utf8_casefold(a, -1), *right = g_utf8_casefold(b, -1);
+    gboolean equal = !strcmp(left, right);
+    g_free(left);
+    g_free(right);
+    return equal;
+#else
+    return g_str_equal(a, b);
+#endif
+}
+
 /* EN: Allocate a graph restricted to project paths under root. No file I/O.
  * The caller frees the graph; duplicate basenames are intentionally unresolved.
  * RU: Создаёт граф только для путей проекта paths с корнем root без чтения файлов.
@@ -55,8 +86,8 @@ InsightIncludeGraph *insight_include_graph_new(GPtrArray *paths, const gchar *ro
 {
     InsightIncludeGraph *g = g_new0(InsightIncludeGraph, 1);
     g->root = g_strdup(root);
-    g->paths = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-    g->basenames = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    g->paths = g_hash_table_new_full(path_hash, path_equal, g_free, NULL);
+    g->basenames = g_hash_table_new_full(path_hash, path_equal, g_free, g_free);
     g->edges = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)g_ptr_array_unref);
     g->families = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     g->directive = g_regex_new("(?m)^[\\t ]*([#`])[\\t ]*include[\\t ]*[<\"]([^>\"\\r\\n]+)[>\"]", 0, 0, NULL);
@@ -78,15 +109,25 @@ InsightIncludeGraph *insight_include_graph_new(GPtrArray *paths, const gchar *ro
  * Return an owned member path or NULL; never resolve outside the membership.
  * RU: Разрешает name относительно owner, root, затем уникального имени проекта.
  * Возвращает принадлежащий вызывающему путь либо NULL, только внутри состава проекта. */
-static gchar *include_path(InsightIncludeGraph *g, const gchar *owner, const gchar *name)
+static gchar *include_path_normalized(InsightIncludeGraph *g, const gchar *owner, const gchar *name)
 {
     gchar *directory = g_path_get_dirname(owner);
-    gchar *path = g_canonicalize_filename(name, directory);
+    gchar *path = insight_canonicalize_filename(name, directory);
     g_free(directory);
-    if (g_hash_table_contains(g->paths, path)) return path;
+    const gchar *actual = g_hash_table_lookup(g->paths, path);
+    if (actual)
+    {
+        g_free(path);
+        return g_strdup(actual);
+    }
     g_free(path);
-    path = g_canonicalize_filename(name, g->root);
-    if (g_hash_table_contains(g->paths, path)) return path;
+    path = insight_canonicalize_filename(name, g->root);
+    actual = g_hash_table_lookup(g->paths, path);
+    if (actual)
+    {
+        g_free(path);
+        return g_strdup(actual);
+    }
     g_free(path);
     gchar *base = g_path_get_basename(name);
     const gchar *unique = g_hash_table_lookup(g->basenames, base);
@@ -94,9 +135,31 @@ static gchar *include_path(InsightIncludeGraph *g, const gchar *owner, const gch
     if (!unique || !*unique) return NULL;
     /* Preserve an explicit relative directory suffix; never pick a different folder. */
     gchar *suffix = g_strconcat(G_DIR_SEPARATOR_S, name, NULL);
+#ifdef G_OS_WIN32
+    gchar *folded = g_utf8_casefold(unique, -1), *folded_suffix = g_utf8_casefold(suffix, -1);
+    gboolean valid = !strchr(name, G_DIR_SEPARATOR) || g_str_has_suffix(folded, folded_suffix);
+    g_free(folded);
+    g_free(folded_suffix);
+#else
     gboolean valid = !strchr(name, G_DIR_SEPARATOR) || g_str_has_suffix(unique, suffix);
+#endif
     g_free(suffix);
     return valid ? g_strdup(unique) : NULL;
+}
+
+/* EN: Resolve include name from owner in graph g, normalizing Windows separators.
+ * Return an owned member path, or NULL on missing/ambiguous membership.
+ * RU: Разрешает name из owner в графе g, нормализуя разделители Windows.
+ * Возвращает принадлежащий вызывающему путь либо NULL при отсутствии/неоднозначности. */
+static gchar *include_path(InsightIncludeGraph *g, const gchar *owner, const gchar *name)
+{
+    gchar *normalized = g_strdup(name);
+#ifdef G_OS_WIN32
+    for (gchar *p = normalized; *p; p++) if (*p == '/') *p = G_DIR_SEPARATOR;
+#endif
+    gchar *result = include_path_normalized(g, owner, normalized);
+    g_free(normalized);
+    return result;
 }
 
 /* EN: Add literal directives from text belonging to path. Ignore commented

@@ -238,7 +238,8 @@ gboolean insight_language_filter_match(const InsightLanguageFilter *filter, cons
     const gchar *owner = filter->include_languages ?
         g_hash_table_lookup(filter->include_languages, path) : NULL;
     return own || (!excluded && language_include_family_matches(filter->family, owner) &&
-        (insight_file_patterns_match(filter->patterns, path, INSIGHT_FILE_PATTERN_ANY) ||
+        ((filter->family && owner) ||
+         insight_file_patterns_match(filter->patterns, path, INSIGHT_FILE_PATTERN_ANY) ||
          extensions_match(filter->extensions, path) || extensions_match(filter->compatible, path)));
 }
 
