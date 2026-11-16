@@ -115,7 +115,6 @@ static void usage_start(GtkWidget *widget, gpointer data)
      * RU: Сначала проверяем индекс для точного запроса, затем все файлы области:
      * теги не содержат все обращения к макросам и неиндексированные исходники. */
     if (mode == 3 && (scope == 0 || scope == 3) && wb.index &&
-        (wb.usage_flags & INSIGHT_SEARCH_WORD) &&
         !(wb.usage_flags & INSIGHT_SEARCH_REGEX) && !wb.usage_keywords)
     {
         const InsightSymbol *symbols[128];
