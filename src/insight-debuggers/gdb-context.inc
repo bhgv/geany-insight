@@ -234,6 +234,7 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         session->frame_select_needed = FALSE;
         if (request == NATIVE_CONTEXT_SELECT_THREAD || request == NATIVE_CONTEXT_SELECT_FRAME)
             native_context_restore(session, request);
+        native_all_stacks_select(session);
         return;
     }
     if (request == NATIVE_CONTEXT_SELECT_THREAD || request == NATIVE_CONTEXT_SELECT_FRAME)
@@ -296,6 +297,9 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
         native_source_stopped(session);
     if (request == NATIVE_CONTEXT_SELECT_FRAME)
         g_clear_pointer(&session->requested_frame, g_free);
+    if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_SELECT_THREAD ||
+        request == NATIVE_CONTEXT_STACK)
+        native_all_stacks_select(session);
     if (request == NATIVE_CONTEXT_SELECT_FRAME || request == NATIVE_CONTEXT_SELECT_THREAD)
     {
         session->locals_needed = TRUE;

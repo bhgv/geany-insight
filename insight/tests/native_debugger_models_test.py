@@ -39,6 +39,7 @@ typedef struct GHashTable GHashTable;
 typedef struct GtkTreeStore GtkTreeStore;
 typedef GtkTreeStore GtkTreeModel;
 typedef void GtkTreeView;
+
 typedef void GtkTreePath;
 typedef struct {int stamp; void *a, *b, *c;} GtkTreeIter;
 #define FALSE 0
@@ -98,6 +99,11 @@ typedef struct {
     char *all_stack_thread, *selected_thread, *selected_frame;
     GtkTreeView *all_stacks_view;
 } NativeDebug;
+typedef void GtkTreeSelection;
+extern GtkTreeSelection *gtk_tree_view_get_selection(GtkTreeView *);
+extern void gtk_tree_selection_unselect_all(GtkTreeSelection *);
+extern void gtk_tree_selection_select_iter(GtkTreeSelection *, GtkTreeIter *);
+extern int gtk_tree_model_iter_next(GtkTreeModel *, GtkTreeIter *);
 '''
 
 HARNESS = r'''
@@ -195,6 +201,7 @@ class NativeModels(unittest.TestCase):
         helpers = [function('src/insight-debuggers/gdb-context.inc', name) for name in
                    ('native_debug_field', 'native_next_tuple', 'native_context_id')]
         helpers += [function('src/insight-debuggers/gdb-session.inc', 'native_debug_scoped'),
+                    function('src/insight-debuggers/gdb-backtraces.inc', 'native_all_stacks_select'),
                     function('src/insight-debuggers/gdb-backtraces.inc', 'native_all_stacks_reply')]
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)

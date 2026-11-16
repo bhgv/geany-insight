@@ -155,6 +155,7 @@ static gboolean native_attach_interrupt_reply(NativeDebug *session, const gchar 
 static void native_profile_command_sent(NativeDebug *session, const gchar *command);
 static void native_debug_send(GtkWidget *dialog, const gchar *command);
 static void native_all_stacks_reply(NativeDebug *session, const gchar *record);
+static void native_all_stacks_select(NativeDebug *session);
 static gboolean native_context_id(const gchar *value);
 
 static void native_instruction_refresh(NativeDebug *session);

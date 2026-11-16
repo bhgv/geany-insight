@@ -251,7 +251,17 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 20 && threads_gui_context(window, thread, frame, "111", "1007") &&
              threads_gui_stacks_ready(window))
     {
-        gtk_tree_view_expand_all(GTK_TREE_VIEW(find(window, "insight-gdb-all-thread-stacks")));
+        GtkWidget *tree = find(window, "insight-gdb-all-thread-stacks");
+        GtkTreeModel *model = NULL;
+        GtkTreeIter row;
+        g_assert_true(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(tree)), &model, &row));
+        gchar *picked_thread = NULL, *picked_frame = NULL;
+        gtk_tree_model_get(model, &row, 5, &picked_thread, 6, &picked_frame, -1);
+        g_assert_cmpstr(picked_thread, ==, thread);
+        g_assert_cmpstr(picked_frame, ==, frame);
+        g_free(picked_thread);
+        g_free(picked_frame);
+        gtk_tree_view_expand_all(GTK_TREE_VIEW(tree));
         gtk_window_present(GTK_WINDOW(window));
         gdk_window_raise(gtk_widget_get_window(window));
         gtk_widget_queue_draw(window);

@@ -194,6 +194,13 @@ static void native_marker_add(GPtrArray *owned, const char *filename, guint line
     g_ptr_array_add(owned, (void *)1);
 }
 
+/* EN: Leave combined-tree rendering for the GUI regression; session has no tree view in this fixture.
+ * RU: Оставляет отрисовку общего дерева GUI-проверке; у session нет виджета дерева в фикстуре. */
+static void native_all_stacks_select(NativeDebug *session)
+{
+    (void)session;
+}
+
 /* EN: Count delegation of record to session's all-thread stack handler.
  * RU: Считает передачу record обработчику всех стеков session. */
 static void native_all_stacks_reply(NativeDebug *session, const char *record)

@@ -2,6 +2,41 @@
 /* EN: Group stopped GDB backtraces by thread and select their source frames.
  * RU: Группирует стеки GDB по потокам и выбирает соответствующие кадры исходников. */
 
+/* EN: Highlight session's confirmed thread/frame in the combined tree without emitting activation commands.
+ * Clear stale highlights when that context is absent; expand only its containing thread when found.
+ * RU: Выделяет подтверждённые поток/кадр session в общем дереве без отправки команд активации.
+ * Удаляет устаревшее выделение при отсутствии контекста; раскрывает только найденный поток. */
+static void native_all_stacks_select(NativeDebug *session)
+{
+    if (!session->all_stacks_view)
+        return;
+    GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(session->all_stacks_view));
+    gtk_tree_selection_unselect_all(selection);
+    if (!native_context_id(session->selected_thread) || !native_context_id(session->selected_frame))
+        return;
+    GtkTreeIter *root = g_hash_table_lookup(session->thread_roots, session->selected_thread);
+    if (!root)
+        return;
+    GtkTreeModel *model = GTK_TREE_MODEL(session->all_stack_rows);
+    GtkTreeIter row;
+    for (gboolean valid = gtk_tree_model_iter_children(model, &row, root); valid;
+         valid = gtk_tree_model_iter_next(model, &row))
+    {
+        gchar *frame = NULL;
+        gtk_tree_model_get(model, &row, 6, &frame, -1);
+        gboolean matches = !g_strcmp0(frame, session->selected_frame);
+        g_free(frame);
+        if (matches)
+        {
+            GtkTreePath *path = gtk_tree_model_get_path(model, root);
+            gtk_tree_view_expand_row(GTK_TREE_VIEW(session->all_stacks_view), path, FALSE);
+            gtk_tree_path_free(path);
+            gtk_tree_selection_select_iter(selection, &row);
+            return;
+        }
+    }
+}
+
 /* EN: Append scoped stack record to the thread currently requested by session.
  * RU: Добавляет ответ record в стек потока, запрошенного сеансом session. */
 static void native_all_stacks_reply(NativeDebug *session, const gchar *record)
@@ -50,6 +85,7 @@ static void native_all_stacks_reply(NativeDebug *session, const gchar *record)
         GtkTreePath *path = gtk_tree_model_get_path(GTK_TREE_MODEL(session->all_stack_rows), root);
         gtk_tree_view_expand_row(GTK_TREE_VIEW(session->all_stacks_view), path, FALSE);
         gtk_tree_path_free(path);
+        native_all_stacks_select(session);
     }
 }
 
