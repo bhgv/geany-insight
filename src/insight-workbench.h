@@ -25,6 +25,8 @@ GPtrArray *insight_workbench_completion_templates(struct GeanyEditor *,const gch
 gboolean insight_workbench_completion_template_insert(struct GeanyEditor *,const gchar *,gint,gint,guint64);
 void insight_workbench_template_selected(struct GeanyEditor *,const gchar *);
 gboolean insight_workbench_show_file_search(void);
+gboolean insight_workbench_show_project_search(const gchar *text, const gchar *dir);
+gboolean insight_workbench_find_usage(const gchar *text, guint flags, gboolean session);
 gboolean insight_workbench_focus_file_symbols(void);
 gboolean insight_workbench_file_find_again(gboolean);
 void insight_workbench_source_link_notify(struct GeanyEditor *,struct SCNotification *);

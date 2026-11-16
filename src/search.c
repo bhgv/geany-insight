@@ -1086,8 +1086,11 @@ void search_show_find_in_files_dialog(const gchar *dir)
 }
 
 
+/* EN: Open native cross-file search with optional text and UTF-8 dir.
+ * RU: Открывает встроенный поиск в файлах с необязательными text и каталогом dir UTF-8. */
 void search_show_find_in_files_dialog_full(const gchar *text, const gchar *dir)
 {
+ if(insight_workbench_show_project_search(text,dir)) return;
 	GtkWidget *entry; /* for child GtkEntry of a GtkComboBoxEntry */
 	GeanyDocument *doc = document_get_current();
 	gchar *sel = NULL;
@@ -2316,9 +2319,14 @@ static gint find_document_usage(GeanyDocument *doc, const gchar *search_text, Ge
 }
 
 
+/* EN: Find search_text using flags in project/session or current document;
+ * original_search_text labels legacy results. Native search includes closed files.
+ * RU: Ищет search_text с flags в проекте/сеансе или текущем файле;
+ * original_search_text подписывает прежние результаты. Учитывает закрытые файлы. */
 void search_find_usage(const gchar *search_text, const gchar *original_search_text,
 		GeanyFindFlags flags, gboolean in_session)
 {
+ if(!EMPTY(search_text) && insight_workbench_find_usage(search_text,flags,in_session)) return;
 	GeanyDocument *doc;
 	gint count = 0;
 

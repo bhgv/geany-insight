@@ -70,23 +70,22 @@ static gboolean complete(gint count)
         gtk_tree_model_iter_n_children(model("insight-search-results"), NULL) == count;
 }
 
-/* EN: Return whether Messages contains text; inspect the production search column.
- * RU: Сообщает, содержит ли Messages текст text; проверяет настоящий столбец поиска. */
-static gboolean message_contains(const gchar *text)
+/* EN: Accept the standard native search dialog from its nested event loop.
+ * RU: Подтверждает стандартный встроенный диалог из вложенного цикла событий. */
+static gboolean accept_search(gpointer data)
 {
-    GtkTreeView *view = GTK_TREE_VIEW(ui_lookup_widget(window, "treeview4"));
-    GtkTreeModel *rows = gtk_tree_view_get_model(view);
-    GtkTreeIter iter;
-    for (gboolean ok = gtk_tree_model_get_iter_first(rows, &iter); ok;
-         ok = gtk_tree_model_iter_next(rows, &iter))
-    {
-        gchar *line = NULL;
-        gtk_tree_model_get(rows, &iter, gtk_tree_view_get_search_column(view), &line, -1);
-        gboolean found = line && strstr(line, text);
-        g_free(line);
-        if (found) return TRUE;
-    }
-    return FALSE;
+    (void)data;
+    GList *windows=gtk_window_list_toplevels();
+    GtkWidget *dialog=NULL;
+    for(GList *p=windows;p;p=p->next)
+        if(!g_strcmp0(gtk_widget_get_name(p->data),"insight-search-project-dialog")) dialog=p->data;
+    g_list_free(windows);
+    if(!dialog) return G_SOURCE_CONTINUE;
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(dialog,"insight-search-command-query"))),==,"needle");
+    gtk_combo_box_set_active(GTK_COMBO_BOX(named(dialog,"insight-search-command-scope")),0);
+    gtk_entry_set_text(GTK_ENTRY(named(dialog,"insight-search-command-mask")),"*.txt");
+    gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
 }
 
 /* EN: Advance GUI scenarios; data is unused. Stop after all assertions pass.
@@ -163,27 +162,36 @@ static gboolean tick(gpointer data)
             return G_SOURCE_CONTINUE;
         sci_set_current_position(cpp->editor->sci, 5, FALSE);
         keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_FINDUSAGE);
-        g_assert_true(message_contains("Found 2 matches"));
-        keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_FINDDOCUMENTUSAGE);
-        g_assert_true(message_contains("Found 1 match"));
-        scintilla_send_message(cpp->editor->sci, SCI_SETSEL, 4, 10);
-        keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_FINDINFILES);
-        GList *windows = gtk_window_list_toplevels();
-        GtkWidget *dialog = NULL;
-        for (GList *p = windows; p; p = p->next)
-            if (GTK_IS_DIALOG(p->data) &&
-                !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)), "Find in Files"))
-                dialog = p->data;
-        g_list_free(windows);
-        g_assert_nonnull(dialog);
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui_lookup_widget(dialog, "check_regexp")), FALSE);
-        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui_lookup_widget(dialog, "check_recursive")), FALSE);
-        gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+        phase++;
+    }
+    else if(phase==7)
+    {
+        if(!complete(3)) return G_SOURCE_CONTINUE;
+        keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDDOCUMENTUSAGE);
+        phase++;
+    }
+    else if(phase==8)
+    {
+        if(!complete(1)) return G_SOURCE_CONTINUE;
+        scintilla_send_message(cpp->editor->sci,SCI_SETSEL,4,10);
+        phase++;
+        g_timeout_add(50,accept_search,NULL);
+        keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDINFILES);
+    }
+    else if(phase==9)
+    {
+        if(!complete(1)) return G_SOURCE_CONTINUE;
+        gchar *hdl=g_build_filename(directory,"sources","defines.v",NULL);
+        GeanyDocument *doc=document_open_file(hdl,FALSE,NULL,NULL);
+        g_assert_nonnull(doc);
+        g_free(hdl);
+        scintilla_send_message(doc->editor->sci,SCI_SETSEL,8,19);
+        keybindings_send_command(GEANY_KEY_GROUP_SEARCH,GEANY_KEYS_SEARCH_FINDUSAGE);
         phase++;
     }
     else
     {
-        if (!message_contains("Search completed with 3 matches")) return G_SOURCE_CONTINUE;
+        if(!complete(4)) return G_SOURCE_CONTINUE;
         const gchar *capture = g_getenv("INSIGHT_SEARCH_COMMANDS_CAPTURE");
         if (capture)
         {
@@ -197,7 +205,7 @@ static gboolean tick(gpointer data)
             g_object_unref(image);
         }
         g_assert_false(cpp->changed);
-        g_print("Search commands passed: mixed-language filenames/project text, masks, disk/buffer results, open/current scopes, Ctrl+F, Enter, lexical usages, standard Find Usages/current-document commands, grep Find in Files and result navigation.\n");
+        g_print("Search commands passed: mixed-language filenames/project text, masks, disk/buffer results, open/current scopes, Ctrl+F, Enter, lexical usages, standard Find Usages/current-document commands, native Find in Files with masks and closed Verilog/macro references and result navigation.\n");
         gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window, "menu_quit1")));
         return G_SOURCE_REMOVE;
     }
@@ -230,7 +238,7 @@ int main(void)
     g_free(config);
     g_free(language);
     config = g_build_filename(profile, "geany.conf", NULL);
-    g_assert_true(g_file_set_contents(config, "[geany]\nconfirm_exit=false\n", -1, NULL));
+    g_assert_true(g_file_set_contents(config, "[geany]\nconfirm_exit=false\n[tools]\ngrep_cmd=/nonexistent/forbidden-search-command\n", -1, NULL));
     g_free(config);
     gchar *sources = g_build_filename(directory, "sources", NULL);
     g_assert_cmpint(g_mkdir_with_parents(sources, 0700), ==, 0);
@@ -240,6 +248,19 @@ int main(void)
     g_assert_true(g_file_set_contents(cpp_path, "int needle;\n", -1, NULL));
     g_assert_true(g_file_set_contents(text_path, "needle", -1, NULL));
     g_assert_true(g_file_set_contents(python, "needle = 1\n", -1, NULL));
+    gchar *hdl=g_build_filename(sources,"defines.v",NULL);
+    g_assert_true(g_file_set_contents(hdl,"`define CPU_R_START 8'hb9\n",-1,NULL));
+    g_free(hdl);
+    gchar *nested=g_build_filename(sources,"nested",NULL);
+    g_assert_cmpint(g_mkdir_with_parents(nested,0700),==,0);
+    const gchar *extensions[]={"v","sv","inc"};
+    for(guint i=0;i<G_N_ELEMENTS(extensions);i++) {
+        gchar *name=g_strdup_printf("use.%s",extensions[i]);
+        hdl=g_build_filename(nested,name,NULL);
+        g_assert_true(g_file_set_contents(hdl,"assign result = `CPU_R_START;\n",-1,NULL));
+        g_free(hdl);g_free(name);
+    }
+    g_free(nested);
     g_free(python);
     g_free(sources);
     project = g_build_filename(directory, "search.geany", NULL);

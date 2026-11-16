@@ -273,8 +273,13 @@ static void search_command_unavailable(GtkWidget *box,const gchar *label,const g
  GtkWidget *check=search_command_check(box,label,"insight-search-unavailable");gtk_widget_set_sensitive(check,FALSE);gtk_widget_set_tooltip_text(check,reason);
 }
 static void search_command_response(GtkButton *button,gpointer data) { gtk_dialog_response(GTK_DIALOG(data),GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button),"response"))); }
-static void search_command_dialog(GtkWidget *widget,gpointer data) {
- (void)widget;SearchCommandDialog d={0};d.references=GPOINTER_TO_INT(data)!=0;
+/* EN: Show native search with optional initial text and UTF-8 directory; references
+ * selects lexical defaults. Validation failures leave the dialog open.
+ * RU: Открывает встроенный поиск с начальным текстом и каталогом UTF-8;
+ * references задаёт поиск ссылок. Ошибка проверки оставляет диалог открытым. */
+static void search_command_dialog_full(gboolean references, const gchar *initial_text,
+ const gchar *directory, gboolean standard) {
+ SearchCommandDialog d={0};d.references=references;
  gchar *path=g_build_filename(app->configdir,"insight",d.references ? "lookup-references.conf" : "search-project-dialog.conf",NULL);
  GKeyFile *state=g_key_file_new();g_key_file_load_from_file(state,path,G_KEY_FILE_NONE,NULL);
  d.dialog=gtk_dialog_new_with_buttons(d.references ? "Lookup References" : "Search Project",GTK_WINDOW(main_widgets.window),GTK_DIALOG_DESTROY_WITH_PARENT,NULL);
@@ -301,6 +306,19 @@ static void search_command_dialog(GtkWidget *widget,gpointer data) {
  gtk_combo_box_set_active(GTK_COMBO_BOX(d.method),g_key_file_has_key(state,"Search","Method",NULL) ? CLAMP(g_key_file_get_integer(state,"Search","Method",NULL),0,3) : d.references ? 3 : 2);g_signal_connect(d.method,"changed",G_CALLBACK(search_command_method),&d);search_command_method(GTK_COMBO_BOX(d.method),&d);
  const gchar *actions[]={"Search","Close","Help"};const gint responses[]={GTK_RESPONSE_ACCEPT,GTK_RESPONSE_CLOSE,GTK_RESPONSE_HELP};for(guint i=0;i<3;i++) { GtkWidget *button=gtk_button_new_with_label(actions[i]);gtk_box_pack_start(GTK_BOX(buttons),button,FALSE,FALSE,0);g_object_set_data(G_OBJECT(button),"response",GINT_TO_POINTER(responses[i]));g_signal_connect(button,"clicked",G_CALLBACK(search_command_response),d.dialog);if(!i) { gtk_widget_set_can_default(button,TRUE);gtk_widget_grab_default(button); } }
  gtk_entry_set_activates_default(GTK_ENTRY(d.query),TRUE);label=gtk_label_new("Lexical references; comment filters skip unsupported languages.\nKeyword fragments: turn Whole Words Only off.");gtk_label_set_line_wrap(GTK_LABEL(label),TRUE);gtk_label_set_xalign(GTK_LABEL(label),0);gtk_box_pack_start(GTK_BOX(left),label,FALSE,FALSE,0);
+ if(standard) {
+  GeanyDocument *doc=document_get_current();
+  gchar *selection=initial_text ? g_strdup(initial_text) : doc ? editor_get_default_selection(doc->editor,TRUE,NULL) : NULL;
+  if(selection) gtk_entry_set_text(GTK_ENTRY(d.query),selection);
+  g_free(selection);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(d.method),0);
+  gtk_combo_box_set_active(GTK_COMBO_BOX(d.scope),app->project ? 0 : 1);
+  if(directory && *directory) {
+   gchar *locale=utils_get_locale_from_utf8(directory);guint visited=0;
+   g_ptr_array_set_size(wb.search_files,0);search_folder_files(locale,0,&visited);g_free(locale);
+   gtk_combo_box_set_active(GTK_COMBO_BOX(d.scope),3);
+  }
+ }
  gtk_widget_show_all(d.dialog);gtk_widget_grab_focus(d.query);gtk_editable_select_region(GTK_EDITABLE(d.query),0,-1);gint response;
  for(;;) { response=gtk_dialog_run(GTK_DIALOG(d.dialog));if(response==GTK_RESPONSE_HELP) { insight_help_show(NULL,"search-command-dialogs.md");continue; }if(response!=GTK_RESPONSE_ACCEPT) break;
   const gchar *q=gtk_entry_get_text(GTK_ENTRY(d.query));gint m=gtk_combo_box_get_active(GTK_COMBO_BOX(d.method));guint flags=(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d.sensitive)) ? INSIGHT_SEARCH_CASE : 0)|(m==3 || gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d.word)) ? INSIGHT_SEARCH_WORD : 0)|(m==1 ? INSIGHT_SEARCH_REGEX : 0)|(m==2 && gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(d.variations)) ? INSIGHT_KEYWORD_VARIATIONS : 0);size_t total=0;GError *validation=NULL;
@@ -318,4 +336,47 @@ static void search_command_dialog(GtkWidget *widget,gpointer data) {
   gtk_widget_hide(d.dialog);if(scope==3 && !wb.search_files->len) search_choose_files(NULL,NULL);if(scope!=3 || wb.search_files->len) { usage_start(NULL,NULL);focus_search_results(NULL,NULL); }
  }
  gtk_widget_destroy(d.dialog);g_ptr_array_unref(saved);g_strfreev(queries);g_key_file_unref(state);g_free(path);
+}
+
+/* EN: Menu callback; data selects reference defaults, widget is unused.
+ * RU: Обработчик меню; data выбирает ссылки, widget не используется. */
+static void search_command_dialog(GtkWidget *widget, gpointer data)
+{
+ (void)widget;
+ search_command_dialog_full(GPOINTER_TO_INT(data)!=0,NULL,NULL,FALSE);
+}
+
+/* EN: Route the standard Find in Files command to native search. text and dir
+ * optionally seed query and UTF-8 directory. Return FALSE before UI startup.
+ * RU: Направляет стандартный поиск в файлах во встроенный поиск. text и dir
+ * задают запрос и каталог UTF-8. До запуска интерфейса возвращает FALSE. */
+gboolean insight_workbench_show_project_search(const gchar *text, const gchar *dir)
+{
+ if(!wb.alive || !wb.search_page) return FALSE;
+ search_command_dialog_full(FALSE,text,dir,TRUE);
+ return TRUE;
+}
+
+/* EN: Search text with Geany flags in the whole project (session), open documents
+ * without a project, or current document. Return FALSE before UI startup.
+ * RU: Ищет text с флагами Geany во всём проекте (session), открытых документах
+ * без проекта либо текущем файле. До запуска интерфейса возвращает FALSE. */
+gboolean insight_workbench_find_usage(const gchar *text, guint flags, gboolean session)
+{
+ if(!wb.alive || !wb.search_page) return FALSE;
+ wb.relation_setting=TRUE;
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.relation_follow),FALSE);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.relation_mode),3);
+ gtk_entry_set_text(GTK_ENTRY(wb.usage_entry),text);
+ gtk_entry_set_text(GTK_ENTRY(wb.search_mask),"");
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.search_scope),session ? (app->project ? 0 : 1) : 2);
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_case),!!(flags&GEANY_FIND_MATCHCASE));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_word),!!(flags&GEANY_FIND_WHOLEWORD));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.project_regex),!!(flags&GEANY_FIND_REGEXP));
+ gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(wb.search_keywords),FALSE);
+ gtk_combo_box_set_active(GTK_COMBO_BOX(wb.search_region),0);
+ wb.relation_setting=FALSE;
+ usage_start(NULL,NULL);
+ focus_search_results(NULL,NULL);
+ return TRUE;
 }

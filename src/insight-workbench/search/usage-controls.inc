@@ -110,6 +110,30 @@ static void usage_start(GtkWidget *widget, gpointer data)
     GHashTable *seen = g_hash_table_new(g_str_hash, g_str_equal);
     gint scope = mode == 3 ? gtk_combo_box_get_active(GTK_COMBO_BOX(wb.search_scope)) : (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.usage_buffer)) ? 2 : 0);
     GPtrArray *paths = mode == 3 && scope == 3 ? wb.search_files : wb.files;
+    /* EN: Consult the symbol index first for exact queries, then scan all member
+     * files: tags do not contain every macro use or unindexed source.
+     * RU: Сначала проверяем индекс для точного запроса, затем все файлы области:
+     * теги не содержат все обращения к макросам и неиндексированные исходники. */
+    if (mode == 3 && (scope == 0 || scope == 3) && wb.index &&
+        (wb.usage_flags & INSIGHT_SEARCH_WORD) &&
+        !(wb.usage_flags & INSIGHT_SEARCH_REGEX) && !wb.usage_keywords)
+    {
+        const InsightSymbol *symbols[128];
+        size_t count = insight_index_find(wb.index, query, 1, symbols, G_N_ELEMENTS(symbols));
+        for (size_t i = 0; i < MIN(count, G_N_ELEMENTS(symbols)); i++)
+        {
+            const gchar *path = symbols[i]->path;
+            if (!path || g_hash_table_contains(seen, path) || !search_path_matches(path)) continue;
+            gboolean member = FALSE;
+            for (guint k = 0; k < paths->len && !member; k++)
+                member = !g_strcmp0(path, g_ptr_array_index(paths, k));
+            if (!member) continue;
+            Location *next = g_new0(Location, 1);
+            next->path = g_strdup(path);
+            g_ptr_array_add(wb.usage_paths, next);
+            g_hash_table_add(seen, next->path);
+        }
+    }
     if (scope == 0 || scope == 3)
     {
         for (guint i = 0;i<paths->len && wb.usage_paths->len<10000;i++)
