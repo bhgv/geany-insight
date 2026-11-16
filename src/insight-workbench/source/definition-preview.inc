@@ -8,21 +8,59 @@ static void queue_definition(gboolean force) {
  if(!force && (same || wb.definition_timer || wb.definition_worker)) return;
  stop_definition(); wb.definition_timer=g_timeout_add(500,definition_timeout,NULL);
 }
-static gboolean refresh_now(gpointer data) {
- (void)data; wb.refresh=0;
- GeanyDocument *active=document_get_current(); gboolean dirty=wb.index_dirty;
- if(wb.clips_store) { gchar *language=clip_current_language(); if(g_strcmp0(language,wb.clips_language)) notes_filter(NULL,GINT_TO_POINTER(INSIGHT_CLIP)); g_free(language); }
- if(active) { decorate_selection(active->editor->sci); gsize a=(gsize)SSM(active->editor->sci,SCI_GETSELECTIONSTART,0,0),b=(gsize)SSM(active->editor->sci,SCI_GETSELECTIONEND,0,0); if(b>a) decorate_match(active->editor->sci,a,b); else decorate_match(active->editor->sci,0,0); }
- if(wb.preview) decorate_selection(wb.preview);
- /* Project models are refreshed when a completed snapshot is published,
-  * rather than repeatedly while the same snapshot is still being built. */
- if(wb.local_doc_id!=(active ? active->id : 0)) local_filter(NULL,NULL);
- relation_update_from_editor(dirty);
- if(!wb.preview || !wb.context_visible || !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
- GeanyDocument *doc=document_get_current();
- if(!doc) { render_source("",NULL,1,NULL); g_clear_pointer(&wb.source_path,g_free); wb.source_id=0; wb.source_line=0; preview_links();navigation_state(); gtk_label_set_text(GTK_LABEL(wb.title),"Context — no active source"); return G_SOURCE_REMOVE; }
- queue_definition(dirty);
- return G_SOURCE_REMOVE;
+/* EN: Refresh active editor context; data is unused. Requery project symbols
+ * when the active language changes, even if query text and index are unchanged.
+ * Return G_SOURCE_REMOVE after updating selection, relations and previews.
+ * RU: Обновляет контекст редактора; data не используется. Повторяет поиск символов
+ * при смене языка даже без изменения запроса и индекса. После обновления выделения,
+ * связей и просмотра возвращает G_SOURCE_REMOVE. */
+static gboolean refresh_now(gpointer data)
+{
+    (void)data;
+    wb.refresh = 0;
+    GeanyDocument *active = document_get_current();
+    gboolean dirty = wb.index_dirty;
+    if (wb.symbols)
+    {
+        gchar *profile = active ? insight_languages_profile_name(active->editor->sci,
+            active->file_name, active->file_type) : g_strdup("");
+        if (g_strcmp0(profile, wb.project_page_profile)) browser_filter(NULL, NULL);
+        g_free(profile);
+    }
+    if (wb.clips_store)
+    {
+        gchar *language = clip_current_language();
+        if (g_strcmp0(language, wb.clips_language)) notes_filter(NULL, GINT_TO_POINTER(INSIGHT_CLIP));
+        g_free(language);
+    }
+    if (active)
+    {
+        decorate_selection(active->editor->sci);
+        gsize a = (gsize)SSM(active->editor->sci, SCI_GETSELECTIONSTART, 0, 0);
+        gsize b = (gsize)SSM(active->editor->sci, SCI_GETSELECTIONEND, 0, 0);
+        if (b > a) decorate_match(active->editor->sci, a, b);
+        else decorate_match(active->editor->sci, 0, 0);
+    }
+    if (wb.preview) decorate_selection(wb.preview);
+    /* Snapshot publication refreshes content; language changes refresh eligibility above. */
+    if (wb.local_doc_id != (active ? active->id : 0)) local_filter(NULL, NULL);
+    relation_update_from_editor(dirty);
+    if (!wb.preview || !wb.context_visible ||
+        !gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wb.follow))) return G_SOURCE_REMOVE;
+    GeanyDocument *doc = document_get_current();
+    if (!doc)
+    {
+        render_source("", NULL, 1, NULL);
+        g_clear_pointer(&wb.source_path, g_free);
+        wb.source_id = 0;
+        wb.source_line = 0;
+        preview_links();
+        navigation_state();
+        gtk_label_set_text(GTK_LABEL(wb.title), "Context — no active source");
+        return G_SOURCE_REMOVE;
+    }
+    queue_definition(dirty);
+    return G_SOURCE_REMOVE;
 }
 static void history_move(GtkButton *button,gpointer data) {
  (void)button; gint next=wb.history_position+GPOINTER_TO_INT(data);
