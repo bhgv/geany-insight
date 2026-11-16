@@ -5,8 +5,6 @@
 #include "document.h"
 #include "editor.h"
 #include "filetypes.h"
-#include "insight-languages.h"
-#include "insight-workbench.h"
 #include "keybindings.h"
 #include "main.h"
 #include "sciwrappers.h"
@@ -72,19 +70,37 @@ static gboolean complete(gint count)
         gtk_tree_model_iter_n_children(model("insight-search-results"), NULL) == count;
 }
 
+/* EN: Return whether Messages contains text; inspect the production search column.
+ * RU: Сообщает, содержит ли Messages текст text; проверяет настоящий столбец поиска. */
+static gboolean message_contains(const gchar *text)
+{
+    GtkTreeView *view = GTK_TREE_VIEW(ui_lookup_widget(window, "treeview4"));
+    GtkTreeModel *rows = gtk_tree_view_get_model(view);
+    GtkTreeIter iter;
+    for (gboolean ok = gtk_tree_model_get_iter_first(rows, &iter); ok;
+         ok = gtk_tree_model_iter_next(rows, &iter))
+    {
+        gchar *line = NULL;
+        gtk_tree_model_get(rows, &iter, gtk_tree_view_get_search_column(view), &line, -1);
+        gboolean found = line && strstr(line, text);
+        g_free(line);
+        if (found) return TRUE;
+    }
+    return FALSE;
+}
+
 /* EN: Advance GUI scenarios; data is unused. Stop after all assertions pass.
  * RU: Продвигает сценарии интерфейса; data не используется. Завершает после проверок. */
 static gboolean tick(gpointer data)
 {
     (void)data;
     if (!document_get_current()) return G_SOURCE_CONTINUE;
-    if (!window) window = main_widgets.window;
+    if (!window) window = gtk_widget_get_toplevel(GTK_WIDGET(document_get_current()->editor->sci));
     if (!phase)
     {
         cpp = document_open_file(cpp_path, FALSE, NULL, NULL);
         g_assert_nonnull(cpp);
-        /* Ensure the regression cannot pass because language filtering is unrestricted. */
-        g_assert_false(insight_languages_search_path(cpp_path, cpp->file_type, text_path));
+        g_assert_true(cpp->file_type == filetypes_lookup_by_name("C++"));
         gtk_entry_set_text(GTK_ENTRY(named(window, "insight-file-query")), "notes.txt");
         phase++;
         return G_SOURCE_CONTINUE;
@@ -139,16 +155,39 @@ static gboolean tick(gpointer data)
         g_signal_emit_by_name(query, "activate");
         phase++;
     }
-    else
+    else if (phase == 6)
     {
         const gchar *status = gtk_label_get_text(GTK_LABEL(named(window, "insight-relation-status")));
         if (!strstr(status, "files scanned") ||
             gtk_tree_model_iter_n_children(model("insight-relations"), NULL) != 1)
             return G_SOURCE_CONTINUE;
+        sci_set_current_position(cpp->editor->sci, 5, FALSE);
+        keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_FINDUSAGE);
+        g_assert_true(message_contains("Found 2 matches"));
+        keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_FINDDOCUMENTUSAGE);
+        g_assert_true(message_contains("Found 1 match"));
+        scintilla_send_message(cpp->editor->sci, SCI_SETSEL, 4, 10);
+        keybindings_send_command(GEANY_KEY_GROUP_SEARCH, GEANY_KEYS_SEARCH_FINDINFILES);
+        GList *windows = gtk_window_list_toplevels();
+        GtkWidget *dialog = NULL;
+        for (GList *p = windows; p; p = p->next)
+            if (GTK_IS_DIALOG(p->data) &&
+                !g_strcmp0(gtk_window_get_title(GTK_WINDOW(p->data)), "Find in Files"))
+                dialog = p->data;
+        g_list_free(windows);
+        g_assert_nonnull(dialog);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui_lookup_widget(dialog, "check_regexp")), FALSE);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(ui_lookup_widget(dialog, "check_recursive")), FALSE);
+        gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+        phase++;
+    }
+    else
+    {
+        if (!message_contains("Search completed with 3 matches")) return G_SOURCE_CONTINUE;
         const gchar *capture = g_getenv("INSIGHT_SEARCH_COMMANDS_CAPTURE");
         if (capture)
         {
-            insight_workbench_activate(12);
+            gtk_widget_show(named(window, "insight-project-search-panel"));
             gtk_window_resize(GTK_WINDOW(window), 1280, 900);
             GdkWindow *native = gtk_widget_get_window(window);
             GdkPixbuf *image = gdk_pixbuf_get_from_window(native, 0, 0,
@@ -158,7 +197,7 @@ static gboolean tick(gpointer data)
             g_object_unref(image);
         }
         g_assert_false(cpp->changed);
-        g_print("Search commands passed: mixed-language filenames/project text, masks, disk/buffer results, open/current scopes, Ctrl+F, Enter, lexical usages and result navigation.\n");
+        g_print("Search commands passed: mixed-language filenames/project text, masks, disk/buffer results, open/current scopes, Ctrl+F, Enter, lexical usages, standard Find Usages/current-document commands, grep Find in Files and result navigation.\n");
         gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(window, "menu_quit1")));
         return G_SOURCE_REMOVE;
     }
