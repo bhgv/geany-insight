@@ -137,7 +137,7 @@ static void focus_search_results(GtkWidget *widget,gpointer data) {
 void insight_workbench_source_link_notify(GeanyEditor *editor,SCNotification *nt) {
  if(wb.alive) {
   if(nt->nmhdr.code==SCN_MODIFIED && (nt->modificationType&(SC_MOD_INSERTTEXT|SC_MOD_DELETETEXT)) &&
-     insight_slang_source(editor->document->file_name)) hdl_invalidate_colors();
+     insight_languages_is_hdl(editor->document->file_name)) hdl_invalidate_colors();
   if(nt->nmhdr.code==SCN_UPDATEUI && (nt->updated&SC_UPDATE_V_SCROLL)) hdl_queue_paint(editor->sci);
   if(nt->nmhdr.code==SCN_PAINTED && g_object_get_data(G_OBJECT(editor->sci),"insight-hdl-spans")) {
    GObject *view=G_OBJECT(editor->sci);

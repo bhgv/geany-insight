@@ -25,6 +25,7 @@ on:
       - insight/desktop/renumber.*
       - src/insight-replace-files.*
       - insight/desktop/replace_files.*
+      - insight/desktop/include_language.*
       - insight/desktop/source_mask.*
       - src/insight-editor-ai.*
       - insight/desktop/ai_edit_session.*
@@ -217,7 +218,7 @@ jobs:
       - name: Verify search commands before optional integrations
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
-          INSIGHT_SEARCH_COMMANDS_CAPTURE="$PWD/search-commands.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight HDL project search GUI' 'Insight Verilog source regions' 'Insight source mask' 'Insight language profiles GUI' 'Insight file type filters GUI' 'Insight native search commands GUI' 'Insight context search' 'Insight keyword search' 'Insight search state' 'Insight unified file search and symbols GUI' 'Insight native incremental search GUI' 'Insight native selection search and match list GUI' 'Insight reference comment regions GUI'
+          INSIGHT_SEARCH_COMMANDS_CAPTURE="$PWD/search-commands.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight mixed include ownership' 'Insight mixed C C++ HDL includes GUI' 'Insight HDL project search GUI' 'Insight Verilog source regions' 'Insight source mask' 'Insight language profiles GUI' 'Insight file type filters GUI' 'Insight native search commands GUI' 'Insight context search' 'Insight keyword search' 'Insight search state' 'Insight unified file search and symbols GUI' 'Insight native incremental search GUI' 'Insight native selection search and match list GUI' 'Insight reference comment regions GUI'
       - name: Publish search diagnostics
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         uses: actions/upload-artifact@v4

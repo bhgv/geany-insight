@@ -8,6 +8,7 @@
 #include "insight-languages.h"
 #include "insight-completion.h"
 #include "../insight/desktop/master_list.h"
+#include "../insight/desktop/slang_completion.h"
 #include "../insight/desktop/file_patterns.h"
 #include "../insight/desktop/filetype_editing.h"
 #include "../insight/desktop/filetype_pairs.h"
@@ -187,7 +188,7 @@ InsightMasterTypes *insight_languages_master_types(void) {
  }
  g_ptr_array_add(patterns,NULL);g_ptr_array_add(extensions,NULL);g_ptr_array_add(files,NULL);InsightMasterTypes *types=g_new0(InsightMasterTypes,1);types->patterns=(const gchar *const *)g_ptr_array_free(patterns,FALSE);types->extensions=(const gchar *const *)g_ptr_array_free(extensions,FALSE);types->files=(const gchar *const *)g_ptr_array_free(files,FALSE);return types;
 }
-struct InsightLanguageFilter { gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted;InsightFilePatterns *patterns; };
+struct InsightLanguageFilter { GHashTable *include_languages; guint family; gchar *extensions,*compatible;GPtrArray *own,*excluded;gboolean unrestricted;InsightFilePatterns *patterns; };
 /* EN: Allocate a worker-safe filter for from/ft, including compatible HDL
  * extensions and explicit bindings. The caller releases it with filter_free.
  * RU: Выделяет безопасный для потока фильтр from/ft с совместимыми HDL-
@@ -202,6 +203,8 @@ InsightLanguageFilter *insight_language_filter_new(const gchar *from, GeanyFilet
         p = doc ? for_editor(doc->editor->sci, from, ft) : by_name(ft ? ft->name : NULL);
     }
     filter->unrestricted = !p;
+    filter->family = language_profile_family(p);
+    filter->include_languages = insight_workbench_include_languages();
     filter->own = g_ptr_array_new_with_free_func(g_free);
     filter->excluded = g_ptr_array_new_with_free_func(g_free);
     filter->patterns = insight_file_patterns_new(p ? p->file_filters : "", NULL);
@@ -217,17 +220,55 @@ InsightLanguageFilter *insight_language_filter_new(const gchar *from, GeanyFilet
         }
     return filter;
 }
-gboolean insight_language_filter_match(const InsightLanguageFilter *filter,const gchar *path) {
- if(!filter || filter->unrestricted) return TRUE;
- if(!path) return FALSE;
- gchar *canonical=insight_canonicalize_filename(path,NULL);gboolean own=FALSE,excluded=FALSE;
- for(guint n=0;n<filter->own->len;n++) if(binding_path_equal(g_ptr_array_index(filter->own,n),canonical)) own=TRUE;
- for(guint n=0;n<filter->excluded->len;n++) if(binding_path_equal(g_ptr_array_index(filter->excluded,n),canonical)) excluded=TRUE;
- g_free(canonical);
- return own || (!excluded && (insight_file_patterns_match(filter->patterns,path,INSIGHT_FILE_PATTERN_ANY) || extensions_match(filter->extensions,path) || extensions_match(filter->compatible,path)));
+/* EN: Return whether path passes filter bindings, include family and patterns.
+ * A NULL/unrestricted filter accepts every path; missing paths otherwise fail.
+ * RU: Проверяет path по привязкам filter, семейству include и маскам.
+ * NULL/свободный фильтр допускает любой путь; иначе отсутствующий путь отклоняется. */
+gboolean insight_language_filter_match(const InsightLanguageFilter *filter, const gchar *path)
+{
+    if (!filter || filter->unrestricted) return TRUE;
+    if (!path) return FALSE;
+    gchar *canonical = insight_canonicalize_filename(path, NULL);
+    gboolean own = FALSE, excluded = FALSE;
+    for (guint n = 0; n < filter->own->len; n++)
+        if (binding_path_equal(g_ptr_array_index(filter->own, n), canonical)) own = TRUE;
+    for (guint n = 0; n < filter->excluded->len; n++)
+        if (binding_path_equal(g_ptr_array_index(filter->excluded, n), canonical)) excluded = TRUE;
+    g_free(canonical);
+    const gchar *owner = filter->include_languages ?
+        g_hash_table_lookup(filter->include_languages, path) : NULL;
+    return own || (!excluded && language_include_family_matches(filter->family, owner) &&
+        (insight_file_patterns_match(filter->patterns, path, INSIGHT_FILE_PATTERN_ANY) ||
+         extensions_match(filter->extensions, path) || extensions_match(filter->compatible, path)));
 }
-void insight_language_filter_free(InsightLanguageFilter *filter) { if(!filter) return;insight_file_patterns_free(filter->patterns);g_free(filter->extensions);g_free(filter->compatible);g_ptr_array_free(filter->own,TRUE);g_ptr_array_free(filter->excluded,TRUE);g_free(filter); }
+
+/* EN: Release filter and its immutable include snapshot; NULL is accepted.
+ * RU: Освобождает filter и неизменяемый снимок подключений; допускает NULL. */
+void insight_language_filter_free(InsightLanguageFilter *filter)
+{
+    if (!filter) return;
+    g_clear_pointer(&filter->include_languages, g_hash_table_unref);
+    insight_file_patterns_free(filter->patterns);
+    g_free(filter->extensions);
+    g_free(filter->compatible);
+    g_ptr_array_free(filter->own, TRUE);
+    g_ptr_array_free(filter->excluded, TRUE);
+    g_free(filter);
+}
 GeanyFiletype *insight_languages_detect(const gchar *path) { Language *p=for_path(path);return p ? p->parser : NULL; }
+/* EN: Return whether path belongs to HDL. Ambiguous .inc files require a
+ * resolved HDL profile; C/C++ includes never select the HDL service.
+ * RU: Проверяет принадлежность path к HDL. Для .inc нужен определённый HDL-
+ * профиль; подключения C/C++ не направляются сервису HDL. */
+gboolean insight_languages_is_hdl(const gchar *path)
+{
+    if (!insight_slang_source(path)) return FALSE;
+    const gchar *dot = strrchr(path, '.');
+    if (g_ascii_strcasecmp(dot, ".inc")) return TRUE;
+    GeanyFiletype *ft = insight_languages_detect(path);
+    return ft && (!strcmp(ft->name, "Verilog") || !strcmp(ft->name, "SystemVerilog"));
+}
+
 /* EN: Test language compatibility from/ fallback to path to. Explicit bindings
  * exclude other profiles; generated HDL profiles share their source family.
  * RU: Проверяет совместимость языка from/fallback с путём to. Явные привязки
@@ -244,6 +285,8 @@ gboolean insight_languages_compatible(const gchar *from, GeanyFiletype *fallback
     if (p)
     {
         Language *target = for_path(to);
+        if ((!target || target->seeded) && !language_include_family_matches(
+            language_profile_family(p), insight_workbench_include_language(to))) return FALSE;
         if (target && target != p)
         {
             gchar *canonical = to ? insight_canonicalize_filename(to, NULL) : NULL;

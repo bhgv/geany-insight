@@ -17,6 +17,7 @@ gchar *insight_languages_profile_name(ScintillaObject *,const gchar *,GeanyFilet
 void insight_languages_init(void);
 void insight_languages_finalize(void);
 GeanyFiletype *insight_languages_detect(const gchar *path);
+gboolean insight_languages_is_hdl(const gchar *path);
 gboolean insight_languages_compatible(const gchar *from,GeanyFiletype *fallback,const gchar *to);
 gboolean insight_languages_search_path(const gchar *,GeanyFiletype *,const gchar *);
 gboolean insight_languages_keyword(ScintillaObject *,const gchar *);

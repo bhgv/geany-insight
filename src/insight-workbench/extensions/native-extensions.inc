@@ -93,7 +93,7 @@ static void native_commands_rebuild(void) {
 static gboolean file_event_refresh(gpointer data) { (void)data;wb.file_event_idle=0;if(wb.alive) { files_filter(NULL,NULL); tree_refresh(); file_types_refresh(); categories_filter(NULL,NULL);disk_current_file(); }return G_SOURCE_REMOVE; }
 static void native_document_event(GObject *object,GeanyDocument *doc,gpointer data) {
  (void)object;
- if(DOC_VALID(doc) && insight_slang_source(doc->file_name)) {
+ if(DOC_VALID(doc) && insight_languages_is_hdl(doc->file_name)) {
   if(!strcmp(data,"document_activate")) {hdl_queue_paint(doc->editor->sci);hdl_schedule_colors();}
   else hdl_invalidate_colors();
  }

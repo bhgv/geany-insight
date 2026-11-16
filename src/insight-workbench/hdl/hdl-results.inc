@@ -107,14 +107,14 @@ static gboolean hdl_results_apply(gpointer data)
         return G_SOURCE_REMOVE;
     if (!j->applied)
     {
-        GPtrArray *paths = insight_workbench_source_paths(insight_slang_source, 257);
+        GPtrArray *paths = insight_workbench_source_paths(insight_languages_is_hdl, 257);
         GHashTable *current = g_hash_table_new(g_str_hash, g_str_equal);
         for (guint i = 0;i<paths->len;i++)
             g_hash_table_add(current, g_ptr_array_index(paths, i));
         for (guint i = 0;i<documents_array->len;i++)
         {
             GeanyDocument *doc = g_ptr_array_index(documents_array, i);
-            if (DOC_VALID(doc) && insight_slang_source(doc->file_name))
+            if (DOC_VALID(doc) && insight_languages_is_hdl(doc->file_name))
                 g_hash_table_add(current, doc->file_name);
         }
         gboolean same = g_hash_table_size(current) == j->paths->len && (!j->project || j->scan_generation == wb.scan_generation);
@@ -193,7 +193,7 @@ static void hdl_job_done(GObject *source, GAsyncResult *result, gpointer data)
 static HdlJob *hdl_job_new(const gchar *query, gboolean diagnostics, gboolean colors_only)
 {
     HdlJob *j = g_new0(HdlJob, 1);
-    j->paths = insight_workbench_source_paths(insight_slang_source, 257);
+    j->paths = insight_workbench_source_paths(insight_languages_is_hdl, 257);
     j->rows = g_ptr_array_new();
     j->colors = g_array_new(FALSE, FALSE, sizeof(HdlSpan));
     j->buffers = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -211,7 +211,7 @@ static HdlJob *hdl_job_new(const gchar *query, gboolean diagnostics, gboolean co
     j->generation = colors_only ? hdl_color_revision:wb.usage_generation;
     j->scan_generation = wb.scan_generation;
     GeanyDocument *active = document_get_current();
-    if (DOC_VALID(active) && insight_slang_source(active->file_name))
+    if (DOC_VALID(active) && insight_languages_is_hdl(active->file_name))
     {
         j->paint_path = g_strdup(active->file_name);
         j->paint_doc = active->id;
@@ -232,7 +232,7 @@ static HdlJob *hdl_snapshot(const gchar *query, gboolean diagnostics)
     for (guint i = 0;i<documents_array->len;i++)
     {
         GeanyDocument *doc = g_ptr_array_index(documents_array, i);
-        if (!DOC_VALID(doc) || !insight_slang_source(doc->file_name)) continue;
+        if (!DOC_VALID(doc) || !insight_languages_is_hdl(doc->file_name)) continue;
         if (!g_hash_table_contains(seen, doc->file_name))
         {
             g_ptr_array_add(j->paths, g_strdup(doc->file_name));

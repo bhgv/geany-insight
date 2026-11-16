@@ -925,3 +925,9 @@ EXTRA_DIST += insight/tests/search_commands_gui_test.c
 EXTRA_DIST += src/insight-languages-hdl.inc insight/tests/hdl_search_gui_test.c insight/tests/source_mask_verilog_test.c
 
 EXTRA_DIST += src/insight-languages-seed.inc
+
+EXTRA_DIST += insight/tests/include_language_test.c
+
+EXTRA_DIST += insight/tests/mixed_includes_gui_test.c
+
+EXTRA_DIST += src/insight-workbench/workspace/include-context.inc

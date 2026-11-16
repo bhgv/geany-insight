@@ -3,10 +3,12 @@
  * RU: Отмена сканирования и обработка изменений рабочей области. */
 
 
-/* EN: Cancel active scans and clear their temporary workspace state.
- * RU: Отменяет сканирование и очищает временное состояние. */
+/* EN: Cancel scans and clear temporary state and inferred include ownership.
+ * RU: Отменяет обход и очищает временное состояние и принадлежность include. */
 static void stop_scan(void)
 {
+    wb.scan_includes_ready = FALSE;
+    g_clear_pointer(&wb.include_languages, g_hash_table_unref);
     if (wb.scan || wb.scan_worker || wb.restore_worker)
         wb.report_scan_completed = FALSE;
     stop_definition();

@@ -105,6 +105,7 @@
 #include "insight-ssh-setup.h"
 #include "../insight/desktop/workspace_watch.h"
 #include "../insight/desktop/source_mask.h"
+#include "../insight/desktop/include_language.h"
 #include "../insight/desktop/relation_query.h"
 
 typedef struct { gchar *path; GDir *dir; } ScanFrame;
@@ -172,6 +173,7 @@ typedef struct {
  GtkWidget *lua_menu,*lua_commands,*palette_item;
  GtkAccelGroup *lua_accels,*navigation_accels;
  GtkCssProvider *css; GtkWidget *context_toggle;
+ GHashTable *include_languages; gboolean scan_includes_ready;
  gboolean alive; guint64 scan_generation,usage_generation,definition_generation; guint definition_timer; GCancellable *restore_worker,*scan_worker,*search_worker,*definition_worker,*snapshot_worker,*cache_worker,*preview_worker; guint64 preview_generation; guint64 index_generation,index_version; gint64 publish_due;
  InsightIndex *base,*index;
  gboolean info_parse_local,info_across_languages;gint info_scope;

@@ -101,9 +101,9 @@ static void scan_source_file(const char *path)
 }
 
 /* EN: Advance the directory scan; data is unused. Publish membership before
- * indexing and update default .inc session buffers to their HDL project type.
+ * indexing and resolve ambiguous .inc ownership before scheduling source parsers.
  * RU: Продвигает обход; data не используется. Публикует состав до индексации
- * и обновляет тип открытых .inc по HDL-проекту вместо исходного Pascal. */
+ * и определяет принадлежность .inc до запуска парсеров исходников. */
 static gboolean scan_step(gpointer data)
 {
     (void)data;
@@ -117,24 +117,15 @@ static gboolean scan_step(gpointer data)
             g_ptr_array_set_size(wb.files, 0);
             for (guint n = 0;n<wb.scan_members->len;n++)
                 g_ptr_array_add(wb.files, g_strdup(g_ptr_array_index(wb.scan_members, n)));
-            /* Reclassify session buffers after HDL membership becomes known.
-             * An .inc opened before enumeration initially has the Pascal default. */
-            for (guint n = 0; n < documents_array->len; n++)
-            {
-                GeanyDocument *doc = g_ptr_array_index(documents_array, n);
-                if (!DOC_VALID(doc) || !doc->file_name || !doc->file_type) continue;
-                const gchar *dot = strrchr(doc->file_name, '.');
-                if (!dot || g_ascii_strcasecmp(dot, ".inc") ||
-                    (doc->file_type->id != GEANY_FILETYPES_PASCAL &&
-                     doc->file_type->id != GEANY_FILETYPES_NONE)) continue;
-                GeanyFiletype *detected = insight_languages_detect(doc->file_name);
-                if (detected && !strcmp(detected->name, "SystemVerilog"))
-                    document_set_filetype(doc, detected);
-            }
             files_filter(NULL, NULL);
             tree_refresh();
             hdl_invalidate_colors();
             g_object_set_data(G_OBJECT(main_widgets.window), "insight-db-members-ready", GUINT_TO_POINTER(wb.files->len+1));
+        }
+        if (!wb.scan_includes_ready && include_context_start())
+        {
+            wb.scan = 0;
+            return G_SOURCE_REMOVE;
         }
         if (wb.scan_index_position<wb.scan_members->len)
         {

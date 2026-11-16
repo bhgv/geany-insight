@@ -705,3 +705,5 @@ install-clang-resources:
 libgeany.la geany$(EXEEXT): Makefile
 
 libgeany_la_SOURCES += ../insight/desktop/slang_completion.c ../insight/desktop/slang_completion.h
+
+libgeany_la_SOURCES += ../insight/desktop/include_language.c ../insight/desktop/include_language.h

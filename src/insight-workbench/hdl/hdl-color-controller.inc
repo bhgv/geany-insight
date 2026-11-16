@@ -51,7 +51,7 @@ static gboolean hdl_capture_step(gpointer data)
     while (c->next<documents_array->len)
     {
         GeanyDocument *doc = g_ptr_array_index(documents_array, c->next);
-        if (!DOC_VALID(doc) || !insight_slang_source(doc->file_name))
+        if (!DOC_VALID(doc) || !insight_languages_is_hdl(doc->file_name))
         {
             c->next++;
             continue;
@@ -108,7 +108,7 @@ static gboolean hdl_auto_colors(gpointer data)
 {
     (void)data;
     GeanyDocument *doc = wb.alive ? document_get_current():NULL;
-    if (!DOC_VALID(doc) || !insight_slang_source(doc->file_name) ||
+    if (!DOC_VALID(doc) || !insight_languages_is_hdl(doc->file_name) ||
     SSM(doc->editor->sci, SCI_GETLEXER, 0, 0) != SCLEX_VERILOG ||
     g_object_get_data(G_OBJECT(doc->editor->sci), "insight-hdl-painted"))
     {
@@ -145,7 +145,7 @@ static void hdl_schedule_colors(void)
         hdl_color_timer = 0;
     }
     GeanyDocument *doc = document_get_current();
-    if (DOC_VALID(doc) && insight_slang_source(doc->file_name))
+    if (DOC_VALID(doc) && insight_languages_is_hdl(doc->file_name))
     hdl_color_timer = g_timeout_add(650, hdl_auto_colors, NULL);
 }
 

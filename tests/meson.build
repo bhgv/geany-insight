@@ -1023,3 +1023,9 @@ hdl_search_gui_test = executable('test_insight_hdl_search_gui', '../insight/test
 test('Insight HDL project search GUI', hdl_search_gui_test, timeout: 55, is_parallel: false)
 source_mask_verilog_test = executable('test_insight_source_mask_verilog', '../insight/tests/source_mask_verilog_test.c', '../insight/desktop/source_mask.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
 test('Insight Verilog source regions', source_mask_verilog_test)
+
+include_language_test = executable('test_insight_include_language', '../insight/tests/include_language_test.c', '../insight/desktop/include_language.c', '../insight/desktop/source_mask.c', include_directories: include_directories('../insight/desktop'), dependencies: glib)
+test('Insight mixed include ownership', include_language_test)
+
+mixed_includes_gui_test = executable('test_insight_mixed_includes_gui', '../insight/tests/mixed_includes_gui_test.c', dependencies: test_deps)
+test('Insight mixed C C++ HDL includes GUI', mixed_includes_gui_test, timeout: 55, is_parallel: false)

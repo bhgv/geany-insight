@@ -63,10 +63,12 @@ static void search(const gchar *query, gint region)
 
 /* EN: Return TRUE for completed project search with count rows and no skips.
  * RU: Возвращает TRUE для завершённого поиска с count строками без пропусков. */
-static gboolean complete(gint count)
+static gboolean complete(gint count, gint files)
 {
     const gchar *status = gtk_label_get_text(GTK_LABEL(named(window, "insight-search-status")));
-    return strstr(status, "5 files scanned") && strstr(status, "0 skipped") &&
+    gchar expected[40];
+    g_snprintf(expected, sizeof expected, "%d files scanned", files);
+    return strstr(status, expected) && strstr(status, "0 skipped") &&
         gtk_tree_model_iter_n_children(model("insight-search-results"), NULL) == count;
 }
 
@@ -107,7 +109,7 @@ static gboolean tick(gpointer data)
     else if (phase >= 2 && phase <= 5)
     {
         const gint counts[] = {25, 15, 10, 10};
-        if (!complete(counts[phase - 2])) return G_SOURCE_CONTINUE;
+        if (!complete(counts[phase - 2], 5)) return G_SOURCE_CONTINUE;
         if (phase < 5) search("needle", phase - 1);
         else
         {
@@ -118,7 +120,7 @@ static gboolean tick(gpointer data)
     }
     else if (phase == 6)
     {
-        if (!complete(5)) return G_SOURCE_CONTINUE;
+        if (!complete(5, 1)) return G_SOURCE_CONTINUE;
         GtkWidget *view = named(window, "insight-search-results");
         GtkTreePath *first = gtk_tree_path_new_from_indices(0, -1);
         gtk_tree_view_row_activated(GTK_TREE_VIEW(view), first, gtk_tree_view_get_column(GTK_TREE_VIEW(view), 0));

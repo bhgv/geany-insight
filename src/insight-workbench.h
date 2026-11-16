@@ -43,6 +43,10 @@ InsightReportSnapshot *insight_workbench_source_snapshot(GError **);
 /* Returns at most limit matching paths; NULL eligible accepts all. */
 GPtrArray *insight_workbench_source_paths(gboolean (*eligible)(const gchar *),guint limit);
 void insight_workbench_manage_project_files(void);
+/* EN: Borrow inferred language for an unambiguous project include, or NULL.
+ * RU: Возвращает заимствованный язык однозначного подключения проекта либо NULL. */
+const gchar *insight_workbench_include_language(const gchar *path);
+GHashTable *insight_workbench_include_languages(void);
 void insight_workbench_init(void);
 void insight_workbench_finalize(void);
 void insight_workbench_set_independent(gboolean active);

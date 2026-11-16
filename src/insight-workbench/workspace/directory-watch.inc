@@ -7,6 +7,7 @@
 #include "database-save.inc"
 
 #include "source-index-job.inc"
+#include "include-context.inc"
 #include "scan-worker.inc"
 
 #include "hdl-color-state.inc"
