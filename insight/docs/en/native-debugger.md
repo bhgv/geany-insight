@@ -15,7 +15,11 @@ Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcar
 
 The picker shows the policy confirmed by GDB and is disabled while a change is pending. If the target rejects a change, the previous value is restored and the reason is displayed. Stops and console commands reread the setting; an unknown response is not replaced with a guessed policy. Availability depends on GDB and the target platform.
 
-In **All thread stacks**, **Refresh thread stacks** recollects the paused tree while preserving the selected thread/frame. It sends no execution command.
+In **All thread stacks**, **Refresh thread stacks** recollects the paused tree while preserving the selected thread/frame. It sends no execution command. After refresh and confirmed navigation, the tree highlights the confirmed current frame.
+
+Actual editor window with GDB and test workers: the selected `step` policy is confirmed by GDB.
+
+![Thread execution policy controls](../media/native-thread-policy.jpg)
 
 
 ## Threads, frames and backtrace navigation
