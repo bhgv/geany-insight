@@ -690,8 +690,14 @@ static void prefs_init_dialog(void)
 	if (tool_prefs.browser_cmd)
 		gtk_entry_set_text(GTK_ENTRY(ui_lookup_widget(ui_widgets.prefs_dialog, "entry_browser")), tool_prefs.browser_cmd);
 
-	if (tool_prefs.grep_cmd)
-		gtk_entry_set_text(GTK_ENTRY(ui_lookup_widget(ui_widgets.prefs_dialog, "entry_grep")), tool_prefs.grep_cmd);
+ /* EN: Search is built in; obsolete executable controls must not be shown.
+  * RU: Поиск встроен; настройки внешней программы больше не показываются. */
+ const gchar *obsolete_search_controls[]={"label171","entry_grep","button_grep"};
+ for(guint i=0;i<G_N_ELEMENTS(obsolete_search_controls);i++) {
+  GtkWidget *control=ui_lookup_widget(ui_widgets.prefs_dialog,obsolete_search_controls[i]);
+  gtk_widget_set_no_show_all(control,TRUE);
+  gtk_widget_hide(control);
+ }
 
 
 	/* Template settings */
