@@ -15,3 +15,5 @@ Open Quick find in file, type a name and press Enter. Use Next and Previous to i
 More: [Search results](panel-search-results.md).
 
 [Selection search commands and match list / Поиск выделения](selection-search.md).
+
+![File Search in the production editor / Поиск в работающем редакторе](media/unified-file-tools.jpg)
