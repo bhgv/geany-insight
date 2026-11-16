@@ -113,18 +113,18 @@ static gboolean tick(gpointer data)
         ScintillaObject *preview=SCINTILLA(named(window,"insight-context-code"));
         if(sci_get_current_line(preview)<900) return G_SOURCE_CONTINUE;
         GeanyDocument *doc=document_get_current();
-        g_assert_cmpint(SSM(preview,SCI_GETLEXER,0,0),==,SCLEX_VERILOG);
+        g_assert_cmpint(scintilla_send_message(preview,SCI_GETLEXER,0,0),==,SCLEX_VERILOG);
         g_assert_cmpstr(g_object_get_data(G_OBJECT(preview),"insight-language-binding"),==,"Context Verilog");
         gchar *text=sci_get_contents(preview,sci_get_length(preview)+1);
-        SSM(doc->editor->sci,SCI_COLOURISE,0,-1);
+        scintilla_send_message(doc->editor->sci,SCI_COLOURISE,0,-1);
         const gchar *samples[]={"padding comment","module unit_0","1'b0"};
         for(guint i=0;i<G_N_ELEMENTS(samples);i++) {
             gint offset=strstr(text+(i ? 0 : sci_get_position_from_line(preview,880)),samples[i])-text;
-            gint style=SSM(preview,SCI_GETSTYLEAT,offset,0);
+            gint style=scintilla_send_message(preview,SCI_GETSTYLEAT,offset,0);
             g_assert_cmpint(style,!=,SCE_V_DEFAULT);
-            g_assert_cmpint(style,==,SSM(doc->editor->sci,SCI_GETSTYLEAT,offset,0));
-            g_assert_cmpint(SSM(preview,SCI_STYLEGETFORE,style,0),==,
-                SSM(doc->editor->sci,SCI_STYLEGETFORE,style,0));
+            g_assert_cmpint(style,==,scintilla_send_message(doc->editor->sci,SCI_GETSTYLEAT,offset,0));
+            g_assert_cmpint(scintilla_send_message(preview,SCI_STYLEGETFORE,style,0),==,
+                scintilla_send_message(doc->editor->sci,SCI_STYLEGETFORE,style,0));
         }
         g_free(text);
         g_object_set_data(G_OBJECT(doc->editor->sci),"insight-language-binding",NULL);
