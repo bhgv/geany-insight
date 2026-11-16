@@ -104,6 +104,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 session->locals_needed = TRUE;
                 session->threads_needed = session->stack_needed = TRUE;
                 session->points_needed = TRUE;
+                if (session->thread_policy)
+                    session->thread_policy->needed = TRUE;
                 native_attach_stopped(session, line);
                 native_debug_observe(session, line);
             }
@@ -115,6 +117,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             quiet = native_assembly_reply(session, line);
             if (!quiet)
                 quiet = native_remote_reply(session, line);
+            if (!quiet)
+                quiet = native_thread_policy_reply(session, line);
             if (!quiet)
                 quiet = native_memory_reply(session, line);
             if (!quiet)
@@ -142,6 +146,8 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 session->console_pending = FALSE;
                 if (session->stopped)
                 {
+                    if (session->thread_policy)
+                        session->thread_policy->needed = TRUE;
                     native_values_reset(session);
                     g_clear_pointer(&session->selected_thread, g_free);
                     g_clear_pointer(&session->selected_frame, g_free);

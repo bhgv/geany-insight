@@ -305,6 +305,7 @@ enum { FP_OPEN,FP_NAME,FP_PATH,FP_FILTER,FP_CLEAR,FP_RESET,FP_COLUMNS,FP_HELP,FP
 #include "insight-debuggers/gdb-watches.inc"
 #include "insight-debuggers/gdb-context.inc"
 #include "insight-debuggers/gdb-context-navigation.inc"
+#include "insight-debuggers/gdb-thread-policy.inc"
 #include "insight-debuggers/gdb-backtraces.inc"
 #include "insight-debuggers/gdb-source-markers.inc"
 #include "insight-debuggers/gdb-exit-model.inc"

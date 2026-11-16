@@ -82,6 +82,51 @@ static gboolean threads_gui_value(GtkWidget *window, const gchar *value)
     return matches;
 }
 
+/* EN: Read the second worker's numeric counter watch from window into value, returning FALSE until available.
+ * RU: Читает числовое наблюдение счётчика второго потока окна window в value; FALSE означает отсутствие значения. */
+static gboolean threads_gui_counter(GtkWidget *window, guint64 *value)
+{
+    GtkWidget *view = find(window, "progress[1] = ");
+    if (!GTK_IS_TEXT_VIEW(view))
+        return FALSE;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gchar *text = gtk_text_buffer_get_text(buffer, &first, &last, FALSE);
+    const gchar *prefix = "progress[1] = ";
+    gchar *start = strstr(text, prefix);
+    gchar *end = NULL;
+    guint64 number = start ? g_ascii_strtoull(start + strlen(prefix), &end, 10) : 0;
+    gboolean valid = start && end > start + strlen(prefix) && (!*end || *end == '\n');
+    if (valid)
+        *value = number;
+    g_free(text);
+    return valid;
+}
+
+/* EN: Return TRUE once window's collected tree contains nonempty stacks for both named workers.
+ * RU: Возвращает TRUE, когда собранное дерево window содержит непустые стеки обоих именованных потоков. */
+static gboolean threads_gui_stacks_ready(GtkWidget *window)
+{
+    GtkWidget *tree = find(window, "insight-gdb-all-thread-stacks");
+    if (!tree || !gtk_widget_is_sensitive(tree))
+        return FALSE;
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+    GtkTreeIter root;
+    guint found = 0;
+    for (gboolean valid = gtk_tree_model_get_iter_first(model, &root); valid;
+         valid = gtk_tree_model_iter_next(model, &root))
+    {
+        gchar *label = NULL;
+        gtk_tree_model_get(model, &root, 0, &label, -1);
+        if (label && (strstr(label, "worker-one") || strstr(label, "worker-two")) &&
+            gtk_tree_model_iter_n_children(model, &root) > 0)
+            found++;
+        g_free(label);
+    }
+    return found == 2;
+}
+
 /* EN: Drive window/tabs through two workers and three nested frame contexts; source and memory must agree.
  * Capture the real views only after raising the debugger. Finish without resuming worker execution.
  * RU: Проверяет window/tabs на двух потоках и трёх вложенных кадрах; исходник и память должны совпадать.
@@ -90,7 +135,9 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     static gchar *thread, *frame;
     static guint watch;
-    static const gchar *expressions[] = {"value", "tls_value", "shared_value"};
+    static guint64 other_counter;
+    static const gchar *expressions[] = {"value", "tls_value", "shared_value", "progress[1]"};
+    GtkWidget *policy = find(window, "insight-gdb-thread-policy");
     if (phase == 1)
     {
         GtkWidget *location = find(window, "Function or file:line");
@@ -161,8 +208,35 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
              threads_gui_frame(window, "worker-one", "thread_checkpoint", &thread, &frame))
         phase = 11;
     else if (phase == 11 && threads_gui_context(window, thread, frame, "122", "1007") &&
-             threads_gui_frame(window, "worker-one", "worker_entry", &thread, &frame))
-        phase = 12;
+             gtk_widget_is_sensitive(policy))
+    {
+        g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(policy), "step"));
+        phase = 16;
+    }
+    else if (phase == 16 && gtk_widget_is_sensitive(policy) &&
+             !g_strcmp0(gtk_combo_box_get_active_id(GTK_COMBO_BOX(policy)), "step") &&
+             threads_gui_counter(window, &other_counter) && click(window, "Step Over"))
+        phase = 17;
+    else if (phase == 17 && threads_gui_context(window, thread, frame, "122", "1007") &&
+             strstr(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-stop-reason"))), "Step complete"))
+    {
+        guint64 now = 0;
+        g_assert_true(threads_gui_counter(window, &now));
+        g_assert_cmpuint(now, ==, other_counter);
+        g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(policy), "off"));
+        phase = 18;
+    }
+    else if (phase == 18 && gtk_widget_is_sensitive(policy) &&
+             !g_strcmp0(gtk_combo_box_get_active_id(GTK_COMBO_BOX(policy)), "off"))
+    {
+        GtkWidget *page = find(window, "insight-gdb-all-thread-stacks");
+        while (page && gtk_widget_get_parent(page) != tabs)
+            page = gtk_widget_get_parent(page);
+        g_assert_nonnull(page);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        if (threads_gui_frame(window, "worker-one", "worker_entry", &thread, &frame))
+            phase = 12;
+    }
     else if (phase == 12 && threads_gui_context(window, thread, frame, "101", "1007") &&
              threads_gui_frame(window, "worker-one", "worker_leaf", &thread, &frame))
         phase = 13;
@@ -171,7 +245,13 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
         GtkWidget *tree = find(window, "insight-gdb-all-thread-stacks");
         GtkWidget *page = gtk_widget_get_parent(gtk_widget_get_parent(tree));
         gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
-        gtk_tree_view_expand_all(GTK_TREE_VIEW(tree));
+        if (click(window, "insight-gdb-refresh-stacks"))
+            phase = 20;
+    }
+    else if (phase == 20 && threads_gui_context(window, thread, frame, "111", "1007") &&
+             threads_gui_stacks_ready(window))
+    {
+        gtk_tree_view_expand_all(GTK_TREE_VIEW(find(window, "insight-gdb-all-thread-stacks")));
         gtk_window_present(GTK_WINDOW(window));
         gdk_window_raise(gtk_widget_get_window(window));
         gtk_widget_queue_draw(window);
@@ -191,6 +271,26 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 15)
     {
         native_exit_gui_capture(window, "INSIGHT_GDB_THREAD_VALUES_CAPTURE");
+        GtkWidget *page = policy;
+        while (page && gtk_widget_get_parent(page) != tabs)
+            page = gtk_widget_get_parent(page);
+        g_assert_nonnull(page);
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(policy), "step"));
+        phase = 19;
+    }
+    else if (phase == 19 && gtk_widget_is_sensitive(policy) &&
+             !g_strcmp0(gtk_combo_box_get_active_id(GTK_COMBO_BOX(policy)), "step"))
+    {
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
+        phase = 21;
+    }
+    else if (phase == 21)
+    {
+        native_exit_gui_capture(window, "INSIGHT_GDB_THREAD_POLICY_CAPTURE");
+        g_print("C/C++ GTK: confirmed scheduler policy, step isolation and non-executing stack refresh passed.\n");
         g_print("C/C++ GTK: worker/frame locals, TLS, shared globals, watches, value trees, memory and confirmed backtrace navigation passed.\n");
         g_free(thread);
         g_free(frame);

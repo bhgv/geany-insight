@@ -149,6 +149,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     gtk_notebook_append_page(GTK_NOTEBOOK(tabs), native_points_widget(session, dialog),
                              gtk_label_new(insight_tr("C/C++ breakpoints")));
     GtkWidget *context = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_box_pack_start(GTK_BOX(context), native_thread_policy_widget(session), FALSE, FALSE, 0);
     session->threads = gtk_combo_box_text_new();
     gtk_box_pack_start(GTK_BOX(context), session->threads, FALSE, FALSE, 0);
     session->stack_rows = gtk_list_store_new(5, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,

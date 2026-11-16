@@ -915,3 +915,5 @@ EXTRA_DIST += insight/tests/native-debug/threads.c insight/tests/native_debugger
 dist_insightdocmedia_DATA += insight/docs/media/native-thread-context.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/native-threads.jpg insight/docs/media/native-thread-values.jpg
+
+EXTRA_DIST += insight/tests/native_debugger_thread_policy_test.py

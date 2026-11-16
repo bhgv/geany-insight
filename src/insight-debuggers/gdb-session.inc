@@ -9,6 +9,7 @@
 static void native_debug_update(NativeDebug *session)
 {
     native_memory_sync(session);
+    native_thread_policy_sync(session);
     native_assembly_context(session);
     gboolean idle = session->ready && !session->pending && !session->writing &&
         (!session->assembly || !session->assembly->active);
@@ -95,6 +96,7 @@ static void native_debug_free(gpointer data)
         g_free(session->remote->profile_path);
         g_free(session->remote);
     }
+    native_thread_policy_free(session->thread_policy);
     insight_lua_debug_free(session->observer);
     g_hash_table_unref(session->editor_points);
     g_free(session->editor_point_pending);
@@ -204,6 +206,13 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
     }
     if (!session->stopped)
         return;
+    gchar *thread_policy = native_thread_policy_next(session);
+    if (thread_policy)
+    {
+        native_debug_send(dialog, thread_policy);
+        g_free(thread_policy);
+        return;
+    }
     if (session->resume)
     {
         session->resume = FALSE;

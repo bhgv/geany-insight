@@ -9,6 +9,7 @@
 static atomic_int ready, released;
 _Thread_local int tls_value;
 volatile int shared_value = 7;
+volatile unsigned int progress[2];
 
 /* EN: Keep id/outer and a frame-local value inspectable until main releases the workers.
  * RU: Сохраняет id/outer и локальный value доступными до освобождения потоков из main. */
@@ -17,7 +18,10 @@ __attribute__((noinline)) static void thread_checkpoint(int id, volatile int *ou
     volatile int value = id * 100 + 22;
     atomic_fetch_add(&ready, 1);
     while (!atomic_load(&released))
+    {
         value = id * 100 + 22 + (*outer == -1);
+        progress[id - 1]++;
+    }
     (void)value;
 }
 

@@ -124,6 +124,21 @@ static void native_all_stacks_page(GtkNotebook *notebook, GtkWidget *page, guint
     }
 }
 
+/* EN: Reread threads/stacks for session data without execution; button is unused and busy requests are ignored.
+ * RU: Перечитывает потоки/стеки сеанса data без исполнения; button не используется, занятые запросы игнорируются. */
+static void native_all_stacks_refresh(GtkButton *button, gpointer data)
+{
+    (void)button;
+    NativeDebug *session = data;
+    if (session->closed || !session->ready || !session->stopped || session->running ||
+        session->pending || session->writing || (session->assembly && session->assembly->active))
+        return;
+    session->threads_needed = TRUE;
+    if (session->thread_policy)
+        session->thread_policy->needed = TRUE;
+    native_debug_resume(session->window, session);
+}
+
 /* EN: Create the all-thread stack page for session and connect navigation to dialog.
  * RU: Создаёт общую страницу стеков session и подключает переходы к dialog. */
 static GtkWidget *native_all_stacks_widget(NativeDebug *session, GtkWidget *dialog)
@@ -165,6 +180,11 @@ static GtkWidget *native_all_stacks_widget(NativeDebug *session, GtkWidget *dial
         g_signal_connect(button, "clicked", G_CALLBACK(native_all_stacks_expand), tree);
         gtk_box_pack_start(GTK_BOX(actions), button, FALSE, FALSE, 0);
     }
+    GtkWidget *refresh = gtk_button_new_with_label(insight_tr("Refresh thread stacks"));
+    gtk_widget_set_name(refresh, "insight-gdb-refresh-stacks");
+    g_signal_connect(refresh, "clicked", G_CALLBACK(native_all_stacks_refresh), session);
+    g_ptr_array_add(session->paused_controls, refresh);
+    gtk_box_pack_start(GTK_BOX(actions), refresh, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(page), actions, FALSE, FALSE, 0);
     GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
     gtk_container_add(GTK_CONTAINER(scroll), tree);

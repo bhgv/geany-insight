@@ -2,6 +2,22 @@
 
 Launch arguments preserve spaces, empty strings, quotes and backslashes. Wildcards, `$HOME` and command substitution stay literal. On Unix, GDB uses shell startup with each argument quoted; local Windows uses Windows command-line quoting and SSH targets use POSIX quoting. Line breaks are rejected.
 
+## Control thread execution
+
+**Threads and stack** provides a **Thread execution** picker. It is enabled while paused after reading GDB's actual setting. The policy belongs to the current GDB session; profiles do not apply it automatically.
+
+| Policy | Behavior |
+|---|---|
+| `off` | Other threads may run on Continue and stepping. |
+| `step` | Step Into / Step Over run the selected thread; Continue and Step Out allow the others. |
+| `on` | Continue also runs only the selected thread. Code waiting for another thread can remain blocked. |
+| `replay` | GDB's replay policy: locking during replay, ordinary behavior during live execution. |
+
+The picker shows the policy confirmed by GDB and is disabled while a change is pending. If the target rejects a change, the previous value is restored and the reason is displayed. Stops and console commands reread the setting; an unknown response is not replaced with a guessed policy. Availability depends on GDB and the target platform.
+
+In **All thread stacks**, **Refresh thread stacks** recollects the paused tree while preserving the selected thread/frame. It sends no execution command.
+
+
 ## Threads, frames and backtrace navigation
 
 1. Stop at a breakpoint or use **Pause**. In **Threads and stack**, choose a thread and then a call frame. `#0` is the current function, `#1` its caller, and so on.

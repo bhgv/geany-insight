@@ -38,7 +38,16 @@ typedef enum
     NATIVE_VALUE_ASSIGN, NATIVE_VALUE_DELETE, NATIVE_VALUE_PATH
 } NativeValueRequest;
 
+typedef struct
+{
+    GtkWidget *combo, *status;
+    gchar *mode, *requested;
+    guint pending;
+    gboolean filling, needed;
+} NativeThreadPolicy;
+
 typedef struct {
+    NativeThreadPolicy *thread_policy;
     NativeRemote *remote;
     GSubprocess *process;
     GDataInputStream *output;
@@ -156,3 +165,9 @@ static void native_instruction_source_reply(NativeDebug *session, NativeAssembly
 static void native_navigation_controls(NativeDebug *session);
 static void native_navigation_clear(NativeAssembly *assembly);
 static gboolean native_instruction_idle(NativeDebug *session);
+
+static void native_thread_policy_sync(NativeDebug *session);
+static gchar *native_thread_policy_next(NativeDebug *session);
+static gboolean native_thread_policy_reply(NativeDebug *session, const gchar *record);
+static GtkWidget *native_thread_policy_widget(NativeDebug *session);
+static void native_thread_policy_free(NativeThreadPolicy *policy);
