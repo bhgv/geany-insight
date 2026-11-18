@@ -377,7 +377,6 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
             }
         }
     }
-    (void)tabs;
     else if (phase == 50 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
         phase = 51;
     else if (phase == 51 && has_local(window, "marker", "41") && find(window, "marker = 41"))
@@ -416,5 +415,6 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         gtk_main_quit();
         return G_SOURCE_REMOVE;
     }
+    (void)tabs;
     return G_SOURCE_CONTINUE;
 }
