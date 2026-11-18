@@ -401,3 +401,7 @@ Shared script-debugger interface after **Stop**: the production Python window wi
 Python pauses at its next traced source line. If the program is waiting in `input()`, Pause queues a request: submit text with Enter or use **Send EOF** so execution can reach the next line. The status explains this pending-input requirement; another Pause remains unavailable until a stop. Ordinary input does not require Pause.
 
 **Stop** while waiting terminates the current process and clears the unsent draft. **Restart** creates a new process from the original snapshot and clears the console and draft; old replies must not replace the new session. EOF belongs to the current process: after Restart the new program can request input again.
+
+Production Python debugger with an isolated test program: Pause has been requested while the program remains in `input()`. Submit text or **Send EOF**; Stop and Restart remain available.
+
+![Python Pause waiting for input](../media/script-debugger-input.jpg)

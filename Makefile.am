@@ -950,3 +950,5 @@ EXTRA_DIST += insight/tests/script_debugger_lifecycle_gui_test.c
 EXTRA_DIST += insight/tests/script_debugger_frame_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/script-debugger-stop.jpg
+
+dist_insightdocmedia_DATA += insight/docs/media/script-debugger-input.jpg
