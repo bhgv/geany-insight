@@ -373,3 +373,7 @@ Each source's **Symbols…** button and **Ctrl+Shift+O** open functions, methods
 The preview uses the immutable snapshot with syntax highlighting; selecting a row does not move the source caret. Enter or double-click confirms navigation; Esc cancels. Ctrl+F focuses the filter, Down enters the list. Empty results disable navigation. Acceptance is rejected if the comparison changed in the meantime.
 
 **Ctrl+Alt+Left/Right** navigate backward/forward. A new jump after going back clears the forward branch; a successful new comparison clears both histories. Result and its Undo remain separate.
+
+![Snapshot symbol browser](media/file-compare-symbols.jpg)
+
+Real Linux editor dialog in an isolated GUI fixture: filtered changed Verilog definitions and syntax-highlighted snapshot preview.
