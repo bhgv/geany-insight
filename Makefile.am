@@ -957,3 +957,5 @@ insightpythondebugdir = $(insighttooldir)/python-debug
 dist_insightpythondebug_DATA = insight/tools/python-debug/io.py
 
 EXTRA_DIST += insight/tests/python_debug_io_test.py
+
+dist_insightdocmedia_DATA += insight/docs/media/script-debugger-read.jpg

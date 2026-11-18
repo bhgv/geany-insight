@@ -1314,4 +1314,5 @@ install_data(
   'insight/docs/media/native-gdb-source-unavailable.jpg',
   'insight/docs/media/script-debugger-stop.jpg',
   'insight/docs/media/script-debugger-input.jpg',
+  'insight/docs/media/script-debugger-read.jpg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

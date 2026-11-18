@@ -418,3 +418,7 @@ Continue and stepping remove the previous stop highlight. A new line is highligh
 The console supports `input()`, `sys.stdin.readline(n)`, `sys.stdin.read(n)` and `sys.stdin.read()` through EOF. Sizes count Unicode characters. Submitting with Enter adds a newline, which also counts toward the size. Partial reads preserve the remainder for the next read. An empty submitted line is a newline; use **Send EOF** to end input.
 
 `read(n)` waits for the requested character count or EOF and may need several submissions. `read()` collects input until **Send EOF**. For example, after submitting `Я🙂x`, `read(3)` returns those three characters and the following `readline()` receives the remaining newline without another input request.
+
+Production Python window with an isolated test program: after a partial Unicode read and its buffered newline, the program waits for more `read()` input or **Send EOF**. The previous stop highlight is cleared.
+
+![Reading text stdin through EOF](media/script-debugger-read.jpg)
