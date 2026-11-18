@@ -4,12 +4,15 @@
 #include <gtk/gtk.h>
 #include "geany.h"
 #include "main.h"
+#include "document.h"
+#include "editor.h"
 #include "ui_utils.h"
 #include <glib/gstdio.h>
 #include <string.h>
 
 static gboolean python, failing, passed;
 static guint phase;
+static GtkWidget *editor_window;
 
 /* EN: Find widget by key name, button/menu caption, or recursively in children and submenus; return NULL if absent.
  * RU: Ищет widget по имени key, надписи кнопки/меню, детям и подменю; возвращает NULL при отсутствии. */
@@ -110,11 +113,16 @@ static void capture(GtkWidget *window)
 static gboolean drive(gpointer data)
 {
     (void)data;
-    if (!main_widgets.window)
-        return G_SOURCE_CONTINUE;
+    if (!editor_window)
+    {
+        GeanyDocument *document = document_get_current();
+        if (!DOC_VALID(document))
+            return G_SOURCE_CONTINUE;
+        editor_window = gtk_widget_get_toplevel(GTK_WIDGET(document->editor->sci));
+    }
     if (!phase)
     {
-        GtkWidget *menu = find(main_widgets.window,
+        GtkWidget *menu = find(editor_window,
             python ? "Debug Current Python Buffer…" : "Debug Current Lua Buffer…");
         if (!menu)
             return G_SOURCE_CONTINUE;
@@ -192,7 +200,7 @@ static gboolean drive(gpointer data)
             python ? "Python" : "Lua", failing ? "runtime error" : "normal completion");
         passed = TRUE;
         gtk_widget_destroy(window);
-        gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(main_widgets.window, "menu_quit1")));
+        gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(editor_window, "menu_quit1")));
         return G_SOURCE_REMOVE;
     }
     return G_SOURCE_CONTINUE;
