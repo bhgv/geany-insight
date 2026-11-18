@@ -79,6 +79,8 @@ on:
       - src/search.c
       - src/sidebar.c
       - src/insight-diff.*
+      - src/insight-diff/**
+      - src/insight-diff-symbols.*
       - src/insight-compare-ui.h
       - src/insight-diff-syntax.*
       - insight/core/diff.*
