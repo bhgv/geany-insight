@@ -26,6 +26,7 @@ typedef struct {
     gboolean python_diagnostic_seen, python_diagnostic_jumped;
     gboolean python;
     gboolean python_running;
+    gboolean python_waiting_input, python_pause_pending;
     gboolean closing;
     gchar *project_root;
     gchar *display_filename;

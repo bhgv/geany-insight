@@ -10,7 +10,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
-static gboolean python, failing, passed;
+static gboolean python, failing, console_mode, passed;
 static guint phase;
 static GtkWidget *editor_window;
 
@@ -91,11 +91,11 @@ static void assert_cleared(GtkWidget *window)
         g_assert_false(gtk_widget_is_sensitive(find(window, inactive[i])));
 }
 
-/* EN: Save a requested real Python Stop-window capture after it has been raised and painted; errors abort the fixture.
- * RU: Сохраняет запрошенный снимок настоящего Python-окна Stop после поднятия и отрисовки; ошибка завершает фикстуру. */
-static void capture(GtkWidget *window)
+/* EN: Save window to the path in environment variable after raising and painting; errors abort the fixture.
+ * RU: Сохраняет window в путь переменной окружения variable после поднятия и отрисовки; ошибка завершает фикстуру. */
+static void capture(GtkWidget *window, const gchar *variable)
 {
-    const gchar *path = g_getenv("INSIGHT_SCRIPT_STOP_CAPTURE");
+    const gchar *path = g_getenv(variable);
     if (!path || !python || failing)
         return;
     GdkWindow *surface = gtk_widget_get_window(window);
@@ -106,6 +106,121 @@ static void capture(GtkWidget *window)
     g_assert_true(gdk_pixbuf_save(pixels, path, "jpeg", &error, "quality", "88", NULL));
     g_assert_no_error(error);
     g_object_unref(pixels);
+}
+
+/* EN: Drive window through Python input, pending Pause, EOF, Stop and Restart; late old replies must not replace Stop.
+ * Return REMOVE after successful shutdown, CONTINUE while asynchronous requests drain; assertions fail the fixture.
+ * RU: Проверяет window с вводом Python, ожидающей Pause, EOF, Stop и Restart; поздние ответы не должны заменять Stop.
+ * Возвращает REMOVE после успешного выхода, CONTINUE при ожидании; неудачная проверка завершает фикстуру. */
+static gboolean drive_console(GtkWidget *window)
+{
+    static guint settle_ticks;
+    GtkWidget *input = find(window, "insight-python-input");
+    GtkWidget *resume = find(window, "Continue");
+    const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-script-status")));
+    gboolean waiting = gtk_widget_is_sensitive(input);
+    if (phase == 1 && gtk_widget_is_sensitive(resume))
+    {
+        g_assert_true(click(window, "Continue"));
+        phase = 2;
+    }
+    else if (phase == 2 && waiting)
+    {
+        gtk_entry_set_text(GTK_ENTRY(input), "old draft");
+        g_assert_true(click(window, "Stop"));
+        settle_ticks = 0;
+        phase = 3;
+    }
+    else if (phase == 3 || phase == 14)
+    {
+        assert_cleared(window);
+        g_assert_false(waiting);
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(input)), ==, "");
+        g_assert_cmpstr(status, ==, "Debugging stopped");
+        if (++settle_ticks < 5)
+            return G_SOURCE_CONTINUE;
+        if (phase == 3)
+        {
+            g_assert_true(click(window, "Restart"));
+            phase = 4;
+        }
+        else
+        {
+            g_print("Python GTK: input/EOF, deferred source Pause, Stop while waiting, Restart while waiting and ignored late replies passed.\n");
+            passed = TRUE;
+            gtk_widget_destroy(window);
+            gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(editor_window, "menu_quit1")));
+            return G_SOURCE_REMOVE;
+        }
+    }
+    else if ((phase == 4 || phase == 10 || phase == 12) && gtk_widget_is_sensitive(resume))
+    {
+        g_assert_false(waiting);
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(input)), ==, "");
+        GtkWidget *frames = find(window, "insight-script-frames");
+        g_assert_cmpstr(gtk_combo_box_get_active_id(GTK_COMBO_BOX(frames)), ==, "0");
+        gchar *output = view_text(find(window, "insight-python-console"));
+        g_assert_cmpstr(output, ==, "");
+        g_free(output);
+        g_assert_true(click(window, "Continue"));
+        phase++;
+    }
+    else if (phase == 5 && waiting)
+    {
+        g_assert_true(click(window, "Pause"));
+        status = gtk_label_get_text(GTK_LABEL(find(window, "insight-script-status")));
+        g_assert_nonnull(strstr(status, "provide input or EOF"));
+        g_assert_false(gtk_widget_is_sensitive(find(window, "Pause")));
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
+        phase = 6;
+    }
+    else if (phase == 6)
+    {
+        capture(window, "INSIGHT_SCRIPT_INPUT_CAPTURE");
+        gtk_entry_set_text(GTK_ENTRY(input), "alpha");
+        g_signal_emit_by_name(input, "activate");
+        phase = 7;
+    }
+    else if (phase == 7 && gtk_widget_is_sensitive(resume))
+    {
+        g_assert_false(waiting);
+        g_assert_nonnull(strstr(status, "Paused"));
+        g_assert_true(click(window, "Continue"));
+        phase = 8;
+    }
+    else if (phase == 8 && waiting)
+    {
+        g_assert_nonnull(strstr(status, "Python is waiting for input"));
+        g_assert_true(click(window, "Send EOF"));
+        phase = 9;
+    }
+    else if (phase == 9 && strstr(status, "script finished"))
+    {
+        assert_cleared(window);
+        g_assert_false(waiting);
+        gchar *output = view_text(find(window, "insight-python-console"));
+        g_assert_nonnull(strstr(output, "first=alpha"));
+        g_assert_nonnull(strstr(output, "eof"));
+        g_assert_nonnull(strstr(output, "done"));
+        g_free(output);
+        g_assert_true(click(window, "Restart"));
+        phase = 10;
+    }
+    else if (phase == 11 && waiting)
+    {
+        gtk_entry_set_text(GTK_ENTRY(input), "draft to discard");
+        g_assert_true(click(window, "Restart"));
+        phase = 12;
+    }
+    else if (phase == 13 && waiting)
+    {
+        g_assert_true(click(window, "Stop"));
+        settle_ticks = 0;
+        phase = 14;
+    }
+    return G_SOURCE_CONTINUE;
 }
 
 /* EN: Drive a small nested-call fixture from data's unused timer; return REMOVE after all lifecycle assertions pass.
@@ -133,6 +248,8 @@ static gboolean drive(gpointer data)
     GtkWidget *window = debug_window();
     if (!window)
         return G_SOURCE_CONTINUE;
+    if (console_mode)
+        return drive_console(window);
     GtkWidget *frames = find(window, "insight-script-frames");
     const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-script-status")));
     GtkWidget *resume = find(window, "Continue");
@@ -169,7 +286,7 @@ static gboolean drive(gpointer data)
     }
     else if (phase == 4)
     {
-        capture(window);
+        capture(window, "INSIGHT_SCRIPT_STOP_CAPTURE");
         g_assert_true(click(window, "Restart"));
         phase = 5;
     }
@@ -218,8 +335,8 @@ static gboolean timeout(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Run language argv[1] and normal/error argv[2] in a temporary editor profile; return nonzero on failure.
- * RU: Проверяет язык argv[1] и normal/error argv[2] во временном профиле редактора; возвращает ненулевой код при ошибке. */
+/* EN: Run language argv[1] and normal/error/console argv[2] in a temporary editor profile; return nonzero on failure.
+ * RU: Проверяет язык argv[1] и normal/error/console argv[2] во временном профиле редактора; возвращает ненулевой код при ошибке. */
 int main(int argc, char **argv)
 {
     if (!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY"))
@@ -227,6 +344,7 @@ int main(int argc, char **argv)
     g_assert_cmpint(argc, ==, 3);
     python = !strcmp(argv[1], "python");
     failing = !strcmp(argv[2], "error");
+    console_mode = python && !strcmp(argv[2], "console");
     gchar *directory = g_dir_make_tmp("script-lifecycle-XXXXXX", NULL);
     g_assert_nonnull(directory);
     gchar *profile = g_build_filename(directory, "profile", NULL);
@@ -237,6 +355,8 @@ int main(int argc, char **argv)
     const gchar *body = python ?
         "def inner():\n    value = 41\n    value += 1\n    return value\nanswer = inner()\n" :
         "local function inner()\n    local value = 41\n    value = value + 1\n    return value\nend\nlocal answer = inner()\n";
+    if (console_mode)
+        body = "first = input('first: ')\nprint('first=' + first)\ntry:\n    second = input('second: ')\nexcept EOFError:\n    print('eof')\nprint('done')\n";
     gchar *code = g_strconcat(body, failing ? (python ? "raise RuntimeError('fixture failure')\n" :
         "error('fixture failure')\n") : "", NULL);
     g_assert_true(g_file_set_contents(source, code, -1, NULL));

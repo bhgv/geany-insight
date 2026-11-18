@@ -160,6 +160,9 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     g_signal_connect(view->stop, "clicked", G_CALLBACK(debug_stop), view);
     gtk_box_pack_start(GTK_BOX(toolbar), view->stop, FALSE, FALSE, 0);
     view->pause = gtk_button_new_with_label("Pause");
+    if (python)
+        gtk_widget_set_tooltip_text(view->pause, insight_tr(
+            "Pause takes effect at the next Python source line. While input is pending, send text or EOF first."));
     g_signal_connect(view->pause, "clicked", G_CALLBACK(debug_pause), view);
     gtk_box_pack_start(GTK_BOX(toolbar), view->pause, FALSE, FALSE, 0);
     view->go_to_source = gtk_button_new_with_label("Go to Source");
@@ -211,10 +214,12 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     {
         GtkWidget *console_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
         view->python_console = debug_create_view(console_pane, TRUE);
+        gtk_widget_set_name(view->python_console, "insight-python-console");
         GtkWidget *console_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
         gtk_box_pack_start(GTK_BOX(console_page), console_pane, TRUE, TRUE, 0);
         view->python_input_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
         view->python_input_entry = gtk_entry_new();
+        gtk_widget_set_name(view->python_input_entry, "insight-python-input");
         gtk_entry_set_placeholder_text(GTK_ENTRY(view->python_input_entry), "Python input (Enter to send)");
         gtk_entry_set_max_length(GTK_ENTRY(view->python_input_entry), 1024);
         GtkWidget *eof = gtk_button_new_with_label("Send EOF");

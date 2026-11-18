@@ -3523,3 +3523,6 @@ Open a fresh GDB with current launch/SSH settings, watches and persistent breakp
 Source file is unavailable locally: %s. Check source mapping.	Исходный файл недоступен локально: %s. Проверьте сопоставление исходников.
 The selected frame has no source coordinates. Inspect the stack or assembly.	В выбранном кадре нет координат исходника. Исследуйте стек или ассемблер.
 Cannot inspect the selected Lua frame.	Не удалось исследовать выбранный кадр Lua.
+Pause requested; provide input or EOF to reach the next Python source line.	Запрошена пауза; отправьте текст или EOF, чтобы перейти к следующей строке Python.
+Pause requested; waiting for the next Python source line.	Запрошена пауза; ожидается следующая строка исходника Python.
+Pause takes effect at the next Python source line. While input is pending, send text or EOF first.	Пауза срабатывает на следующей строке Python. При ожидании ввода сначала отправьте текст или EOF.

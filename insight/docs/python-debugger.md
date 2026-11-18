@@ -400,3 +400,9 @@ If a frame-selection request fails, the selector returns to the last accepted fr
 Shared script-debugger interface after **Stop**: the production Python window with an isolated test program. Frame rows and stack are empty, stepping and source navigation are unavailable, and Restart remains available.
 
 ![Cleared context after Stop](media/script-debugger-stop.jpg)
+
+## Pause while waiting for input
+
+Python pauses at its next traced source line. If the program is waiting in `input()`, Pause queues a request: submit text with Enter or use **Send EOF** so execution can reach the next line. The status explains this pending-input requirement; another Pause remains unavailable until a stop. Ordinary input does not require Pause.
+
+**Stop** while waiting terminates the current process and clears the unsent draft. **Restart** creates a new process from the original snapshot and clears the console and draft; old replies must not replace the new session. EOF belongs to the current process: after Restart the new program can request input again.

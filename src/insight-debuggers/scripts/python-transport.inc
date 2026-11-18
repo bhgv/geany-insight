@@ -44,8 +44,10 @@ static void debug_python_append_output(ScriptDebugWindow *view, const gchar *tex
     g_free(valid);
 }
 
-/* Send a line or end-of-file to the waiting Python program. */
-/* Передаёт строку или конец файла ожидающей программе Python. */
+/* EN: Send text or EOF selected by eof to view's waiting Python program; preserve a pending source pause in the status.
+ * Failed sends retain the draft and input controls for retry; successful sends clear the draft.
+ * RU: Передаёт текст либо EOF по eof ожидающей программе view; сохраняет запрос паузы в статусе.
+ * При отказе сохраняет черновик и ввод для повтора; успешная отправка очищает черновик. */
 static void debug_python_submit_input(ScriptDebugWindow *view, gboolean eof)
 {
     if (!view->python_engine || !gtk_widget_get_sensitive(view->python_input_row))
@@ -65,8 +67,10 @@ static void debug_python_submit_input(ScriptDebugWindow *view, gboolean eof)
     {
         gtk_entry_set_text(GTK_ENTRY(view->python_input_entry), "");
         gtk_widget_set_sensitive(view->python_input_row, FALSE);
+        view->python_waiting_input = FALSE;
         if (view->python_running)
-            gtk_label_set_text(GTK_LABEL(view->status), "Python is running");
+            gtk_label_set_text(GTK_LABEL(view->status), view->python_pause_pending ? insight_tr(
+                "Pause requested; waiting for the next Python source line.") : "Python is running");
     }
     else
         gtk_label_set_text(GTK_LABEL(view->status), error ? error->message : "Cannot send Python input");
@@ -257,9 +261,12 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
                 GtkWidget *page = gtk_widget_get_parent(view->python_input_row);
                 GtkNotebook *notebook = GTK_NOTEBOOK(gtk_widget_get_parent(page));
                 gtk_notebook_set_current_page(notebook, gtk_notebook_page_num(notebook, page));
+                view->python_waiting_input = TRUE;
                 gtk_widget_set_sensitive(view->python_input_row, TRUE);
                 gtk_widget_grab_focus(view->python_input_entry);
-                gtk_label_set_text(GTK_LABEL(view->status), "Python is waiting for input");
+                gtk_label_set_text(GTK_LABEL(view->status), view->python_pause_pending ? insight_tr(
+                    "Pause requested; provide input or EOF to reach the next Python source line.") :
+                    "Python is waiting for input");
             }
             keep_reading = TRUE;
             g_data_input_stream_read_line_async(G_DATA_INPUT_STREAM(object), G_PRIORITY_DEFAULT,
@@ -268,6 +275,7 @@ static void debug_python_received(GObject *object, GAsyncResult *result, gpointe
         else
         {
             view->python_running = FALSE;
+            view->python_waiting_input = view->python_pause_pending = FALSE;
             if (status != 1 || error)
                 gtk_widget_set_sensitive(view->python_input_row, FALSE);
             g_free(view->python_stack);

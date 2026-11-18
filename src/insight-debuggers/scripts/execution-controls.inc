@@ -153,6 +153,7 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
 static void debug_cancel_execution(ScriptDebugWindow *view)
 {
     view->python_running = FALSE;
+    view->python_waiting_input = view->python_pause_pending = FALSE;
     view->python_request++;
     if (view->python_input_row)
     {
@@ -177,8 +178,10 @@ static void debug_window_destroy(GtkWidget *widget, gpointer data)
     g_clear_pointer(&view->python_engine, insight_python_debug_free);
 }
 
-/* Request a source stop without discarding VM state. */
-/* Запрашивает остановку на строке с сохранением состояния VM. */
+/* EN: Request a source pause for view in data; button is unused. Python input must finish before the next trace stop.
+ * Preserve the VM and report the pending-input requirement; failed sends retain the existing control state.
+ * RU: Запрашивает паузу view из data; button не используется. Ввод Python должен завершиться до остановки трассировки.
+ * Сохраняет VM и сообщает о необходимости ввода; отказ отправки сохраняет состояние кнопок. */
 static void debug_pause(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -197,8 +200,10 @@ static void debug_pause(GtkButton *button, gpointer data)
     }
     else
         insight_lua_debug_request_pause(view->engine);
+    view->python_pause_pending = view->python;
     gtk_widget_set_sensitive(view->pause, FALSE);
-    gtk_label_set_text(GTK_LABEL(view->status), "Pausing…");
+    gtk_label_set_text(GTK_LABEL(view->status), view->python_waiting_input ? insight_tr(
+        "Pause requested; provide input or EOF to reach the next Python source line.") : "Pausing…");
 }
 
 /* Dispatch the step mode associated with a toolbar button. */
