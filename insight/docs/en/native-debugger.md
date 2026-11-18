@@ -529,3 +529,7 @@ A read/write failure or GDB shutdown ends the current session: stale variables, 
 After GDB ends, **Open new GDB session** becomes available. It uses the same GDB and executable and copies current, including unsaved, launch/SSH settings, watches, confirmed persistent source/exception breakpoints and manual address names. The saved profile is not overwritten. Connect or Run explicitly after the new window opens. If GDB cannot start, the original window stays open.
 
 Runtime values, address/temporary breakpoints, watchpoints, Lua observers and old memory/instruction snapshots are not transferred. **Restart** restarts the program inside a working GDB. A normal program exit still allows **Run** and **Restart** without a new window.
+
+Production debugger window with GDB and an isolated test program: the session has ended, argument `17` remains in the form, and opening a fresh GDB is available.
+
+![Recovering after GDB shutdown](../media/native-gdb-recovery.jpg)

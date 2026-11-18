@@ -1309,4 +1309,5 @@ install_data(
   'insight/docs/media/ssh-setup-debug.jpg',
   'insight/docs/media/native-expression-follow.jpg',
   'insight/docs/media/native-memory-follow.jpg',
+  'insight/docs/media/native-gdb-recovery.jpg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
