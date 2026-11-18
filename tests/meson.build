@@ -1029,3 +1029,6 @@ test('Insight mixed include ownership', include_language_test)
 
 mixed_includes_gui_test = executable('test_insight_mixed_includes_gui', '../insight/tests/mixed_includes_gui_test.c', dependencies: test_deps)
 test('Insight mixed C C++ HDL includes GUI', mixed_includes_gui_test, timeout: 55, is_parallel: false)
+
+executable('test_insight_script_debugger_lifecycle_gui',
+  '../insight/tests/script_debugger_lifecycle_gui_test.c', dependencies: test_deps)

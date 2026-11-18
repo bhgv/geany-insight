@@ -193,6 +193,7 @@ jobs:
           python3 insight/tests/c_operator_tokens_test.py
           python3 insight/tests/hdl_instance_models_test.py
           python3 -m unittest discover -s insight/tests -p 'native_debugger*_test.py' -v
+          python3 insight/tests/script_debugger_frame_test.py
           python3 insight/tests/install_fonts_test.py
           if meson setup _missing-internal -Dclang-bootstrap=false -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled > missing-internal.log 2>&1; then
             echo 'Default configuration silently used system Clang'
@@ -273,6 +274,23 @@ jobs:
             native-gdb-source-unavailable.jpg
             native-gdb-entry.jpg
             native-gdb-remote.log
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Verify Lua and Python debugger lifecycle in production windows
+        run: |
+          for language in lua python; do
+            for outcome in normal error; do
+              LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_SCRIPT_STOP_CAPTURE="$PWD/script-debugger-stop.jpg" INSIGHT_CI_DIAGNOSTIC_FILE="script-debugger-$language-$outcome.log" python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_script_debugger_lifecycle_gui "$language" "$outcome"
+            done
+          done
+      - name: Publish script debugger diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: script-debugger-diagnostics
+          path: |
+            script-debugger-*.log
+            script-debugger-stop.jpg
           retention-days: 3
           if-no-files-found: ignore
       - name: Install the HDL backend after native debugger checks

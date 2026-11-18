@@ -385,3 +385,9 @@ Click another diagnostic to open and select its location. When the tool
 supplies only a line number, the whole line is selected.
 Python also lists traceback frames and selects the expression range
 when the interpreter supplies it.
+
+## Stop, Restart and the selected frame
+
+**Stop** ends the current VM and clears frame-selector rows, selected context, stack text and value comparisons. Source navigation and stepping become unavailable; the source snapshot, breakpoints and observer log remain. **Restart** creates a fresh VM from the original snapshot and starts at frame `#0`. Normal completion and execution errors leave no stale selectable frames.
+
+If a frame-selection request fails, the selector returns to the last accepted frame instead of displaying an unaccepted selection.

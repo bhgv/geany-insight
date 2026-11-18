@@ -427,3 +427,9 @@ Startup and execution diagnostics appear in **Messages**. The debugger
 opens the first available source location, scrolls to it, and selects it.
 Click another diagnostic to open and select its location. When the tool
 supplies only a line number, the whole line is selected.
+
+## Stop, Restart and the selected frame
+
+**Stop** ends the current VM and clears frame-selector rows, selected context, stack text and value comparisons. Source navigation and stepping become unavailable; the source snapshot, breakpoints and observer log remain. **Restart** creates a fresh VM from the original snapshot and starts at frame `#0`. Normal completion and execution errors leave no stale selectable frames.
+
+If a frame-selection request fails, the selector returns to the last accepted frame instead of displaying an unaccepted selection.

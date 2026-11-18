@@ -191,8 +191,10 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     gtk_paned_pack2(GTK_PANED(pane), inspection, TRUE, FALSE);
     GtkWidget *stack_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);
     view->stack_view = debug_create_view(stack_pane, TRUE);
+    gtk_widget_set_name(view->stack_view, "insight-script-stack");
     GtkWidget *stack_page = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
     view->stack_frames = gtk_combo_box_text_new();
+    gtk_widget_set_name(view->stack_frames, "insight-script-frames");
     gtk_widget_set_tooltip_text(view->stack_frames, "Choose a stack frame to inspect its source and values");
     gtk_widget_set_sensitive(view->stack_frames, FALSE);
     gtk_box_pack_start(GTK_BOX(stack_page), view->stack_frames, FALSE, FALSE, 0);
@@ -244,6 +246,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     g_signal_connect(view->source_view, "query-tooltip", G_CALLBACK(debug_source_tooltip), view);
     g_signal_connect(view->window, "key-press-event", G_CALLBACK(debug_handle_key), view);
     view->status = gtk_label_new(NULL);
+    gtk_widget_set_name(view->status, "insight-script-status");
     gtk_label_set_selectable(GTK_LABEL(view->status), TRUE);
     gtk_label_set_ellipsize(GTK_LABEL(view->status), PANGO_ELLIPSIZE_END);
     gtk_box_pack_start(GTK_BOX(box), view->status, FALSE, FALSE, 0);

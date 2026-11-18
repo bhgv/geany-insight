@@ -944,3 +944,7 @@ EXTRA_DIST += insight/tests/native_debugger_reopen_test.py
 EXTRA_DIST += insight/tests/native_debugger_source_status_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/native-gdb-source-unavailable.jpg
+
+EXTRA_DIST += insight/tests/script_debugger_lifecycle_gui_test.c
+
+EXTRA_DIST += insight/tests/script_debugger_frame_test.py

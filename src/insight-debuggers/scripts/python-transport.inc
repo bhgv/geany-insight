@@ -308,8 +308,10 @@ static void debug_python_read_reply(ScriptDebugWindow *view)
         G_PRIORITY_DEFAULT, NULL, debug_python_received, reply);
 }
 
-/* Change the inspected frame while leaving the execution point paused. */
-/* Меняет просматриваемый кадр, оставляя выполнение на паузе. */
+/* EN: Inspect the frame selected by frames for view in data; failed backend selection restores the accepted row.
+ * Busy or programmatic changes do nothing; Python replies remain asynchronous.
+ * RU: Исследует выбранный frames кадр view из data; отказ движка возвращает принятую строку.
+ * Занятый движок и программные изменения игнорируются; ответы Python асинхронны. */
 static void debug_stack_frame_changed(GtkComboBox *frames, gpointer data)
 {
     ScriptDebugWindow *view = data;
@@ -328,6 +330,7 @@ static void debug_stack_frame_changed(GtkComboBox *frames, gpointer data)
         GError *error = NULL;
         if (!insight_python_debug_send(view->python_engine, command, &error))
         {
+            debug_restore_frame_selection(view);
             gtk_label_set_text(GTK_LABEL(view->status), error ? error->message : "Cannot inspect Python frame");
             g_clear_error(&error);
             return;
@@ -343,7 +346,11 @@ static void debug_stack_frame_changed(GtkComboBox *frames, gpointer data)
         const char *filename;
         unsigned long line;
         if (!insight_lua_debug_select_frame(view->engine, (guint)level, &filename, &line))
+        {
+            debug_restore_frame_selection(view);
+            gtk_label_set_text(GTK_LABEL(view->status), insight_tr("Cannot inspect the selected Lua frame."));
             return;
+        }
         view->inspection_frame = (guint)level;
         view->inspecting_frame = TRUE;
         debug_show_script_file(view, filename);

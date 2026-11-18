@@ -36,6 +36,28 @@ static void debug_update_stack_frames(ScriptDebugWindow *view, const gchar *stac
     view->updating_stack_frames = FALSE;
 }
 
+/* EN: Restore view's frame selector to its last accepted inspection_frame without issuing another request.
+ * RU: Возвращает список кадров view к принятому inspection_frame без повторного запроса движку. */
+static void debug_restore_frame_selection(ScriptDebugWindow *view)
+{
+    gchar id[16];
+    g_snprintf(id, sizeof id, "%u", view->inspection_frame);
+    view->updating_stack_frames = TRUE;
+    gtk_combo_box_set_active_id(GTK_COMBO_BOX(view->stack_frames), id);
+    view->updating_stack_frames = FALSE;
+}
+
+/* EN: Clear view's stale frame rows and inspection state after Stop, completion or an execution error.
+ * Disable frame navigation without changing source, saved points or the observer log.
+ * RU: Очищает старые кадры и состояние выбора view после Stop, завершения либо ошибки исполнения.
+ * Отключает переходы по кадрам, сохраняя исходник, точки и журнал наблюдателя. */
+static void debug_clear_frame_context(ScriptDebugWindow *view)
+{
+    view->inspection_frame = 0;
+    view->inspecting_frame = FALSE;
+    debug_update_stack_frames(view, NULL);
+}
+
 /* EN: Update view for result and line. Publish error to Messages on failure when
  * the Python protocol has not already supplied diagnostic rows.
  * RU: Обновляет view по result и line. При ошибке публикует error в «Сообщениях»,
@@ -101,7 +123,7 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
         }
         gtk_label_set_text(GTK_LABEL(view->status), label);
         debug_set_text(view->stack_view, result < 0 ? label : "");
-        debug_update_stack_frames(view, NULL);
+        debug_clear_frame_context(view);
         g_free(label);
         gtk_widget_set_sensitive(view->step_controls, FALSE);
     }

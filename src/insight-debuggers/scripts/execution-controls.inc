@@ -377,8 +377,8 @@ static void debug_restart(GtkButton *button, gpointer data)
     debug_window_step(view, INSIGHT_LUA_STEP_INTO);
 }
 
-/* End the current VM while keeping the source and breakpoint list. */
-/* Завершает текущую VM, сохраняя исходник и список точек останова. */
+/* EN: Stop the VM for view in data; button is unused. Clear frame rows and watch comparisons, preserving source and points.
+ * RU: Останавливает VM сеанса view из data; button не используется. Очищает кадры и сравнения наблюдений, сохраняя исходник и точки. */
 static void debug_stop(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -387,6 +387,10 @@ static void debug_stop(GtkButton *button, gpointer data)
         return;
 
     debug_cancel_execution(view);
+    debug_clear_frame_context(view);
+    g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
+    memset(view->watch_changed, 0, sizeof view->watch_changed);
+    view->watch_change_count = 0;
     view->watch_graph = NULL;
     view->watch_selected = -1;
     debug_watch_layout(view);
