@@ -38,6 +38,15 @@ static gboolean scope_response(gpointer data)
     {
         GtkWidget *view = named(dialog, side ? "insight-diff-scope-right" : "insight-diff-scope-left");
         g_assert_false(gtk_text_view_get_editable(GTK_TEXT_VIEW(view)));
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+        GtkTextTag *tag = gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(buffer), "scope-change");
+        g_assert_nonnull(tag);
+        GtkTextIter begin;
+        const gchar *changed = strstr(response->m->sources[side], " return a +");
+        g_assert_nonnull(changed);
+        gtk_text_buffer_get_iter_at_offset(buffer, &begin,
+            g_utf8_pointer_to_offset(response->m->sources[side], changed));
+        g_assert_true(gtk_text_iter_has_tag(&begin, tag));
         gchar *text = contents(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)));
         g_assert_cmpstr(text, ==, response->m->sources[side]);
         g_free(text);

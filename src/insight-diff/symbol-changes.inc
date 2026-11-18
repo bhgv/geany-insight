@@ -55,8 +55,11 @@ static void diff_scope_preview(GtkTreeSelection *selection, gpointer data)
         gsize first = side ? change->hunk.b_begin : change->hunk.a_begin;
         gsize last = side ? change->hunk.b_end : change->hunk.a_end;
         GtkTextIter begin, end;
+        gtk_text_buffer_get_bounds(review->buffers[side], &begin, &end);
+        gtk_text_buffer_remove_tag_by_name(review->buffers[side], "scope-change", &begin, &end);
         gtk_text_buffer_get_iter_at_offset(review->buffers[side], &begin, chars(review->sources[side], first));
         gtk_text_buffer_get_iter_at_offset(review->buffers[side], &end, chars(review->sources[side], last));
+        gtk_text_buffer_apply_tag_by_name(review->buffers[side], "scope-change", &begin, &end);
         gtk_text_buffer_select_range(review->buffers[side], &begin, &end);
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(review->views[side]), &begin, 0.1, TRUE, 0, 0.4);
     }
@@ -189,6 +192,8 @@ static void diff_scope_show(Merge *m, guint side, gsize begin, gsize end, const 
         gtk_text_buffer_set_text(review.buffers[source], review.sources[source], -1);
         if (colorizer)
             colorizer(review.buffers[source], m->loaded_paths[source]);
+        gtk_text_buffer_create_tag(review.buffers[source], "scope-change", "background",
+            source ? "#ddf2dd" : "#ffe0d3", NULL);
         review.views[source] = gtk_text_view_new_with_buffer(review.buffers[source]);
         gtk_widget_set_name(review.views[source], source ? "insight-diff-scope-right" : "insight-diff-scope-left");
         gtk_text_view_set_editable(GTK_TEXT_VIEW(review.views[source]), FALSE);
