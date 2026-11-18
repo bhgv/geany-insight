@@ -129,6 +129,16 @@ static gboolean threads_gui_stacks_ready(GtkWidget *window)
     return found == 2;
 }
 
+/* EN: Check current bytes in window while address/size drafts remain unapplied.
+ * RU: Проверяет актуальные bytes окна window при неприменённых черновиках адреса/размера. */
+static gboolean threads_gui_memory(GtkWidget *window, const gchar *bytes)
+{
+    const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-memory-status")));
+    return find(window, bytes) && strstr(status, "&value") && strstr(status, "bytes: 4.") &&
+        !g_strcmp0(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-memory-address"))), "&shared_value") &&
+        gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(find(window, "insight-gdb-memory-size"))) == 128;
+}
+
 /* EN: Drive window/tabs through two workers and three nested frame contexts; source and memory must agree.
  * Capture the real views only after raising the debugger. Finish without resuming worker execution.
  * RU: Проверяет window/tabs на двух потоках и трёх вложенных кадрах; исходник и память должны совпадать.
@@ -196,8 +206,14 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
             phase = 7;
     }
     else if (phase == 7 && find(window, G_BYTE_ORDER == G_LITTLE_ENDIAN ? "6f 00 00 00" : "00 00 00 6f") &&
-             threads_gui_frame(window, "worker-two", "worker_leaf", &thread, &frame))
-        phase = 8;
+             gtk_widget_is_sensitive(find(window, "Continue")))
+    {
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-memory-auto")), TRUE);
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-memory-address")), "&shared_value");
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(find(window, "insight-gdb-memory-size")), 128);
+        if (threads_gui_frame(window, "worker-two", "worker_leaf", &thread, &frame))
+            phase = 8;
+    }
     else if (phase == 8 && threads_gui_context(window, thread, frame, "211", "2007"))
     {
         g_assert_false(threads_gui_value(window, "111"));
@@ -217,15 +233,26 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 22)
     {
         native_exit_gui_capture(window, "INSIGHT_GDB_VALUE_FOLLOW_CAPTURE");
-        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-memory-address")), "&value");
-        if (click(window, "Read Memory"))
-            phase = 10;
+        g_assert_true(threads_gui_memory(window,
+            G_BYTE_ORDER == G_LITTLE_ENDIAN ? "d3 00 00 00" : "00 00 00 d3"));
+        GtkWidget *view = find(window, "insight-gdb-memory-bytes");
+        GtkWidget *page = gtk_widget_get_parent(gtk_widget_get_parent(view));
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        gtk_window_present(GTK_WINDOW(window));
+        gtk_widget_queue_draw(window);
+        phase = 23;
+    }
+    else if (phase == 23)
+    {
+        native_exit_gui_capture(window, "INSIGHT_GDB_MEMORY_FOLLOW_CAPTURE");
+        phase = 10;
     }
     else if (phase == 10 && find(window, G_BYTE_ORDER == G_LITTLE_ENDIAN ? "d3 00 00 00" : "00 00 00 d3") &&
              threads_gui_frame(window, "worker-one", "thread_checkpoint", &thread, &frame))
         phase = 11;
     else if (phase == 11 && threads_gui_context(window, thread, frame, "122", "1007") &&
              threads_gui_value(window, "122") &&
+             threads_gui_memory(window, G_BYTE_ORDER == G_LITTLE_ENDIAN ? "7a 00 00 00" : "00 00 00 7a") &&
              gtk_widget_is_sensitive(policy))
     {
         g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(policy), "step"));
@@ -239,6 +266,8 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
              strstr(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-stop-reason"))), "Step complete"))
     {
         g_assert_true(threads_gui_value(window, "122"));
+        g_assert_true(threads_gui_memory(window,
+            G_BYTE_ORDER == G_LITTLE_ENDIAN ? "7a 00 00 00" : "00 00 00 7a"));
         guint64 now = 0;
         g_assert_true(threads_gui_counter(window, &now));
         g_assert_cmpuint(now, ==, other_counter);
@@ -258,6 +287,7 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 12 && threads_gui_context(window, thread, frame, "101", "1007") &&
              threads_gui_value(window, "101") &&
+             threads_gui_memory(window, G_BYTE_ORDER == G_LITTLE_ENDIAN ? "65 00 00 00" : "00 00 00 65") &&
              threads_gui_frame(window, "worker-one", "worker_leaf", &thread, &frame))
         phase = 13;
     else if (phase == 13 && threads_gui_context(window, thread, frame, "111", "1007") &&
@@ -322,7 +352,7 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     {
         native_exit_gui_capture(window, "INSIGHT_GDB_THREAD_POLICY_CAPTURE");
         g_print("C/C++ GTK: confirmed scheduler policy, step isolation and non-executing stack refresh passed.\n");
-        g_print("C/C++ GTK: worker/frame locals, TLS, shared globals, watches, automatic inspected-expression refresh, draft isolation, value trees, memory and confirmed backtrace navigation passed.\n");
+        g_print("C/C++ GTK: worker/frame locals, TLS, shared globals, watches, automatic inspected-expression refresh, saved memory-read parameters, draft isolation, value trees, memory and confirmed backtrace navigation passed.\n");
         g_free(thread);
         g_free(frame);
         passed = TRUE;

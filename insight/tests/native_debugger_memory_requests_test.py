@@ -20,12 +20,13 @@ STATE = r'''/* EN: Use real GLib/GTK types and nonvisual text controls for produ
 #define insight_tr(text) (text)
 typedef struct {
     gboolean memory_pending, stopped, ready, pending, writing, memory_needed;
-    guint memory_pending_generation, value_generation, memory_count;
-    gchar *memory_address;
+    guint memory_pending_generation, value_generation, memory_count, memory_read_count;
+    gchar *memory_address, *memory_read_expression, *memory_pending_expression;
     GtkWidget *memory_text, *memory_status, *memory_size, *memory_expression, *window;
 } NativeDebug;
 static gchar *displayed, *status, *requested_address;
 static guint resume_count;
+static gint draft_size = 3;
 
 /* EN: Return view as a nonvisual buffer token; no GTK text widget is constructed.
  * RU: Возвращает view как невизуальный идентификатор буфера; текстовый виджет GTK не создаётся. */
@@ -53,12 +54,12 @@ static void fixture_label(gpointer label, const gchar *text)
     status = g_strdup(text);
 }
 
-/* EN: Return the fixture's three-byte read size for button.
- * RU: Возвращает размер чтения три байта для button фикстуры. */
+/* EN: Return the fixture's editable draft size for button.
+ * RU: Возвращает редактируемый черновик размера для button фикстуры. */
 static gint fixture_size(gpointer button)
 {
     (void)button;
-    return 3;
+    return draft_size;
 }
 
 /* EN: Record text assigned to entry as the next requested address.
@@ -68,6 +69,21 @@ static void fixture_entry(gpointer entry, const gchar *text)
     (void)entry;
     g_free(requested_address);
     requested_address = g_strdup(text);
+}
+
+/* EN: Return the fixture's current draft address; no GTK entry is constructed.
+ * RU: Возвращает текущий черновик адреса фикстуры; поле GTK не создаётся. */
+static const gchar *fixture_entry_text(gpointer entry)
+{
+    (void)entry;
+    return requested_address ? requested_address : "&sample";
+}
+/* EN: Ignore the tooltip for widget; text metadata is checked through the visible status.
+ * RU: Пропускает подсказку widget; метаданные text проверяются через видимый статус. */
+static void fixture_tooltip(gpointer widget, const gchar *text)
+{
+    (void)widget;
+    (void)text;
 }
 
 /* EN: Return owned text for session without address annotations; NULL formats as an empty snapshot.
@@ -99,6 +115,8 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
 #define gtk_label_set_text fixture_label
 #define gtk_spin_button_get_value_as_int fixture_size
 #define gtk_entry_set_text fixture_entry
+#define gtk_entry_get_text fixture_entry_text
+#define gtk_widget_set_tooltip_text fixture_tooltip
 '''
 
 HARNESS = r'''
@@ -111,6 +129,7 @@ int main(int argc, char **argv)
     session.stopped = session.ready = session.memory_pending = TRUE;
     session.memory_pending_generation = session.value_generation = 4;
     session.memory_count = 3;
+    session.memory_pending_expression = g_strdup("&sample");
     session.memory_address = g_strdup("0x2000");
     GObject *view = g_object_new(G_TYPE_OBJECT, NULL);
     session.memory_text = (GtkWidget *)view;
@@ -133,6 +152,12 @@ int main(int argc, char **argv)
     {
         session.memory_pending = FALSE;
         unchanged = TRUE;
+    }
+    else if (!strcmp(argv[1], "queued"))
+    {
+        session.memory_read_expression = g_strdup("&next_request");
+        session.memory_read_count = 128;
+        session.memory_needed = TRUE;
     }
     else if (!strcmp(argv[1], "error"))
         record = "^error,msg=\"Cannot access memory\"";
@@ -162,10 +187,16 @@ int main(int argc, char **argv)
         guint64 address = 0;
         assert(native_memory_address(session.memory_address, &address) && address == 0x1000);
         assert(raw && strstr(raw, " | ABC\n") && !strcmp(displayed, raw));
+        assert(strstr(status, "&sample") && strstr(status, "3"));
+        assert(!strstr(status, "next_request"));
+        if (!strcmp(argv[1], "queued"))
+            assert(session.memory_needed && session.memory_read_count == 128);
+        draft_size = 99;
         GObject *button = g_object_new(G_TYPE_OBJECT, NULL);
         g_object_set_data(button, "memory-direction", GINT_TO_POINTER(1));
         native_memory_read((GtkButton *)button, &session);
         assert(session.memory_needed && resume_count == 1 && !strcmp(requested_address, "0x1003"));
+        assert(session.memory_read_count == 3);
         session.memory_needed = FALSE;
         g_object_set_data(button, "memory-direction", GINT_TO_POINTER(-1));
         native_memory_read((GtkButton *)button, &session);
@@ -173,6 +204,8 @@ int main(int argc, char **argv)
         g_object_unref(button);
     }
     g_free(session.memory_address);
+    g_free(session.memory_read_expression);
+    g_free(session.memory_pending_expression);
     g_free(displayed);
     g_free(status);
     g_free(requested_address);
@@ -195,9 +228,9 @@ class NativeMemoryRequests(unittest.TestCase):
         helpers = [function('src/insight-debuggers/gdb-context.inc', name)
                    for name in ('native_debug_field', 'native_next_tuple')]
         helpers += [function('src/insight-debuggers/gdb-memory-model.inc', name)
-                    for name in ('native_memory_address', 'native_memory_format')]
+                    for name in ('native_memory_address', 'native_memory_format', 'native_memory_snapshot_label')]
         helpers += [function('src/insight-debuggers/gdb-memory-ui.inc', name)
-                    for name in ('native_memory_reply', 'native_memory_read')]
+                    for name in ('native_memory_queue_read', 'native_memory_reply', 'native_memory_read')]
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             source = folder / 'memory-requests.c'
@@ -206,6 +239,11 @@ class NativeMemoryRequests(unittest.TestCase):
             subprocess.run(['cc', '-Wall', '-Wextra', '-Werror', str(source), '-o', str(executable),
                             *shlex.split(flags.stdout)], check=True)
             subprocess.run([str(executable), scenario], check=True)
+
+    # EN: Keep the current reply labelled by its dispatched request while a different read is queued.
+    # RU: Сохраняет подпись отправленного запроса, пока другое чтение уже ожидает в очереди.
+    def test_queued_request_metadata(self):
+        self.exercise('queued')
 
     # EN: Verify self's current snapshot supplies the address for exact next/previous block navigation.
     # RU: Проверяет адрес текущего снимка self для точной навигации по следующим/предыдущим блокам.

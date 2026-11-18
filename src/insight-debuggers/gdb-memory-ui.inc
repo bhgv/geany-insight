@@ -2,8 +2,36 @@
 /* EN: Paused-only memory requests, navigation and snapshot lifetime for the GDB panel.
  * RU: Запросы памяти на паузе, навигация и срок жизни снимков панели GDB. */
 
-/* EN: Invalidate session's memory snapshot when its value context changes; optionally queue a fresh read.
- * RU: Сбрасывает снимок памяти session при смене контекста; при необходимости запрашивает новый. */
+/* EN: Clear session's displayed bytes and confirmed navigation base without changing read settings.
+ * RU: Убирает байты и подтверждённую базу переходов session, сохраняя параметры чтения. */
+static void native_memory_clear_snapshot(NativeDebug *session)
+{
+    g_object_set_data(G_OBJECT(session->memory_text), "native-memory-raw", NULL);
+    g_clear_pointer(&session->memory_address, g_free);
+    gtk_widget_set_tooltip_text(session->memory_status, NULL);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), "", -1);
+}
+
+/* EN: Remember explicit expression/count for session; return FALSE for empty/invalid input.
+ * Copy input before replacing owned data; drafts are not read by subsequent automatic requests.
+ * RU: Запоминает явные expression/count для session; пустой/неверный запрос даёт FALSE.
+ * Копирует вход до замены своих данных; последующие автообновления не читают черновик. */
+static gboolean native_memory_queue_read(NativeDebug *session, const gchar *expression, guint count)
+{
+    if (!expression || !*expression || !count || count > 4096)
+        return FALSE;
+    gchar *copy = g_strdup(expression);
+    g_free(session->memory_read_expression);
+    session->memory_read_expression = copy;
+    session->memory_read_count = count;
+    session->memory_needed = TRUE;
+    return TRUE;
+}
+
+/* EN: Invalidate session's changed context; auto-refresh only a previously requested expression/size.
+ * Keep draft inputs independent and require an explicit first read. Unchanged contexts do nothing.
+ * RU: Сбрасывает изменившийся контекст session; автообновляет только ранее запрошенные адрес/размер.
+ * Черновики независимы; первое чтение должно быть явным. Неизменный контекст не затрагивается. */
 static void native_memory_sync(NativeDebug *session)
 {
     if (!session->memory_text || session->memory_generation == session->value_generation)
@@ -11,25 +39,29 @@ static void native_memory_sync(NativeDebug *session)
     session->memory_generation = session->value_generation;
     session->memory_needed = session->stopped &&
         gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(session->memory_auto)) &&
-        *gtk_entry_get_text(GTK_ENTRY(session->memory_expression));
-    g_object_set_data(G_OBJECT(session->memory_text), "native-memory-raw", NULL);
-    g_clear_pointer(&session->memory_address, g_free);
-    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), "", -1);
-    gtk_label_set_text(GTK_LABEL(session->memory_status),
-        insight_tr("Snapshot cleared. Pause and read memory in the selected frame."));
+        session->memory_read_expression && *session->memory_read_expression &&
+        session->memory_read_count && session->memory_read_count <= 4096;
+    native_memory_clear_snapshot(session);
+    gtk_label_set_text(GTK_LABEL(session->memory_status), insight_tr(session->memory_needed ?
+        "Refreshing selected context…" : "Snapshot cleared. Pause and read memory in the selected frame."));
 }
 
-/* EN: Return session's queued memory read command, owned by the caller, or NULL if none is pending.
- * RU: Возвращает ожидающую команду чтения session, принадлежащую вызывающему, либо NULL. */
+/* EN: Dispatch session's saved request; return an owned command or NULL when running, busy or invalid.
+ * Preserve queued work while an older read drains, clear old bytes, and capture reply metadata.
+ * RU: Отправляет сохранённый запрос session; возвращает команду либо NULL при работе цели, занятости или ошибке.
+ * Сохраняет очередь до ответа прежнего чтения, убирает старые байты и фиксирует данные ответа. */
 static gchar *native_memory_next(NativeDebug *session)
 {
-    if (!session->memory_needed || !session->stopped)
+    if (!session->memory_needed || !session->stopped || session->memory_pending)
         return NULL;
     session->memory_needed = FALSE;
-    const gchar *expression = gtk_entry_get_text(GTK_ENTRY(session->memory_expression));
-    if (!*expression)
+    const gchar *expression = session->memory_read_expression;
+    if (!expression || !*expression || !session->memory_read_count || session->memory_read_count > 4096)
         return NULL;
-    session->memory_count = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(session->memory_size));
+    session->memory_count = session->memory_read_count;
+    g_free(session->memory_pending_expression);
+    session->memory_pending_expression = g_strdup(expression);
+    native_memory_clear_snapshot(session);
     gchar *escaped = g_strescape(expression, NULL);
     gchar *command = g_strdup_printf("-data-read-memory-bytes \"%s\" %u", escaped, session->memory_count);
     g_free(escaped);
@@ -41,9 +73,11 @@ static gchar *native_memory_next(NativeDebug *session)
 
 /* EN: Consume record for session's memory read; discard obsolete frame replies and clear invalid snapshots.
  * Navigation uses the validated snapshot's first displayed address, regardless of MI fragment order.
+ * Describe accepted bytes using the dispatched expression/count, not subsequent queued edits.
  * Return TRUE when the memory request consumed the reply, otherwise FALSE.
  * RU: Принимает record чтения памяти session; отбрасывает устаревшие кадры и очищает неверные снимки.
  * Навигация использует первый адрес проверенного снимка независимо от порядка фрагментов MI.
+ * Подписывает байты отправленными expression/count, а не следующим запросом или черновиком.
  * Возвращает TRUE, если ответ принадлежал запросу памяти, иначе FALSE. */
 static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
 {
@@ -59,9 +93,12 @@ static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
     gchar *named = native_name_line_addresses(session, text);
     gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(session->memory_text)), named, -1);
     g_free(named);
-    gtk_label_set_text(GTK_LABEL(session->memory_status), text ?
-        insight_tr("Memory at the current stop; byte order is unchanged.") : valid ? valid :
+    gchar *description = text ? native_memory_snapshot_label(session->memory_pending_expression,
+                                                            session->memory_count) : NULL;
+    gtk_label_set_text(GTK_LABEL(session->memory_status), description ? description : valid ? valid :
         insight_tr("Memory unavailable or incomplete. Try a smaller block or another address."));
+    g_free(description);
+    gtk_widget_set_tooltip_text(session->memory_status, text ? session->memory_pending_expression : NULL);
     g_clear_pointer(&session->memory_address, g_free);
     if (text)
         session->memory_address = g_strndup(text, strcspn(text, " \n"));
@@ -71,19 +108,22 @@ static gboolean native_memory_reply(NativeDebug *session, const gchar *record)
     return TRUE;
 }
 
-/* EN: Queue a read in session data from button; navigate only from the last confirmed numeric address.
- * RU: Запрашивает чтение сеанса data по button; перемещается только от подтверждённого числового адреса. */
+/* EN: Queue an explicit read in session data from button. Navigation preserves the confirmed
+ * numeric base and block size; ordinary reads apply the draft fields. Busy requests are ignored.
+ * RU: Запрашивает явное чтение сеанса data по button. Переходы используют подтверждённые
+ * числовую базу и размер блока; обычное чтение применяет черновики. Занятый запрос игнорируется. */
 static void native_memory_read(GtkButton *button, gpointer data)
 {
     NativeDebug *session = data;
     if (!session->ready || !session->stopped || session->pending || session->writing)
         return;
     gint direction = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "memory-direction"));
+    guint count = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(session->memory_size));
     if (direction)
     {
         guint64 address = 0;
-        guint count = (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(session->memory_size));
-        if (!session->memory_address || !native_memory_address(session->memory_address, &address) ||
+        count = session->memory_count;
+        if (!count || count > 4096 || !session->memory_address || !native_memory_address(session->memory_address, &address) ||
             (direction < 0 ? address < count : address > G_MAXUINT64 - count))
         {
             gtk_label_set_text(GTK_LABEL(session->memory_status),
@@ -95,20 +135,26 @@ static void native_memory_read(GtkButton *button, gpointer data)
         gtk_entry_set_text(GTK_ENTRY(session->memory_expression), expression);
         g_free(expression);
     }
-    session->memory_needed = TRUE;
-    native_debug_resume(session->window, session);
+    if (native_memory_queue_read(session, gtk_entry_get_text(GTK_ENTRY(session->memory_expression)), count))
+        native_debug_resume(session->window, session);
 }
 
-/* EN: Open session's memory tab using expression as the address; read it when the command queue is idle.
- * RU: Открывает вкладку памяти session с адресом expression; читает после освобождения очереди команд. */
+/* EN: Open session's memory tab and capture expression/current byte count for an explicit read.
+ * Copy aliased input before updating the entry; dispatch after the command queue becomes idle.
+ * RU: Открывает вкладку памяти session и фиксирует expression/текущий размер для явного чтения.
+ * Копирует вход до изменения поля; отправляет запрос после освобождения очереди команд. */
 static void native_memory_inspect(NativeDebug *session, const gchar *expression)
 {
-    gtk_entry_set_text(GTK_ENTRY(session->memory_expression), expression);
+    gchar *copy = g_strdup(expression);
+    gtk_entry_set_text(GTK_ENTRY(session->memory_expression), copy);
+    gboolean queued = native_memory_queue_read(session, copy,
+        (guint)gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(session->memory_size)));
+    g_free(copy);
     GtkWidget *page = gtk_widget_get_parent(session->memory_status);
     gtk_notebook_set_current_page(GTK_NOTEBOOK(session->tabs),
         gtk_notebook_page_num(GTK_NOTEBOOK(session->tabs), page));
-    session->memory_needed = TRUE;
-    native_debug_resume(session->window, session);
+    if (queued)
+        native_debug_resume(session->window, session);
 }
 
 /* EN: Build session's memory tab with byte count, refresh policy and a noneditable hex/ASCII snapshot.
@@ -143,6 +189,8 @@ static GtkWidget *native_memory_widget(NativeDebug *session)
     }
     session->memory_auto = gtk_check_button_new_with_label(insight_tr("Refresh memory at each stop"));
     gtk_widget_set_name(session->memory_auto, "insight-gdb-memory-auto");
+    gtk_widget_set_tooltip_text(session->memory_auto, insight_tr(
+        "Repeat the last explicit read after stops and context changes. Read Memory applies draft fields; block navigation keeps the confirmed size."));
     gtk_container_add(GTK_CONTAINER(bar), session->memory_auto);
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
     g_ptr_array_add(session->paused_controls, bar);

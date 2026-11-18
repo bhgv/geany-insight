@@ -103,6 +103,8 @@ static void native_debug_free(gpointer data)
     g_free(session->stop_detail);
     g_free(session->data_command);
     g_free(session->memory_address);
+    g_free(session->memory_read_expression);
+    g_free(session->memory_pending_expression);
     native_assembly_free(session->assembly);
     g_ptr_array_unref(session->paused_controls);
     g_object_unref(session->value_rows);

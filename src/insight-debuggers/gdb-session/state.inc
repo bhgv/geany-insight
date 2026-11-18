@@ -66,8 +66,10 @@ typedef struct {
     GtkWidget *window;
     GPtrArray *paused_controls;
     GtkWidget *memory_expression, *memory_size, *memory_auto, *memory_text, *memory_status;
-    gchar *memory_address;
-    guint memory_generation, memory_pending_generation, memory_count;
+    /* EN: Owned confirmed navigation base, saved explicit address and in-flight address expression.
+     * RU: Собственные подтверждённая база переходов, сохранённый адрес и выражение ожидающего чтения. */
+    gchar *memory_address, *memory_read_expression, *memory_pending_expression;
+    guint memory_generation, memory_pending_generation, memory_count, memory_read_count;
     gboolean memory_needed, memory_pending;
     GtkTreeStore *value_rows;
     GtkWidget *value_tree, *value_expression, *value_status, *value_auto, *locals_view;

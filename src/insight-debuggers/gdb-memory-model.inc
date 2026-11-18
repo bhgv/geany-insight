@@ -87,3 +87,20 @@ static gchar *native_memory_format(const gchar *record, guint count)
     }
     return g_string_free(text, FALSE);
 }
+
+/* EN: Return an owned, bounded UTF-8 status for the expression/count actually read.
+ * Unknown expressions display '?'; invalid UTF-8 is repaired and long names are shortened.
+ * RU: Возвращает краткий статус UTF-8 для действительно прочитанных expression/count.
+ * Неизвестный адрес обозначает '?'; исправляет UTF-8 и сокращает длинные имена. */
+static gchar *native_memory_snapshot_label(const gchar *expression, guint count)
+{
+    gchar *valid = g_utf8_make_valid(expression ? expression : "?", -1);
+    glong length = g_utf8_strlen(valid, -1);
+    gchar *prefix = g_utf8_substring(valid, 0, MIN(length, 80));
+    gchar *name = g_strconcat(prefix, length > 80 ? "…" : "", NULL);
+    gchar *label = g_strdup_printf(insight_tr("Memory snapshot — %s; bytes: %u."), name, count);
+    g_free(name);
+    g_free(prefix);
+    g_free(valid);
+    return label;
+}

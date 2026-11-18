@@ -337,18 +337,30 @@ hexadecimal bytes and printable ASCII. Byte order stays as stored in memory.
 
 **View Memory** in Variables, Watches or Inspect values uses the selected
 expression as an address. For a scalar, change it to `&variable` in Memory.
-**Next block** and **Previous block** navigate by the currently selected byte
-count from the last successful address. They do not reevaluate pointer expressions.
+**Next block** and **Previous block** navigate by the last confirmed snapshot's byte
+count from its successful address. They do not reevaluate pointer expressions.
 The navigation base is the first displayed address of the complete snapshot,
 even if GDB returns its memory fragments in a different order.
 A truncated reply cannot supply an address for subsequent block navigation.
 
 Snapshots clear on execution, target exit and thread/frame changes. Enable
-**Refresh memory at each stop** to reevaluate the current address expression
+**Refresh memory at each stop** to repeat the last explicit address expression and byte count
 in the selected frame at each new stop or frame change. Otherwise, read manually.
 Expression evaluation follows GDB semantics and can execute target code if you
 enter function calls. An inaccessible address, incomplete block or truncated GDB reply clears
 the snapshot and shows an error; choose a smaller block or another address.
+
+
+### Saved memory requests and drafts
+
+Automatic refresh starts only after an explicit **Read Memory** or **View Memory**.
+It repeats that address expression and byte count in the selected thread/frame;
+the address and size currently being edited are drafts. Apply them with
+**Read Memory**. Block navigation preserves the confirmed snapshot's size.
+A new request clears old bytes and its numeric navigation base before dispatch.
+The status names the expression and byte count actually read, with the full
+expression available as a tooltip. A late response cannot replace a newer
+context or relabel itself using a subsequently queued request.
 
 ## Remote gdbserver over SSH
 
