@@ -973,3 +973,5 @@ dist_insightdocmedia_DATA += insight/docs/media/file-compare-code.jpg insight/do
 EXTRA_DIST += insight/tests/diff-gui/symbol-browser.inc
 
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-symbols.jpg
+
+EXTRA_DIST += insight/tests/diff-gui/symbol-changes.inc

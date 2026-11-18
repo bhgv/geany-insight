@@ -438,6 +438,7 @@ libgeany_la_SOURCES += \
 	insight-diff/symbol-context.inc \
 	insight-diff/symbol-navigation.inc \
 	insight-diff/symbol-browser.inc \
+	insight-diff/symbol-changes.inc \
 	insight-diff/state.inc \
 	insight-diff/history.inc \
 	insight-diff/navigation.inc \

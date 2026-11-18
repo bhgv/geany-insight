@@ -3,6 +3,7 @@
  * RU: Навигация по определениям и текстовым вхождениям внутри неизменных снимков сравнения. */
 typedef struct { guint side; gint offset; } DiffSymbolLocation;
 static void diff_symbol_browser(Merge *m, guint side);
+static void diff_scope_current(Merge *m, guint side);
 
 /* EN: Return an owned identifier at side's caret/selection in m, or NULL; never change selection or search options.
  * RU: Возвращает собственный идентификатор у курсора/выделения стороны side в m либо NULL; не меняет выделение и поиск. */
@@ -169,12 +170,17 @@ static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
     g_object_unref(model);
 }
 
-/* EN: Execute action (0 definition, 1 occurrences, 2 back, 3 symbols, 4 forward) on source side of m; never write files or Result.
- * RU: Выполняет action (0 определение, 1 вхождения, 2 назад, 3 символы, 4 вперёд) для стороны side в m; не меняет файлы и Result. */
+/* EN: Execute action (0 definition, 1 occurrences, 2 back, 3 symbols, 4 forward, 5 scope changes) on source side of m; never write files or Result.
+ * RU: Выполняет action (0 определение, 1 вхождения, 2 назад, 3 символы, 4 вперёд, 5 изменения области) для стороны side в m; не меняет файлы и Result. */
 static void diff_symbol_action(Merge *m, guint side, guint action)
 {
     if (m->busy || side > 1 || !m->sources[side])
         return;
+    if (action == 5)
+    {
+        diff_scope_current(m, side);
+        return;
+    }
     if (action == 3)
     {
         diff_symbol_browser(m, side);
@@ -238,7 +244,7 @@ static void diff_symbol_menu(GtkTextView *view, GtkWidget *menu, gpointer data)
 {
     Merge *m = data;
     guint side = GTK_WIDGET(view) == m->views[1];
-    const gchar *labels[] = {"Go to definition — F12", "Text occurrences in snapshot — Shift+F12", "Back — Ctrl+Alt+Left", "Symbols in snapshot — Ctrl+Shift+O", "Forward — Ctrl+Alt+Right"};
+    const gchar *labels[] = {"Go to definition — F12", "Text occurrences in snapshot — Shift+F12", "Back — Ctrl+Alt+Left", "Symbols in snapshot — Ctrl+Shift+O", "Forward — Ctrl+Alt+Right", "Changes in definition — Ctrl+Shift+D"};
     for (guint action = 0; action < G_N_ELEMENTS(labels); action++)
     {
         GtkWidget *item = gtk_menu_item_new_with_label(insight_tr(labels[action]));
@@ -260,6 +266,11 @@ static gboolean diff_symbol_key(GtkWidget *view, GdkEventKey *event, gpointer da
     if (event->keyval == GDK_KEY_F12 && !(modifiers & (GDK_CONTROL_MASK | GDK_MOD1_MASK)))
     {
         diff_symbol_action(m, side, !!(modifiers & GDK_SHIFT_MASK));
+        return TRUE;
+    }
+    if ((event->keyval == GDK_KEY_d || event->keyval == GDK_KEY_D) && modifiers == (GDK_CONTROL_MASK | GDK_SHIFT_MASK))
+    {
+        diff_symbol_action(m, side, 5);
         return TRUE;
     }
     if ((event->keyval == GDK_KEY_o || event->keyval == GDK_KEY_O) && modifiers == (GDK_CONTROL_MASK | GDK_SHIFT_MASK))

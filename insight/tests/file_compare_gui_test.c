@@ -119,13 +119,39 @@ static void capture(GtkWidget *window, const gchar *variable)
     g_object_unref(pixels);
 }
 
+/* EN: Capture the scoped change dialog after painting and verify paired Verilog snapshots before accepting.
+ * RU: Снимает диалог изменений после отрисовки и проверяет два снимка Verilog перед подтверждением. */
+static gboolean capture_scope(gpointer data)
+{
+    (void)data;
+    GList *windows = gtk_window_list_toplevels();
+    GtkWidget *dialog = NULL;
+    for (GList *it = windows; it; it = it->next)
+        if (!g_strcmp0(gtk_widget_get_name(it->data), "insight-diff-scope-changes"))
+            dialog = it->data;
+    g_list_free(windows);
+    g_assert_nonnull(dialog);
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(find(dialog, "insight-diff-scope-list")));
+    g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 1);
+    gchar *left = text(find(dialog, "insight-diff-scope-left"));
+    gchar *right = text(find(dialog, "insight-diff-scope-right"));
+    g_assert_nonnull(strstr(left, "value = x + 1;"));
+    g_assert_nonnull(strstr(right, "value = x + 2;"));
+    g_free(left);
+    g_free(right);
+    capture(dialog, "INSIGHT_FILE_SCOPE_CAPTURE");
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
 /* EN: Capture the retained dialog in data after its filtered list and preview have painted, then accept it.
  * RU: Снимает сохранённый dialog из data после отрисовки фильтра и предпросмотра, затем подтверждает выбор. */
 static gboolean capture_symbols(gpointer data)
 {
     GtkWidget *dialog = data;
     capture(dialog, "INSIGHT_FILE_SYMBOLS_CAPTURE");
-    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    g_timeout_add(250, capture_scope, NULL);
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_APPLY);
     return G_SOURCE_REMOVE;
 }
 
@@ -280,7 +306,7 @@ static gboolean drive(gpointer data)
         g_timeout_add(200, browse_symbols, NULL);
         click(window, "insight-diff-symbol-0-3");
         gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
-        g_assert_cmpint(gtk_text_iter_get_line(&at), ==, 4);
+        g_assert_cmpint(gtk_text_iter_get_line(&at), ==, 7);
         click(window, "insight-diff-symbol-0-2");
         gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
         g_assert_cmpint(gtk_text_iter_get_offset(&at), ==, original);

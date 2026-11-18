@@ -377,3 +377,9 @@ The preview uses the immutable snapshot with syntax highlighting; selecting a ro
 ![Snapshot symbol browser](media/file-compare-symbols.jpg)
 
 Real Linux editor dialog in an isolated GUI fixture: filtered changed Verilog definitions and syntax-highlighted snapshot preview.
+
+## Review changes within one function or module
+
+Select a definition in the symbol browser and choose **Changes in definition…**, enabled for changed ranges. In a source pane, **Ctrl+Shift+D** or the context-menu action opens changes for the smallest unambiguous indexed definition at the caret. The list includes only blocks intersecting that definition in the selected version; insertions after its end are excluded. A block crossing the definition boundary is shown in full.
+
+The dialog shows original comparison block numbers, both source line numbers and two independent syntax-highlighted snapshot previews. **Previous/Next change**, F3 and Shift+F3 step without closing the dialog and stop at the endpoints. **Copy change** copies the selected block's old and new text. Enter or double-click selects that block in the main comparison and retains the prior source position in back/forward history. Cancellation, preview and copying leave the main selection, files and Result unchanged. Stale acceptance is rejected.

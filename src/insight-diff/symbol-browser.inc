@@ -14,10 +14,7 @@ static gboolean diff_symbol_changed(Merge *m, guint side, gsize begin, gsize end
 {
     for (gsize i = 0; i < m->diff.count; i++)
     {
-        InsightDiffHunk *hunk = &m->diff.hunks[i];
-        gsize first = side ? hunk->b_begin : hunk->a_begin;
-        gsize last = side ? hunk->b_end : hunk->a_end;
-        if (first == last ? begin <= first && first < end : first < end && last > begin)
+        if (diff_scope_intersects(&m->diff.hunks[i], side, begin, end))
             return TRUE;
     }
     return FALSE;
@@ -48,6 +45,10 @@ static void diff_symbol_preview(GtkTreeSelection *selection, gpointer data)
     GtkTreeIter row;
     gboolean valid = gtk_tree_selection_get_selected(selection, &model, &row);
     gtk_dialog_set_response_sensitive(GTK_DIALOG(browser->dialog), GTK_RESPONSE_ACCEPT, valid);
+    gboolean changed = FALSE;
+    if (valid)
+        gtk_tree_model_get(model, &row, 4, &changed, -1);
+    gtk_dialog_set_response_sensitive(GTK_DIALOG(browser->dialog), GTK_RESPONSE_APPLY, valid && changed);
     gtk_widget_set_visible(browser->preview_scroll, valid);
     if (!valid)
         return;
@@ -125,7 +126,8 @@ static void diff_symbol_browser(Merge *m, guint side)
     guint64 serial = m->history_serial;
     browser.dialog = gtk_dialog_new_with_buttons(insight_tr("Symbols in this snapshot"), GTK_WINDOW(window),
         GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, insight_tr("Cancel"), GTK_RESPONSE_CANCEL,
-        insight_tr("Go to definition"), GTK_RESPONSE_ACCEPT, NULL);
+        insight_tr("Go to definition"), GTK_RESPONSE_ACCEPT,
+        insight_tr("Changes in definition…"), GTK_RESPONSE_APPLY, NULL);
     g_object_ref(browser.dialog);
     gtk_widget_set_name(browser.dialog, "insight-diff-symbol-browser");
     gtk_window_set_default_size(GTK_WINDOW(browser.dialog), 760, 540);
@@ -140,8 +142,8 @@ static void diff_symbol_browser(Merge *m, guint side)
     browser.changed = gtk_check_button_new_with_label(insight_tr("Changed definitions only"));
     gtk_widget_set_name(browser.changed, "insight-diff-symbol-changed");
     gtk_box_pack_start(GTK_BOX(box), browser.changed, FALSE, FALSE, 4);
-    GtkListStore *store = gtk_list_store_new(6, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INT,
-        G_TYPE_INT, G_TYPE_BOOLEAN, G_TYPE_STRING);
+    GtkListStore *store = gtk_list_store_new(8, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INT,
+        G_TYPE_INT, G_TYPE_BOOLEAN, G_TYPE_STRING, G_TYPE_UINT64, G_TYPE_UINT64);
     GPtrArray *symbols = m->symbols[side];
     gsize length = strlen(m->sources[side]);
     GtkTextBuffer *snapshot = gtk_text_buffer_new(NULL);
@@ -161,7 +163,8 @@ static void diff_symbol_browser(Merge *m, guint side)
         GtkTreeIter row;
         gtk_list_store_append(store, &row);
         gtk_list_store_set(store, &row, 0, symbol->name, 1, gtk_text_iter_get_line(&at) + 1,
-            2, offset, 3, (gint)browser.total, 4, changed, 5, insight_tr(changed ? "Changed" : "Unchanged"), -1);
+            2, offset, 3, (gint)browser.total, 4, changed, 5, insight_tr(changed ? "Changed" : "Unchanged"),
+            6, (guint64)symbol->begin, 7, (guint64)symbol->end, -1);
         browser.total++;
     }
     browser.fold = g_strdup("");
@@ -200,6 +203,8 @@ static void diff_symbol_browser(Merge *m, guint side)
     g_signal_connect(browser.changed, "toggled", G_CALLBACK(diff_symbol_filter), &browser);
     g_signal_connect(browser.tree, "row-activated", G_CALLBACK(diff_symbol_candidate), browser.dialog);
     g_signal_connect(browser.dialog, "key-press-event", G_CALLBACK(diff_symbol_browser_key), &browser);
+    g_object_ref(browser.entry);
+    g_object_ref(browser.changed);
     gtk_widget_show_all(browser.dialog);
     diff_symbol_filter(NULL, &browser);
     gtk_widget_grab_focus(browser.entry);
@@ -207,12 +212,17 @@ static void diff_symbol_browser(Merge *m, guint side)
     m = g_object_get_data(G_OBJECT(window), "insight-diff-state");
     GtkTreeModel *model;
     GtkTreeIter row;
-    if (response == GTK_RESPONSE_ACCEPT && m && !m->busy && serial == m->history_serial &&
+    gchar *scope_name = NULL;
+    guint64 scope_begin = 0, scope_end = 0;
+    if ((response == GTK_RESPONSE_ACCEPT || response == GTK_RESPONSE_APPLY) && m && !m->busy && serial == m->history_serial &&
         gtk_tree_selection_get_selected(selection, &model, &row))
     {
         gint offset;
         gtk_tree_model_get(model, &row, 2, &offset, -1);
-        diff_symbol_jump(m, side, offset, TRUE);
+        if (response == GTK_RESPONSE_ACCEPT)
+            diff_symbol_jump(m, side, offset, TRUE);
+        else
+            gtk_tree_model_get(model, &row, 0, &scope_name, 6, &scope_begin, 7, &scope_end, -1);
     }
     g_signal_handlers_disconnect_by_data(selection, &browser);
     g_signal_handlers_disconnect_by_data(browser.entry, &browser);
@@ -221,7 +231,13 @@ static void diff_symbol_browser(Merge *m, guint side)
     gtk_widget_destroy(browser.dialog);
     g_object_unref(selection);
     g_object_unref(browser.dialog);
+    g_object_unref(browser.entry);
+    g_object_unref(browser.changed);
     g_object_unref(browser.filter);
     g_free(browser.fold);
+    m = g_object_get_data(G_OBJECT(window), "insight-diff-state");
+    if (scope_name && m && !m->busy && serial == m->history_serial)
+        diff_scope_show(m, side, scope_begin, scope_end, scope_name);
+    g_free(scope_name);
     g_object_unref(window);
 }

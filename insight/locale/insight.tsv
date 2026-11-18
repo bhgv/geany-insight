@@ -3552,3 +3552,14 @@ Right snapshot	Правый снимок
 Filter symbol names	Фильтр имён символов
 Changed definitions only	Только изменённые определения
 %u of %u symbols	%u из %u символов
+Changes in definition	Изменения определения
+Changes in definition…	Изменения определения…
+Changes in definition — Ctrl+Shift+D	Изменения определения — Ctrl+Shift+D
+Go to change	Перейти к изменению
+Previous change	Предыдущее изменение
+Next change	Следующее изменение
+Copy change	Копировать изменение
+%u of %u changes in definition	%u из %u изменений определения
+Place the caret inside an indexed definition.	Установите курсор внутри индексированного определения.
+Left line	Строка слева
+Right line	Строка справа

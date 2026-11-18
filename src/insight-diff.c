@@ -29,6 +29,7 @@ static InsightDiffColorize colorizer;
 #include "insight-diff/comparison.inc"
 #include "insight-diff/window-tools.inc"
 #include "insight-diff/symbol-navigation.inc"
+#include "insight-diff/symbol-changes.inc"
 #include "insight-diff/symbol-browser.inc"
 #include "insight-diff/layout.inc"
 #include "insight-diff/window.inc"

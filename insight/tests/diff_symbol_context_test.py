@@ -119,6 +119,7 @@ class SnapshotSymbolContext(unittest.TestCase):
         helpers = ''.join(function('src/insight-diff/symbol-context.inc', name)
                           for name in ('diff_symbols_owner', 'diff_symbols_hunk'))
         helpers += function('src/insight-diff/symbol-navigation.inc', 'diff_symbol_matches')
+        helpers += function('src/insight-diff/symbol-changes.inc', 'diff_scope_intersects')
         helpers += function('src/insight-diff/symbol-browser.inc', 'diff_symbol_changed')
         helpers += ''.join(function('src/insight-diff-symbols.c', name)
                            for name in ('diff_symbol_word', 'diff_symbol_token', 'diff_symbol_named',

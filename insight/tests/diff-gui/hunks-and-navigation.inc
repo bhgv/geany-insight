@@ -6,6 +6,7 @@
     file_compare_modes_test();
     file_compare_symbol_navigation_test();
     file_compare_symbol_browser_test();
+    file_compare_symbol_changes_test();
     line_navigation_test();
     search_options_test();
     replace_test();

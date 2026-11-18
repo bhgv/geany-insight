@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Exercise installed directory comparison, explicit merge mode and native editor routing.
+ * RU: Проверяет установленное сравнение каталогов, явный режим сведения и переходы в редактор. */
 #include "geany.h"
 #include "main.h"
 #include "document.h"
@@ -34,56 +36,296 @@ static gboolean save_selected_result(gpointer data) {
 static gboolean choose_search_match(gpointer data) {
  (void)data;GtkWidget *dialog=window_named("insight-diff-search-results");g_assert_nonnull(dialog);GtkWidget *tree=named(dialog,"insight-diff-search-results-list");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),NULL),==,1);gtk_entry_set_text(GTK_ENTRY(named(dialog,"insight-diff-search-filter")),"8080");gtk_button_clicked(GTK_BUTTON(named(dialog,"insight-diff-search-copy")));gchar *text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD)),*path=g_build_filename(right,"config.ini",NULL),*expected=g_strdup_printf("File\tLine\tColumn\tText\n%s\t1\t1\tport = 8080\n",path);g_assert_cmpstr(text,==,expected);g_free(text);g_free(path);g_free(expected);GtkTreePath *row=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),row,NULL,FALSE);gtk_tree_path_free(row);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-search-field-2")),FALSE);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_YES);return G_SOURCE_REMOVE;
 }
-static gboolean step(gpointer data) {
- (void)data;
- if(!phase) {
-  GeanyDocument *doc=document_get_current();if(!doc) return G_SOURCE_CONTINUE;
-  host=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
-  GtkWidget *item=named(host,"insight-directory-menu");if(!item) return G_SOURCE_CONTINUE;
-  gtk_menu_item_activate(GTK_MENU_ITEM(item));directory=window_named("insight-directory-window");g_assert_nonnull(directory);
-  gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-left")),left);gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-right")),right);
-  GtkWidget *known=named(directory,"insight-directory-known");g_assert_true(gtk_widget_get_sensitive(known));gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(known),TRUE);
-  gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));phase++;return G_SOURCE_CONTINUE;
- }
- if(phase==1) {
-  if(!gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))) return G_SOURCE_CONTINUE;
-  GtkWidget *view=named(directory,"insight-directory-files");GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,1);
-  GtkTreePath *path=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE);gtk_tree_path_free(path);
-  /* The current editor buffer is the left file: copying from it, replacing
-   * it, and trashing it must all be rejected before any confirmation/task. */
-  for(guint action=0;action<3;action++) { gchar *name=g_strdup_printf("insight-directory-operation-%u",action);GtkWidget *button=named(directory,name);g_free(name);g_assert_true(gtk_widget_get_sensitive(button));gtk_button_clicked(GTK_BUTTON(button));g_assert_null(window_named("insight-directory-operation-dialog"));g_assert_true(gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))); }
-  g_idle_add(respond_file_dialog,GINT_TO_POINTER(GTK_RESPONSE_CANCEL));gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-operation-3")));g_assert_null(window_named("insight-directory-operation-dialog"));
-  GtkWidget *open=named(directory,"insight-directory-open");g_assert_true(gtk_widget_get_sensitive(open));gtk_button_clicked(GTK_BUTTON(open));merge=window_named("insight-diff-window");g_assert_nonnull(merge);phase++;return G_SOURCE_CONTINUE;
- }
- if(phase==2) {
-  if(!gtk_widget_get_sensitive(named(merge,"insight-diff-compare"))) return G_SOURCE_CONTINUE;
-  GtkWidget *directory_tabs=named(directory,"insight-directory-toolbar-tabs"),*merge_tabs=named(merge,"insight-diff-toolbar-tabs");g_assert_true(GTK_IS_NOTEBOOK(directory_tabs));g_assert_true(GTK_IS_NOTEBOOK(merge_tabs));
-  g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(directory_tabs),"insight-compare-toolbar"));g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(merge_tabs),"insight-compare-toolbar"));g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(directory_tabs)),==,6);g_assert_nonnull(named(directory_tabs,"insight-ai-options-collapse"));
-  const PangoFontDescription *directory_font=gtk_style_context_get_font(gtk_widget_get_style_context(named(directory,"insight-directory-scan")),GTK_STATE_FLAG_NORMAL),*merge_font=gtk_style_context_get_font(gtk_widget_get_style_context(named(merge,"insight-diff-compare")),GTK_STATE_FLAG_NORMAL);g_assert_cmpint(pango_font_description_get_size(directory_font),==,pango_font_description_get_size(merge_font));
-  GtkWidget *directory_page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(directory_tabs),0),*merge_page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(merge_tabs),0);gint dw,dh,mw,mh;gtk_widget_get_size_request(directory_page,&dw,&dh);gtk_widget_get_size_request(merge_page,&mw,&mh);g_assert_cmpint(dh,>,0);g_assert_cmpint(mh,>,0);GtkAdjustment *directory_vertical=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(directory_page)),*merge_vertical=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(merge_page));g_assert_cmpfloat(gtk_adjustment_get_upper(directory_vertical),<=,gtk_adjustment_get_page_size(directory_vertical)+1);g_assert_cmpfloat(gtk_adjustment_get_upper(merge_vertical),<=,gtk_adjustment_get_page_size(merge_vertical)+1);
-
-  GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));GtkTextIter a,z;gtk_text_buffer_get_bounds(buffer,&a,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
-  GdkEventKey shortcut={0};shortcut.type=GDK_KEY_PRESS;shortcut.state=GDK_CONTROL_MASK;shortcut.keyval=GDK_KEY_q;gboolean handled=FALSE;g_idle_add(apply_compare_options,NULL);g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(named(merge,"insight-diff-zoom"))),==,130);g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-overview"))));
-  g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-visible-space"))));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-visible-eol"))));
-  gtk_entry_set_text(GTK_ENTRY(named(merge,"insight-diff-search")),"port");gtk_entry_set_text(GTK_ENTRY(named(merge,"insight-diff-replacement")),"SERVER");gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-preserve-case")),TRUE);gtk_button_clicked(GTK_BUTTON(named(merge,"insight-diff-replace-all")));gtk_text_buffer_get_bounds(buffer,&a,&z);text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"server = 3000\n");g_free(text);shortcut.keyval=GDK_KEY_z;handled=FALSE;g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);gtk_text_buffer_get_bounds(buffer,&a,&z);text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
-  GtkWidget *scope=named(merge,"insight-diff-replace-scope");g_assert_nonnull(scope);gtk_combo_box_set_active(GTK_COMBO_BOX(scope),2);gtk_text_buffer_get_iter_at_offset(buffer,&a,1);gtk_text_buffer_place_cursor(buffer,&a);gtk_button_clicked(GTK_BUTTON(named(merge,"insight-diff-replace-all")));gtk_text_buffer_get_bounds(buffer,&a,&z);text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
-  gtk_text_buffer_get_start_iter(buffer,&a);gtk_text_buffer_get_iter_at_offset(buffer,&z,4);gtk_text_buffer_select_range(buffer,&a,&z);shortcut.keyval=GDK_KEY_h;handled=FALSE;g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(scope)),==,1);gtk_text_buffer_place_cursor(buffer,&a);handled=FALSE;g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(scope)),==,0);
-  gtk_text_buffer_get_start_iter(buffer,&a);gtk_text_buffer_place_cursor(buffer,&a);GtkWidget *result_menu=GTK_WIDGET(gtk_menu_button_get_popup(GTK_MENU_BUTTON(named(merge,"insight-diff-result-menu"))));gtk_widget_show(result_menu);GList *edit_items=gtk_container_get_children(GTK_CONTAINER(result_menu));gboolean indented=FALSE;for(GList *p=edit_items;p;p=p->next) if(GTK_IS_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(p->data),"Indent result lines")) { gtk_menu_item_activate(p->data);indented=TRUE;break; }g_list_free(edit_items);gtk_widget_hide(result_menu);g_assert_true(indented);gtk_text_buffer_get_bounds(buffer,&a,&z);text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"    port = 3000\n");g_free(text);shortcut.keyval=GDK_KEY_z;handled=FALSE;g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);
-  g_idle_add(apply_history_state,NULL);gtk_button_clicked(GTK_BUTTON(named(merge,"insight-diff-history-button")));gtk_text_buffer_get_bounds(buffer,&a,&z);text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);g_assert_cmpstr(text,==,"    port = 3000\n");g_free(text);shortcut.keyval=GDK_KEY_z;handled=FALSE;g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);g_assert_true(handled);
-  gtk_text_buffer_get_bounds(buffer,&a,&z);gtk_text_buffer_select_range(buffer,&a,&z);gtk_widget_show(result_menu);GList *save_items=gtk_container_get_children(GTK_CONTAINER(result_menu));gboolean exported=FALSE;for(GList *p=save_items;p;p=p->next) if(GTK_IS_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(p->data),"Save Result selection…")) { g_timeout_add(100,save_selected_result,NULL);gtk_menu_item_activate(p->data);exported=TRUE;break; }g_list_free(save_items);gtk_widget_hide(result_menu);g_assert_true(exported);GeanyDocument *exported_doc=document_get_current();g_assert_nonnull(exported_doc);g_assert_cmpstr(exported_doc->real_path,==,export_path);g_assert_false(exported_doc->changed);g_assert_true(g_file_get_contents(export_path,&text,NULL,NULL));g_assert_cmpstr(text,==,"port = 3000\n");g_free(text);
-  GtkWidget *right_view=named(merge,"insight-diff-right");GtkTextBuffer *right_buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(right_view));GtkTextIter line;gtk_text_buffer_get_start_iter(right_buffer,&line);gtk_text_buffer_place_cursor(right_buffer,&line);gtk_widget_grab_focus(right_view);gtk_entry_set_text(GTK_ENTRY(named(merge,"insight-diff-search")),"unrelated");shortcut.keyval=GDK_KEY_F3;handled=FALSE;g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(merge,"insight-diff-search"))),==,"port");shortcut.keyval=GDK_KEY_F;shortcut.state=GDK_CONTROL_MASK|GDK_SHIFT_MASK;handled=FALSE;g_idle_add(choose_search_match,NULL);g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);g_assert_true(handled);g_assert_true(gtk_text_buffer_get_has_selection(right_buffer));shortcut.state=GDK_CONTROL_MASK;shortcut.keyval=GDK_KEY_g;handled=FALSE;g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);g_assert_true(handled);GtkWidget *line_number=named(merge,"insight-diff-line");g_assert_nonnull(line_number);gtk_spin_button_set_value(GTK_SPIN_BUTTON(line_number),2);g_signal_emit_by_name(line_number,"activate");gtk_text_buffer_get_iter_at_mark(right_buffer,&line,gtk_text_buffer_get_insert(right_buffer));g_assert_cmpint(gtk_text_iter_get_line(&line),==,1);shortcut.keyval=GDK_KEY_e;handled=FALSE;g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);g_assert_true(handled);GeanyDocument *opened=document_get_current();g_assert_nonnull(opened);gchar *expected=g_build_filename(right,"config.ini",NULL);g_assert_cmpstr(opened->real_path,==,expected);g_free(expected);g_assert_cmpint(sci_get_current_line(opened->editor->sci),==,1);g_assert_false(opened->changed);gtk_widget_destroy(merge);
-  gchar *copy=g_build_filename(left,"transfer.c",NULL);g_assert_true(g_file_set_contents(copy,"int transfer;\n",-1,NULL));g_free(copy);gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));phase=3;return G_SOURCE_CONTINUE;
- }
- if(phase==3) {
-  if(!gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))) return G_SOURCE_CONTINUE;
-  GtkWidget *view=named(directory,"insight-directory-files");GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));GtkTreeIter iter;gboolean found=FALSE;gint name_column=gtk_tree_view_column_get_sort_column_id(gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));
-  for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter)) { gchar *name=NULL;gtk_tree_model_get(model,&iter,name_column,&name,-1);found=!strcmp(name,"transfer.c");g_free(name);if(found) { GtkTreePath *path=gtk_tree_model_get_path(model,&iter);gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE);gtk_tree_path_free(path);break; } }
-  g_assert_true(found);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-confirm")),FALSE);gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-operation-0")));phase=4;return G_SOURCE_CONTINUE;
- }
- if(!gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))) return G_SOURCE_CONTINUE;
- gchar *copy=g_build_filename(right,"transfer.c",NULL),*bytes=NULL;g_assert_true(g_file_get_contents(copy,&bytes,NULL,NULL));g_assert_cmpstr(bytes,==,"int transfer;\n");g_free(bytes);g_free(copy);g_assert_false(gtk_widget_get_sensitive(named(directory,"insight-directory-operation-0")));gtk_widget_destroy(directory);
- gtk_menu_item_activate(GTK_MENU_ITEM(named(host,"insight-directory-menu")));directory=window_named("insight-directory-window");g_assert_nonnull(directory);g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-confirm"))));g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-known"))));g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(directory,"insight-directory-left"))),==,left);g_assert_true(gtk_widget_get_sensitive(named(directory,"insight-directory-scan")));g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(named(directory,"insight-directory-files"))),NULL),==,0);
- gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(host,"menu_quit1")));return G_SOURCE_REMOVE;
+/* EN: Advance the production directory/file comparison fixture from unused data; explicitly enable merge before Result edits.
+ * RU: Продвигает проверку сравнения каталогов/файлов из неиспользуемого data; явно включает сведение перед правками Result. */
+static gboolean step(gpointer data)
+{
+    (void)data;
+    if(!phase)
+    {
+        GeanyDocument *doc=document_get_current();
+        if(!doc) return G_SOURCE_CONTINUE;
+        host=gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
+        GtkWidget *item=named(host,"insight-directory-menu");
+        if(!item) return G_SOURCE_CONTINUE;
+        gtk_menu_item_activate(GTK_MENU_ITEM(item));
+        directory=window_named("insight-directory-window");
+        g_assert_nonnull(directory);
+        gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-left")),left);
+        gtk_entry_set_text(GTK_ENTRY(named(directory,"insight-directory-right")),right);
+        GtkWidget *known=named(directory,"insight-directory-known");
+        g_assert_true(gtk_widget_get_sensitive(known));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(known),TRUE);
+        gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));
+        phase++;
+        return G_SOURCE_CONTINUE;
+    }
+    if(phase==1)
+    {
+        if(!gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))) return G_SOURCE_CONTINUE;
+        GtkWidget *view=named(directory,"insight-directory-files");
+        GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+        g_assert_cmpint(gtk_tree_model_iter_n_children(model,NULL),==,1);
+        GtkTreePath *path=gtk_tree_path_new_first();
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE);
+        gtk_tree_path_free(path);
+        /* The current editor buffer is the left file: copying from it, replacing
+        * it, and trashing it must all be rejected before any confirmation/task. */
+        for(guint action=0;action<3;action++)
+        {
+            gchar *name=g_strdup_printf("insight-directory-operation-%u",action);
+            GtkWidget *button=named(directory,name);
+            g_free(name);
+            g_assert_true(gtk_widget_get_sensitive(button));
+            gtk_button_clicked(GTK_BUTTON(button));
+            g_assert_null(window_named("insight-directory-operation-dialog"));
+            g_assert_true(gtk_widget_get_sensitive(named(directory,"insight-directory-scan")));
+        }
+        g_idle_add(respond_file_dialog,GINT_TO_POINTER(GTK_RESPONSE_CANCEL));
+        gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-operation-3")));
+        g_assert_null(window_named("insight-directory-operation-dialog"));
+        GtkWidget *open=named(directory,"insight-directory-open");
+        g_assert_true(gtk_widget_get_sensitive(open));
+        gtk_button_clicked(GTK_BUTTON(open));
+        merge=window_named("insight-diff-window");
+        g_assert_nonnull(merge);
+        g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-merge-mode"))));
+        phase++;
+        return G_SOURCE_CONTINUE;
+    }
+    if(phase==2)
+    {
+        if(!gtk_widget_get_sensitive(named(merge,"insight-diff-compare"))) return G_SOURCE_CONTINUE;
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-merge-mode")),TRUE);
+        GtkWidget *directory_tabs=named(directory,"insight-directory-toolbar-tabs"),*merge_tabs=named(merge,"insight-diff-toolbar-tabs");
+        g_assert_true(GTK_IS_NOTEBOOK(directory_tabs));
+        g_assert_true(GTK_IS_NOTEBOOK(merge_tabs));
+        g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(directory_tabs),"insight-compare-toolbar"));
+        g_assert_true(gtk_style_context_has_class(gtk_widget_get_style_context(merge_tabs),"insight-compare-toolbar"));
+        g_assert_cmpint(gtk_notebook_get_n_pages(GTK_NOTEBOOK(directory_tabs)),==,6);
+        g_assert_nonnull(named(directory_tabs,"insight-ai-options-collapse"));
+        const PangoFontDescription *directory_font=gtk_style_context_get_font(gtk_widget_get_style_context(named(directory,"insight-directory-scan")),GTK_STATE_FLAG_NORMAL),*merge_font=gtk_style_context_get_font(gtk_widget_get_style_context(named(merge,"insight-diff-compare")),GTK_STATE_FLAG_NORMAL);
+        g_assert_cmpint(pango_font_description_get_size(directory_font),==,pango_font_description_get_size(merge_font));
+        GtkWidget *directory_page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(directory_tabs),0),*merge_page=gtk_notebook_get_nth_page(GTK_NOTEBOOK(merge_tabs),0);
+        gint dw,dh,mw,mh;
+        gtk_widget_get_size_request(directory_page,&dw,&dh);
+        gtk_widget_get_size_request(merge_page,&mw,&mh);
+        g_assert_cmpint(dh,>,0);
+        g_assert_cmpint(mh,>,0);
+        GtkAdjustment *directory_vertical=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(directory_page)),*merge_vertical=gtk_scrolled_window_get_vadjustment(GTK_SCROLLED_WINDOW(merge_page));
+        g_assert_cmpfloat(gtk_adjustment_get_upper(directory_vertical),<=,gtk_adjustment_get_page_size(directory_vertical)+1);
+        g_assert_cmpfloat(gtk_adjustment_get_upper(merge_vertical),<=,gtk_adjustment_get_page_size(merge_vertical)+1);
+        GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(named(merge,"insight-diff-result")));
+        GtkTextIter a,z;
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+        g_assert_cmpstr(text,==,"port = 3000\n");
+        g_free(text);
+        GdkEventKey shortcut=
+        {
+            0
+        }
+        ;
+        shortcut.type=GDK_KEY_PRESS;
+        shortcut.state=GDK_CONTROL_MASK;
+        shortcut.keyval=GDK_KEY_q;
+        gboolean handled=FALSE;
+        g_idle_add(apply_compare_options,NULL);
+        g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(named(merge,"insight-diff-zoom"))),==,130);
+        g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-overview"))));
+        g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-visible-space"))));
+        g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-visible-eol"))));
+        gtk_entry_set_text(GTK_ENTRY(named(merge,"insight-diff-search")),"port");
+        gtk_entry_set_text(GTK_ENTRY(named(merge,"insight-diff-replacement")),"SERVER");
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(merge,"insight-diff-preserve-case")),TRUE);
+        gtk_button_clicked(GTK_BUTTON(named(merge,"insight-diff-replace-all")));
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+        g_assert_cmpstr(text,==,"server = 3000\n");
+        g_free(text);
+        shortcut.keyval=GDK_KEY_z;
+        handled=FALSE;
+        g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+        g_assert_cmpstr(text,==,"port = 3000\n");
+        g_free(text);
+        GtkWidget *scope=named(merge,"insight-diff-replace-scope");
+        g_assert_nonnull(scope);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(scope),2);
+        gtk_text_buffer_get_iter_at_offset(buffer,&a,1);
+        gtk_text_buffer_place_cursor(buffer,&a);
+        gtk_button_clicked(GTK_BUTTON(named(merge,"insight-diff-replace-all")));
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+        g_assert_cmpstr(text,==,"port = 3000\n");
+        g_free(text);
+        gtk_text_buffer_get_start_iter(buffer,&a);
+        gtk_text_buffer_get_iter_at_offset(buffer,&z,4);
+        gtk_text_buffer_select_range(buffer,&a,&z);
+        shortcut.keyval=GDK_KEY_h;
+        handled=FALSE;
+        g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(scope)),==,1);
+        gtk_text_buffer_place_cursor(buffer,&a);
+        handled=FALSE;
+        g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(scope)),==,0);
+        gtk_text_buffer_get_start_iter(buffer,&a);
+        gtk_text_buffer_place_cursor(buffer,&a);
+        GtkWidget *result_menu=GTK_WIDGET(gtk_menu_button_get_popup(GTK_MENU_BUTTON(named(merge,"insight-diff-result-menu"))));
+        gtk_widget_show(result_menu);
+        GList *edit_items=gtk_container_get_children(GTK_CONTAINER(result_menu));
+        gboolean indented=FALSE;
+        for(GList *p=edit_items;p;p=p->next) if(GTK_IS_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(p->data),"Indent result lines"))
+        {
+            gtk_menu_item_activate(p->data);
+            indented=TRUE;
+            break;
+        }
+        g_list_free(edit_items);
+        gtk_widget_hide(result_menu);
+        g_assert_true(indented);
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+        g_assert_cmpstr(text,==,"    port = 3000\n");
+        g_free(text);
+        shortcut.keyval=GDK_KEY_z;
+        handled=FALSE;
+        g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        g_idle_add(apply_history_state,NULL);
+        gtk_button_clicked(GTK_BUTTON(named(merge,"insight-diff-history-button")));
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        text=gtk_text_buffer_get_text(buffer,&a,&z,TRUE);
+        g_assert_cmpstr(text,==,"    port = 3000\n");
+        g_free(text);
+        shortcut.keyval=GDK_KEY_z;
+        handled=FALSE;
+        g_signal_emit_by_name(merge,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        gtk_text_buffer_get_bounds(buffer,&a,&z);
+        gtk_text_buffer_select_range(buffer,&a,&z);
+        gtk_widget_show(result_menu);
+        GList *save_items=gtk_container_get_children(GTK_CONTAINER(result_menu));
+        gboolean exported=FALSE;
+        for(GList *p=save_items;p;p=p->next) if(GTK_IS_MENU_ITEM(p->data) && !g_strcmp0(gtk_menu_item_get_label(p->data),"Save Result selection…"))
+        {
+            g_timeout_add(100,save_selected_result,NULL);
+            gtk_menu_item_activate(p->data);
+            exported=TRUE;
+            break;
+        }
+        g_list_free(save_items);
+        gtk_widget_hide(result_menu);
+        g_assert_true(exported);
+        GeanyDocument *exported_doc=document_get_current();
+        g_assert_nonnull(exported_doc);
+        g_assert_cmpstr(exported_doc->real_path,==,export_path);
+        g_assert_false(exported_doc->changed);
+        g_assert_true(g_file_get_contents(export_path,&text,NULL,NULL));
+        g_assert_cmpstr(text,==,"port = 3000\n");
+        g_free(text);
+        GtkWidget *right_view=named(merge,"insight-diff-right");
+        GtkTextBuffer *right_buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(right_view));
+        GtkTextIter line;
+        gtk_text_buffer_get_start_iter(right_buffer,&line);
+        gtk_text_buffer_place_cursor(right_buffer,&line);
+        gtk_widget_grab_focus(right_view);
+        gtk_entry_set_text(GTK_ENTRY(named(merge,"insight-diff-search")),"unrelated");
+        shortcut.keyval=GDK_KEY_F3;
+        handled=FALSE;
+        g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(merge,"insight-diff-search"))),==,"port");
+        shortcut.keyval=GDK_KEY_F;
+        shortcut.state=GDK_CONTROL_MASK|GDK_SHIFT_MASK;
+        handled=FALSE;
+        g_idle_add(choose_search_match,NULL);
+        g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        g_assert_true(gtk_text_buffer_get_has_selection(right_buffer));
+        shortcut.state=GDK_CONTROL_MASK;
+        shortcut.keyval=GDK_KEY_g;
+        handled=FALSE;
+        g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        GtkWidget *line_number=named(merge,"insight-diff-line");
+        g_assert_nonnull(line_number);
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(line_number),2);
+        g_signal_emit_by_name(line_number,"activate");
+        gtk_text_buffer_get_iter_at_mark(right_buffer,&line,gtk_text_buffer_get_insert(right_buffer));
+        g_assert_cmpint(gtk_text_iter_get_line(&line),==,1);
+        shortcut.keyval=GDK_KEY_e;
+        handled=FALSE;
+        g_signal_emit_by_name(right_view,"key-press-event",&shortcut,&handled);
+        g_assert_true(handled);
+        GeanyDocument *opened=document_get_current();
+        g_assert_nonnull(opened);
+        gchar *expected=g_build_filename(right,"config.ini",NULL);
+        g_assert_cmpstr(opened->real_path,==,expected);
+        g_free(expected);
+        g_assert_cmpint(sci_get_current_line(opened->editor->sci),==,1);
+        g_assert_false(opened->changed);
+        gtk_widget_destroy(merge);
+        gchar *copy=g_build_filename(left,"transfer.c",NULL);
+        g_assert_true(g_file_set_contents(copy,"int transfer;\n",-1,NULL));
+        g_free(copy);
+        gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-scan")));
+        phase=3;
+        return G_SOURCE_CONTINUE;
+    }
+    if(phase==3)
+    {
+        if(!gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))) return G_SOURCE_CONTINUE;
+        GtkWidget *view=named(directory,"insight-directory-files");
+        GtkTreeModel *model=gtk_tree_view_get_model(GTK_TREE_VIEW(view));
+        GtkTreeIter iter;
+        gboolean found=FALSE;
+        gint name_column=gtk_tree_view_column_get_sort_column_id(gtk_tree_view_get_column(GTK_TREE_VIEW(view),0));
+        for(gboolean valid=gtk_tree_model_get_iter_first(model,&iter);valid;valid=gtk_tree_model_iter_next(model,&iter))
+        {
+            gchar *name=NULL;
+            gtk_tree_model_get(model,&iter,name_column,&name,-1);
+            found=!strcmp(name,"transfer.c");
+            g_free(name);
+            if(found)
+            {
+                GtkTreePath *path=gtk_tree_model_get_path(model,&iter);
+                gtk_tree_view_set_cursor(GTK_TREE_VIEW(view),path,NULL,FALSE);
+                gtk_tree_path_free(path);
+                break;
+            }
+        }
+        g_assert_true(found);
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-confirm")),FALSE);
+        gtk_button_clicked(GTK_BUTTON(named(directory,"insight-directory-operation-0")));
+        phase=4;
+        return G_SOURCE_CONTINUE;
+    }
+    if(!gtk_widget_get_sensitive(named(directory,"insight-directory-scan"))) return G_SOURCE_CONTINUE;
+    gchar *copy=g_build_filename(right,"transfer.c",NULL),*bytes=NULL;
+    g_assert_true(g_file_get_contents(copy,&bytes,NULL,NULL));
+    g_assert_cmpstr(bytes,==,"int transfer;\n");
+    g_free(bytes);
+    g_free(copy);
+    g_assert_false(gtk_widget_get_sensitive(named(directory,"insight-directory-operation-0")));
+    gtk_widget_destroy(directory);
+    gtk_menu_item_activate(GTK_MENU_ITEM(named(host,"insight-directory-menu")));
+    directory=window_named("insight-directory-window");
+    g_assert_nonnull(directory);
+    g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-confirm"))));
+    g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(named(directory,"insight-directory-known"))));
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(named(directory,"insight-directory-left"))),==,left);
+    g_assert_true(gtk_widget_get_sensitive(named(directory,"insight-directory-scan")));
+    g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(named(directory,"insight-directory-files"))),NULL),==,0);
+    gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(host,"menu_quit1")));
+    return G_SOURCE_REMOVE;
 }
 static gboolean timeout(gpointer data) { (void)data;g_error("Directory Compare native GUI timeout");return G_SOURCE_REMOVE; }
 int main(void) {
