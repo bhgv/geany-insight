@@ -41,11 +41,11 @@ static void native_values_context_reset(NativeDebug *session)
 }
 
 /* EN: Return an owned cleanup/root command for session; cleanup selects the queue.
- * Reload the inspected expression, retaining any entry draft. Return NULL when busy,
- * running or empty; capture the generation before dispatching root creation.
+ * Reload the inspected expression, retaining any entry draft. Root creation returns
+ * NULL when busy, running or empty; cleanup may proceed without a stopped target.
  * RU: Возвращает команду удаления/создания для session; cleanup выбирает очередь.
- * Перечитывает исследованное выражение, сохраняя черновик поля. При занятости,
- * работе цели и пустом выражении возвращает NULL; фиксирует поколение запроса. */
+ * Перечитывает исследованное выражение, сохраняя черновик. Создание при занятости,
+ * работе цели и пустом выражении даёт NULL; удаление не требует остановленной цели. */
 static gchar *native_values_next(NativeDebug *session, gboolean cleanup)
 {
     if (session->value_request != NATIVE_VALUE_NONE)

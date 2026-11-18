@@ -314,6 +314,12 @@ updates or by refreshing an already open tree. Press **Inspect Expression** to
 make the draft the active expression. Memory's automatic refresh is a separate
 setting.
 
+Actual editor with the multithreaded test program: automatic inspection follows
+`value = 211` in the second worker. The entry contains the unevaluated
+`shared_value` draft; the root row identifies the active expression.
+
+![Automatic inspection and independent draft](media/native-expression-follow.jpg)
+
 ## Data watchpoints and execution to cursor
 
 On a pause, select a local or a member in the value tree and choose

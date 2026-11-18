@@ -936,3 +936,5 @@ EXTRA_DIST += src/insight-languages-choice.inc
 dist_insightdocmedia_DATA += insight/docs/media/include-refresh.svg
 
 dist_insightdocmedia_DATA += insight/docs/media/include-profile.jpg
+
+dist_insightdocmedia_DATA += insight/docs/media/native-expression-follow.jpg

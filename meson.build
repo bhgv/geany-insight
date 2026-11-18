@@ -1293,3 +1293,19 @@ install_data('insight/docs/media/verilog-hierarchy.svg', install_dir: cdata.get(
 install_data('insight/docs/media/include-refresh.svg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
 
 install_data('insight/docs/media/include-profile.jpg', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
+
+# EN: Ship all native debugger guide illustrations in installed help.
+# RU: Устанавливает все иллюстрации руководства по встроенному отладчику.
+install_data(
+  'insight/docs/media/native-data-refresh.jpg',
+  'insight/docs/media/native-data-refresh.svg',
+  'insight/docs/media/native-debugger-entry.jpg',
+  'insight/docs/media/native-debugger-exit.jpg',
+  'insight/docs/media/native-entry-stop.svg',
+  'insight/docs/media/native-thread-context.svg',
+  'insight/docs/media/native-thread-policy.jpg',
+  'insight/docs/media/native-thread-values.jpg',
+  'insight/docs/media/native-threads.jpg',
+  'insight/docs/media/ssh-setup-debug.jpg',
+  'insight/docs/media/native-expression-follow.jpg',
+  install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
