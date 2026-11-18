@@ -272,6 +272,8 @@ static Merge *merge_new(GtkWidget *parent)
             m->history_ui->label=diff_history_label;
             m->undo=m->history_ui->undo;
             m->redo=m->history_ui->redo;
+            gtk_widget_set_name(m->undo,"insight-diff-undo");
+            gtk_widget_set_name(m->redo,"insight-diff-redo");
             GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,3);
             m->destination_kind=gtk_combo_box_text_new();
             const gchar *choices[]=

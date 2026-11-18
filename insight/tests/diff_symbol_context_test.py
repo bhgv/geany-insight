@@ -46,6 +46,14 @@ MAIN = r'''
  * RU: Проверяет принадлежность, неоднозначность и границы настоящих обработчиков без внешних файлов. */
 int main(void)
 {
+    InsightDiffSymbol scoped = {"Top.worker", 0, 2};
+    assert(diff_symbol_matches(&scoped, "worker"));
+    assert(!diff_symbol_matches(&scoped, "work"));
+    assert(!diff_symbol_matches(&scoped, "Top"));
+    scoped.name = "Box::work";
+    assert(diff_symbol_matches(&scoped, "work"));
+    scoped.name = "bad\xff";
+    assert(!diff_symbol_matches(&scoped, "bad"));
     char source[] = "abcdefghijklmnopqrst";
     InsightDiffSymbol outer = {"Outer",0,20}, inner = {"Inner",3,12};
     InsightDiffSymbol right = {"Renamed",3,12}, ambiguous = {"Other",3,12};
@@ -102,6 +110,7 @@ class SnapshotSymbolContext(unittest.TestCase):
             self.skipTest('Needs cc and GLib runtime.')
         helpers = ''.join(function('src/insight-diff/symbol-context.inc', name)
                           for name in ('diff_symbols_owner', 'diff_symbols_hunk'))
+        helpers += function('src/insight-diff/symbol-navigation.inc', 'diff_symbol_matches')
         helpers += ''.join(function('src/insight-diff-symbols.c', name)
                            for name in ('diff_symbol_word', 'diff_symbol_token', 'diff_symbol_named',
                                         'diff_symbol_line_end', 'diff_symbol_verilog'))

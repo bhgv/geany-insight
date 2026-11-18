@@ -965,3 +965,5 @@ EXTRA_DIST += insight/tests/diff-gui/legacy.inc insight/tests/diff-gui/modes.inc
 EXTRA_DIST += insight/tests/file_compare_gui_test.c
 
 EXTRA_DIST += insight/tests/diff-gui/hunks-and-navigation.inc insight/tests/diff-gui/overview-and-lifetime.inc insight/tests/diff-gui/preferences-and-review.inc
+
+EXTRA_DIST += insight/tests/diff-gui/symbol-navigation.inc

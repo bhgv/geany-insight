@@ -2,8 +2,11 @@
 /* EN: Literal and regular-expression search over comparison snapshots.
  * RU: Буквальный и регулярный поиск по снимкам сравнения. */
 
-static gboolean identifier_char(gunichar c) {
- return c=='_' || g_unichar_isalnum(c) || g_unichar_ismark(c);
+/* EN: Return whether c belongs to an identifier, including Verilog dollar names; no side effects.
+ * RU: Возвращает принадлежность c идентификатору, включая доллар в Verilog; без побочных эффектов. */
+static gboolean identifier_char(gunichar c)
+{
+    return c == '_' || c == '$' || g_unichar_isalnum(c) || g_unichar_ismark(c);
 }
 static gboolean search_match(GtkTextIter start,const gchar *query,GtkTextSearchFlags flags,
  gboolean backwards,gboolean whole,GtkTextIter *a,GtkTextIter *z) {

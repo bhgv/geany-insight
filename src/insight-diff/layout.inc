@@ -93,6 +93,7 @@ static gboolean diff_mode_balance(gpointer data)
 static void file_compare_layout(Merge *m)
 {
     m->file_layout = TRUE;
+    diff_symbol_tools(m);
     gtk_orientable_set_orientation(GTK_ORIENTABLE(m->outer_pane), GTK_ORIENTATION_HORIZONTAL);
     gtk_widget_set_size_request(m->list_scroll, 180, -1);
     gtk_paned_set_position(GTK_PANED(m->outer_pane), 320);

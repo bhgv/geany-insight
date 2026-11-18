@@ -3534,3 +3534,12 @@ File Compare	Сравнение файлов
 File Compare — unsaved result	Сравнение файлов — результат не сохранён
 Left: %s	Слева: %s
 Right: %s	Справа: %s
+No indexed definition in this snapshot.	В этом снимке нет индексированного определения.
+Definitions in this snapshot	Определения в этом снимке
+Place the caret on one identifier in a source pane.	Установите курсор на идентификатор в исходнике.
+Go to definition — F12	К определению — F12
+Text occurrences in snapshot — Shift+F12	Текстовые вхождения в снимке — Shift+F12
+Back — Ctrl+Alt+Left	Назад — Ctrl+Alt+Влево
+Definition	Определение
+Text occurrences…	Текстовые вхождения…
+Definitions use this version only. Occurrences are case-sensitive whole-word text matches, including comments and strings.	Определения берутся только из этой версии. Вхождения — текстовые совпадения целого слова с учётом регистра, включая комментарии и строки.

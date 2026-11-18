@@ -12,6 +12,7 @@ typedef struct {
  GtkWidget *mode, *outer_pane, *result_panel;
  GtkTreeViewColumn *symbol_column, *merge_column;
  GPtrArray *symbols[2];
+ GArray *symbol_history;
  gboolean memory,review_ready,review_locked;GtkWidget *apply,*review_tools;InsightDiffApply apply_cb;InsightDiffAsk ask_cb;gpointer review_data;GDestroyNotify review_destroy;
  GtkWidget *toolbar,*answer_page,*answer_left,*answer_right;GPtrArray *answers;gchar *answer_base,*syntax_path;guint answer_l,answer_r,syntax_idle;gboolean answer_sync;GtkTextBuffer *syntax_buffers[3];
  InsightHistoryUI *history_ui;GtkWidget *headers[3],*destination,*destination_kind;GtkTreeViewColumn *file_columns[2];guchar *resolutions;

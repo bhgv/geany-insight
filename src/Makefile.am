@@ -436,6 +436,7 @@ libgeany_la_SOURCES += \
 	../insight/desktop/directory_compare.h \
 	insight-diff/layout.inc \
 	insight-diff/symbol-context.inc \
+	insight-diff/symbol-navigation.inc \
 	insight-diff/state.inc \
 	insight-diff/history.inc \
 	insight-diff/navigation.inc \

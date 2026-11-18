@@ -4,6 +4,7 @@
     g_setenv("GSETTINGS_BACKEND","memory",TRUE);
     gtk_init(&argc,&argv);
     file_compare_modes_test();
+    file_compare_symbol_navigation_test();
     line_navigation_test();
     search_options_test();
     replace_test();

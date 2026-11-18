@@ -15,6 +15,7 @@ static gboolean closing(GtkWidget *w,GdkEvent *event,gpointer data) { (void)w;(v
 static void clear_diff(Merge *m)
 {
     for(guint side=0;side<2;side++) g_clear_pointer(&m->symbols[side],g_ptr_array_unref);
+    g_clear_pointer(&m->symbol_history, g_array_unref);
     alignment_clear(m);
     for(size_t i=0;i<2*m->diff.count;i++) gtk_text_buffer_delete_mark(result(m),m->marks[i]);
     g_clear_pointer(&m->resolutions,g_free);
@@ -81,5 +82,6 @@ static void destroyed(GtkWidget *w,gpointer data)
     g_free(m->saved);
     g_object_unref(m->list);
     if(m->review_destroy) m->review_destroy(m->review_data);
+    g_clear_pointer(&m->symbol_history, g_array_unref);
     g_free(m);
 }

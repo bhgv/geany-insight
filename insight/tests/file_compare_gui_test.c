@@ -96,7 +96,8 @@ static gboolean context(GtkWidget *window, const gchar *fragment, gboolean exact
 static void click(GtkWidget *window, const gchar *name)
 {
     GtkWidget *button = find(window, name);
-    g_assert_nonnull(button);
+    if (!button)
+        g_error("Missing File Compare control: %s (phase %u)", name, phase);
     g_assert_true(gtk_widget_is_sensitive(button));
     gtk_button_clicked(GTK_BUTTON(button));
 }
@@ -209,7 +210,7 @@ static gboolean drive(gpointer data)
         g_assert_cmpstr(value, ==, retained);
         g_free(value);
         gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(mode), TRUE);
-        click(window, "Undo");
+        click(window, "insight-diff-undo");
         value = text(result_view);
         g_assert_cmpstr(value, ==, left_code);
         g_free(value);
@@ -224,6 +225,21 @@ static gboolean drive(gpointer data)
         g_assert_true(context(window, "value", FALSE));
         g_assert_true(context(window, "Top", TRUE));
         g_assert_false(context(window, "alpha", FALSE));
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(find(window, "insight-diff-left")));
+        gchar *snapshot = text(find(window, "insight-diff-left"));
+        const gchar *call = strstr(snapshot, "value =");
+        g_assert_nonnull(call);
+        gint original = g_utf8_pointer_to_offset(snapshot, call);
+        GtkTextIter at;
+        gtk_text_buffer_get_iter_at_offset(buffer, &at, original);
+        gtk_text_buffer_place_cursor(buffer, &at);
+        click(window, "insight-diff-symbol-0-0");
+        gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+        g_assert_cmpint(gtk_text_iter_get_line(&at), ==, 4);
+        click(window, "insight-diff-symbol-0-2");
+        gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+        g_assert_cmpint(gtk_text_iter_get_offset(&at), ==, original);
+        g_free(snapshot);
         g_print("File Compare GTK: side list, two-source default, C++/Verilog snapshot symbols, different live buffer, explicit merge and retained Undo passed.\n");
         passed = TRUE;
         gtk_widget_destroy(window);

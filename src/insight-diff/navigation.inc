@@ -127,7 +127,7 @@ static gboolean key(GtkWidget *w,GdkEventKey *event,gpointer data)
         }
     }
     if(m->busy) return FALSE;
-    if((event->state&GDK_MOD1_MASK) && (event->keyval==GDK_KEY_Left || event->keyval==GDK_KEY_Right))
+    if((event->state&GDK_MOD1_MASK) && !(event->state&GDK_CONTROL_MASK) && (event->keyval==GDK_KEY_Left || event->keyval==GDK_KEY_Right))
     {
         gint side=event->keyval==GDK_KEY_Right;
         if(event->state&GDK_SHIFT_MASK) take_all(m->take_all[side],m);

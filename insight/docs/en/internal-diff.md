@@ -353,3 +353,9 @@ Use **Compare** to apply new paths or comparison settings. Switching modes write
 ![File Compare modes](../media/file-compare-modes.svg)
 
 Mode schematic: source panes remain read-only; switching retains Result and its history.
+
+## Navigation within compared versions
+
+Each source offers **Definition (F12)**, **Text occurrences (Shift+F12)** and **Back (Ctrl+Alt+Left)**. Place the caret on a name or select one identifier. Definitions resolve against functions, methods and compound definitions captured for that side only. Multiple candidates open a scope/line chooser. Missing definitions never fall through to another version or the live editor buffer.
+
+Occurrences use the internal case-sensitive whole-word text search, including comments and strings; they are textual matches rather than proven semantic references. The result list retains filtering, context preview and match navigation. Back retains up to 128 definition jump positions; a successful new comparison clears them. Navigation leaves Result and Undo unchanged. AI review retains its existing behavior.
