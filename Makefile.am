@@ -959,3 +959,9 @@ dist_insightpythondebug_DATA = insight/tools/python-debug/io.py
 EXTRA_DIST += insight/tests/python_debug_io_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/script-debugger-read.jpg
+
+EXTRA_DIST += insight/tests/diff-gui/legacy.inc insight/tests/diff-gui/modes.inc insight/tests/diff_symbol_context_test.py
+
+EXTRA_DIST += insight/tests/file_compare_gui_test.c
+
+EXTRA_DIST += insight/tests/diff-gui/hunks-and-navigation.inc insight/tests/diff-gui/overview-and-lifetime.inc insight/tests/diff-gui/preferences-and-review.inc

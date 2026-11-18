@@ -134,3 +134,5 @@ Redo. Hover an event for Before/After: grey before, red after. The same controls
 serve text, AI proposals, binary and streaming Result. Git and snapshot windows
 remain read only; their labels and difference table headers identify the sources,
 and help overlays do not allocate a separate blank row.
+
+Ordinary File Compare places its block list to the left of two sources. **Merge mode** reveals Result and preserves its text and Undo across switches. AI review retains its previous layout.

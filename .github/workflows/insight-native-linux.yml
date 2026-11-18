@@ -193,6 +193,7 @@ jobs:
           python3 insight/tests/c_operator_tokens_test.py
           python3 insight/tests/hdl_instance_models_test.py
           python3 -m unittest discover -s insight/tests -p 'native_debugger*_test.py' -v
+          python3 insight/tests/diff_symbol_context_test.py
           python3 insight/tests/script_debugger_frame_test.py
           python3 -B insight/tests/python_debug_io_test.py
           python3 insight/tests/install_fonts_test.py
@@ -234,6 +235,21 @@ jobs:
             include-profile.jpg
             _native/meson-logs/testlog.txt
           retention-days: 3
+      - name: Verify File Compare layout and captured symbol contexts
+        run: |
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_FILE_COMPARE_CAPTURE="$PWD/file-compare-code.jpg" INSIGHT_FILE_MERGE_CAPTURE="$PWD/file-compare-merge.jpg" INSIGHT_CI_DIAGNOSTIC_FILE=file-compare-native.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_file_compare_gui
+          LANG=C.UTF-8 GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_CI_DIAGNOSTIC_FILE=file-compare-regression.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a meson test -C _native --print-errorlogs 'Insight isolated Diff Merge GUI'
+      - name: Publish File Compare diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: file-compare-diagnostics
+          path: |
+            file-compare-*.log
+            file-compare-code.jpg
+            file-compare-merge.jpg
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Exercise native GDB values and data watchpoints
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |

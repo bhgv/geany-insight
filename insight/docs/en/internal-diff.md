@@ -4,8 +4,8 @@ Open the internal comparison window from **Tools → Diff / Merge…**. The Cont
 
 Open **Diff / Merge…** in the Context header. Choose Left and Right files and press
 **Compare**. The nonmodal window displays both read-only sources, highlights changed
-lines and lists changed blocks. Selecting a block scrolls all three panes to it.
-The editable result initially contains Left. **Take Left** / **Take Right** replaces
+lines and lists changed blocks in the left sidebar with their symbol context. Selecting a block scrolls both sources to it.
+Enable **Merge mode** to show the editable Result and merge tools. The result initially contains Left. **Take Left** / **Take Right** replaces
 only the selected block; either version can be chosen repeatedly. Empty blocks
 represent insertions or deletions. Manual edits are allowed in the result.
 
@@ -341,3 +341,11 @@ All three code panes use the editor lexer and palette for the file type. Colorin
 ![Tabs and answer comparison](../media/diff-answer-tabs.svg)
 
 [Shared comparison layout / Единое оформление сравнений](comparison-layout.md).
+
+## File Compare browsing and merge mode
+
+Ordinary file comparisons open in browsing mode: differences on the left and two source versions on the right. Line numbers, alignment and linked scrolling remain available. Sources are read-only. **Merge mode** reveals Result below the sources and the merge/replace tool pages. Switching preserves Result and its Undo history; Ctrl+Z/Ctrl+Y cannot edit a hidden Result. Choosing Result in search or line navigation enables merge mode. F6 cycles only between the two sources while browsing. AI proposal review retains its existing review behavior.
+
+**Symbol / scope** identifies a definition containing the entire changed block. C/C++ supports functions, methods and recognized compound definitions; Verilog/SystemVerilog supports modules, functions/tasks and recognized related constructs. The bundled parser reads each compared snapshot, independently of the live buffer or another version’s project index. Different names show both versions. Extents are lexical: macros and build configurations are not evaluated. Ambiguous, cross-definition and unsupported blocks show **No symbol context** and retain their line ranges. Row tooltips expose the complete label.
+
+Use **Compare** to apply new paths or comparison settings. Switching modes writes no files. An unsaved hidden Result retains its dirty title and the normal close guard.

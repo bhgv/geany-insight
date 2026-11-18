@@ -434,6 +434,20 @@ libgeany_la_SOURCES += \
 	insight-directory.h \
 	../insight/desktop/directory_compare.c \
 	../insight/desktop/directory_compare.h \
+	insight-diff/layout.inc \
+	insight-diff/symbol-context.inc \
+	insight-diff/state.inc \
+	insight-diff/history.inc \
+	insight-diff/navigation.inc \
+	insight-diff/search.inc \
+	insight-diff/editing.inc \
+	insight-diff/rendering.inc \
+	insight-diff/lifecycle.inc \
+	insight-diff/blocks.inc \
+	insight-diff/comparison.inc \
+	insight-diff/window-tools.inc \
+	insight-diff/window.inc \
+	insight-diff/review.inc \
 	insight-diff.c insight-hex.c insight-hex.h insight-stream.c insight-stream.h insight-stream-ui.c insight-stream-ui.h insight-history-ui.h \
 	insight-diff.h insight-compare-ui.h \
 	insight-template-fields.c \
@@ -458,7 +472,7 @@ libgeany_la_SOURCES += \
 	insight-browser-mode.c insight-browser-mode.h \
 	insight-navigation.c insight-navigation.h \
 	insight-command-list.c insight-command-list.h \
-	insight-diff-syntax.c insight-diff-syntax.h \
+	insight-diff-symbols.c insight-diff-syntax.c insight-diff-syntax.h \
 	insight-ai-profiles.c insight-ai-profiles.h \
 	insight-web-search.c insight-web-search.h \
 	../insight/desktop/web_search.c ../insight/desktop/web_search.h \

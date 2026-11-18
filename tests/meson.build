@@ -1032,3 +1032,5 @@ test('Insight mixed C C++ HDL includes GUI', mixed_includes_gui_test, timeout: 5
 
 executable('test_insight_script_debugger_lifecycle_gui',
   '../insight/tests/script_debugger_lifecycle_gui_test.c', dependencies: test_deps)
+
+executable('test_insight_file_compare_gui', '../insight/tests/file_compare_gui_test.c', dependencies: test_deps)

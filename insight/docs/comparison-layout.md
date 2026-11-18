@@ -140,3 +140,5 @@ Base64 экспортируется потоково через временны
 после красным. Управление общее для текста, ИИ-предложений, бинарного и
 потокового результата. Git и снимки остаются только для чтения; источники
 подписаны в панелях и таблицах, справка накладывается без отдельной пустой строки.
+
+Ordinary File Compare places its block list to the left of two sources. **Merge mode** reveals Result and preserves its text and Undo across switches. AI review retains its previous layout.

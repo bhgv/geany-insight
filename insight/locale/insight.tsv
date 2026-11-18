@@ -3526,3 +3526,11 @@ Cannot inspect the selected Lua frame.	Не удалось исследоват�
 Pause requested; provide input or EOF to reach the next Python source line.	Запрошена пауза; отправьте текст или EOF, чтобы перейти к следующей строке Python.
 Pause requested; waiting for the next Python source line.	Запрошена пауза; ожидается следующая строка исходника Python.
 Pause takes effect at the next Python source line. While input is pending, send text or EOF first.	Пауза срабатывает на следующей строке Python. При ожидании ввода сначала отправьте текст или EOF.
+Merge mode	Режим сведения
+Show editable Result and merge tools. Switching modes preserves Result and Undo history.	Показывает редактируемый Result и команды сведения. Переключение сохраняет результат и историю отмены.
+Symbol / scope	Символ / область
+No symbol context	Нет контекста символа
+File Compare	Сравнение файлов
+File Compare — unsaved result	Сравнение файлов — результат не сохранён
+Left: %s	Слева: %s
+Right: %s	Справа: %s
