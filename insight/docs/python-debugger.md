@@ -396,3 +396,7 @@ when the interpreter supplies it.
 **Stop** ends the current VM and clears frame-selector rows, selected context, stack text and value comparisons. Source navigation and stepping become unavailable; the source snapshot, breakpoints and observer log remain. **Restart** creates a fresh VM from the original snapshot and starts at frame `#0`. Normal completion and execution errors leave no stale selectable frames.
 
 If a frame-selection request fails, the selector returns to the last accepted frame instead of displaying an unaccepted selection.
+
+Shared script-debugger interface after **Stop**: the production Python window with an isolated test program. Frame rows and stack are empty, stepping and source navigation are unavailable, and Restart remains available.
+
+![Cleared context after Stop](media/script-debugger-stop.jpg)
