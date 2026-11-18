@@ -22,7 +22,10 @@ typedef enum {
     NATIVE_CONTEXT_NONE, NATIVE_CONTEXT_THREADS, NATIVE_CONTEXT_STACK,
     NATIVE_CONTEXT_SELECT_THREAD, NATIVE_CONTEXT_SELECT_FRAME, NATIVE_CONTEXT_ALL_STACK
 } NativeContextRequest;
+typedef struct {char *value;} NativeWatch;
 typedef struct {
+    GtkTreeStore *local_rows;
+    GPtrArray *locals, *expressions;
     GtkTreeStore *stack_rows;
     GtkTreeView *stack;
     GtkWidget *threads;
@@ -48,7 +51,9 @@ extern void g_ptr_array_set_size(GPtrArray *, guint);
 extern void g_ptr_array_unref(GPtrArray *);
 static NativeDebug *active;
 static char *picked_frame, *picked_thread;
-static guint reset_count, source_count, fill_count, all_stacks_count, sent_count;
+static guint reset_count, source_count, fill_count, all_stacks_count, sent_count, refresh_count;
+extern void gtk_tree_store_clear(GtkTreeStore *);
+#define gtk_list_store_clear gtk_tree_store_clear
 extern GtkTreePath *gtk_tree_path_new_from_indices(int, ...);
 extern int gtk_tree_model_get_iter(GtkTreeModel *, GtkTreeIter *, GtkTreePath *);
 /* EN: Return the nonvisual dialog's session; object/key identify the normal GObject association.
@@ -171,6 +176,17 @@ static void native_values_reset(NativeDebug *session)
     reset_count++;
 }
 
+/* EN: Verify session publishes no old locals or watch value; compare must be false on context changes.
+ * RU: Проверяет отсутствие старых переменных и наблюдений session; compare при смене контекста выключен. */
+static void native_watch_refresh(NativeDebug *session, gboolean compare)
+{
+    assert(!compare && !session->locals->len);
+    assert(!gtk_tree_model_iter_n_children(session->local_rows, NULL));
+    NativeWatch *watch = session->expressions->pdata[0];
+    assert(!strcmp(watch->value, "Refreshing selected context…"));
+    refresh_count++;
+}
+
 /* EN: Copy filename for the fixture; no locale conversion is needed for its ASCII paths.
  * RU: Копирует filename фикстуры; её ASCII-пути не требуют перекодировки локали. */
 static char *utils_get_locale_from_utf8(const char *filename)
@@ -219,6 +235,13 @@ int main(int argc, char **argv)
     assert(argc == 2);
     NativeDebug session = {.ready = TRUE, .stopped = TRUE};
     active = &session;
+    NativeWatch watch = {.value = g_strdup("old-frame-value")};
+    session.locals = g_ptr_array_new();
+    g_ptr_array_add(session.locals, &watch);
+    session.expressions = g_ptr_array_new();
+    g_ptr_array_add(session.expressions, &watch);
+    session.local_rows = gtk_tree_store_new(1, G_TYPE_STRING);
+    gtk_tree_store_insert_with_values(session.local_rows, NULL, NULL, -1, 0, "old-local", -1);
     session.stop_markers = g_ptr_array_new();
     g_ptr_array_add(session.stop_markers, (void *)1);
     session.stack_rows = gtk_tree_store_new(5, G_TYPE_STRING, G_TYPE_STRING,
@@ -330,7 +353,18 @@ int main(int argc, char **argv)
         }
     }
     assert(fill_count == (stack ? 1u : 0u) && !all_stacks_count);
+    assert(refresh_count == (success ? 1u : 0u));
+    if (!success)
+    {
+        assert(session.locals->len == 1);
+        assert(gtk_tree_model_iter_n_children(session.local_rows, NULL) == 1);
+        assert(!strcmp(watch.value, "old-frame-value"));
+    }
 cleanup:
+    g_free(watch.value);
+    g_ptr_array_unref(session.locals);
+    g_ptr_array_unref(session.expressions);
+    g_object_unref(session.local_rows);
     g_free(session.selected_thread);
     g_free(session.selected_frame);
     g_free(session.requested_frame);
@@ -355,7 +389,7 @@ class NativeContextRequests(unittest.TestCase):
         declarations += STATE
         helpers = [function('src/insight-debuggers/gdb-source-markers.inc', 'native_source_stopped')]
         helpers += [function('src/insight-debuggers/gdb-context.inc', name)
-                   for name in ('native_debug_field', 'native_context_id', 'native_selected_frame', 'native_context_restore', 'native_context_reply')]
+                   for name in ('native_debug_field', 'native_context_id', 'native_selected_frame', 'native_context_restore', 'native_context_clear_data', 'native_context_reply')]
         helpers += [function('src/insight-debuggers/gdb-context-navigation.inc', name)
                     for name in ('native_select_frame', 'native_open_frame')]
         with tempfile.TemporaryDirectory() as directory:

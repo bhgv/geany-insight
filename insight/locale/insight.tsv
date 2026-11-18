@@ -3513,3 +3513,4 @@ Waiting for GDB to confirm the thread policy…	Ожидание подтвер�
 Pause to read the target's thread execution policy.	Приостановите программу для чтения режима выполнения потоков цели.
 step locks other threads for Step Into/Over; Continue and Step Out allow them. on keeps other threads stopped, including on Continue.	step блокирует остальные потоки при Step Into/Over; Continue и Step Out разрешают их. on удерживает остальные потоки, в том числе при Continue.
 Refresh thread stacks	Обновить стеки потоков
+Refreshing selected context…	Обновление выбранного контекста…

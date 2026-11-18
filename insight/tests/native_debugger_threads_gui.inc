@@ -12,6 +12,8 @@ static gboolean threads_gui_frame(GtkWidget *window, const gchar *worker, const 
     GtkWidget *tree = find(window, "insight-gdb-all-thread-stacks");
     if (!tree || !gtk_widget_is_sensitive(tree))
         return FALSE;
+    if (!gtk_widget_is_sensitive(tree))
+        return FALSE;
     GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
     GtkTreeIter root, child;
     for (gboolean valid = gtk_tree_model_get_iter_first(model, &root); valid;

@@ -213,6 +213,23 @@ static void native_context_restore(NativeDebug *session, NativeContextRequest re
     session->filling_context = FALSE;
 }
 
+/* EN: Remove session's old frame data after a confirmed context change and publish
+ * pending watch placeholders. Keep expressions; failed selections do not call this.
+ * RU: Удаляет прежние данные кадра session после подтверждённой смены контекста
+ * и показывает ожидание наблюдений. Выражения сохраняет; при ошибке не вызывается. */
+static void native_context_clear_data(NativeDebug *session)
+{
+    g_ptr_array_set_size(session->locals, 0);
+    gtk_list_store_clear(session->local_rows);
+    for (guint i = 0; i < session->expressions->len; i++)
+    {
+        NativeWatch *watch = session->expressions->pdata[i];
+        g_free(watch->value);
+        watch->value = g_strdup(insight_tr("Refreshing selected context…"));
+    }
+    native_watch_refresh(session, FALSE);
+}
+
 /* EN: Apply GDB context result record to session's stack/values; failed selections restore the confirmed picker.
  * Only successful selections invalidate values and schedule source/watch refreshes; returns no value.
  * RU: Применяет ответ контекста GDB record к стеку/значениям session; ошибка выбора возвращает подтверждённую строку.
@@ -304,6 +321,7 @@ static void native_context_reply(NativeDebug *session, const gchar *record)
     {
         session->locals_needed = TRUE;
         session->watch_next = 0;
+        native_context_clear_data(session);
     }
 }
 

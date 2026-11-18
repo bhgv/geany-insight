@@ -494,3 +494,5 @@ on a disabled location prevent Save with an explanation, preserving the old file
 Instructions, names, hardware points, source navigation and address history are described in the separate guide.
 
 [Disassembly and code navigation](native-disassembly.md)
+
+After a confirmed thread or frame change, previous locals disappear immediately and saved expressions show “Refreshing selected context…” until GDB replies. Expression names are retained. A rejected selection preserves the confirmed context’s values. The graph header shows `?` while the frame ID is not yet confirmed.

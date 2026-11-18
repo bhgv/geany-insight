@@ -45,7 +45,7 @@ static void native_watch_refresh(NativeDebug *session, gboolean compare)
     graph->node_count = 1;
     g_snprintf(graph->nodes[0].label, sizeof graph->nodes[0].label, "GDB: %s / #%s",
                session->selected_thread ? session->selected_thread : "—",
-               session->selected_frame ? session->selected_frame : "0");
+               session->selected_frame ? session->selected_frame : "?");
     for (guint i = 0; i < session->expressions->len; i++)
     {
         NativeWatch *watch = session->expressions->pdata[i];
