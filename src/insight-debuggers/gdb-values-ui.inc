@@ -16,8 +16,10 @@ static void native_value_named_cell(GtkTreeViewColumn *column, GtkCellRenderer *
     g_free(raw);
 }
 
-/* EN: Schedule inspection of session's expression after invalidating the previous frame snapshot.
- * RU: Запрашивает выражение session после сброса предыдущего снимка кадра. */
+/* EN: Explicitly inspect expression in idle stopped session and retain it for reloads.
+ * Entry drafts remain independent of the saved expression; busy/empty requests do nothing.
+ * RU: Явно исследует expression в свободном приостановленном session и сохраняет
+ * его для обновления. Черновики независимы; занятый сеанс и пустой запрос игнорируются. */
 static void native_values_inspect(NativeDebug *session, const gchar *expression)
 {
     if (!session->ready || !session->stopped || session->pending || session->writing || !*expression)
@@ -25,7 +27,8 @@ static void native_values_inspect(NativeDebug *session, const gchar *expression)
     gchar *copy = g_strdup(expression);
     native_values_reset(session);
     gtk_entry_set_text(GTK_ENTRY(session->value_expression), copy);
-    g_free(copy);
+    g_free(session->value_pending_expression);
+    session->value_pending_expression = copy;
     session->value_reload = TRUE;
     GtkWidget *page = gtk_widget_get_parent(session->value_status);
     gtk_notebook_set_current_page(GTK_NOTEBOOK(session->tabs),
@@ -198,6 +201,12 @@ static GtkWidget *native_values_widget(NativeDebug *session)
                        FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(page), bar, FALSE, FALSE, 0);
     g_ptr_array_add(session->paused_controls, bar);
+    session->value_auto = gtk_check_button_new_with_label(insight_tr("Refresh inspected expression at each stop"));
+    gtk_widget_set_name(session->value_auto, "insight-gdb-values-auto");
+    gtk_widget_set_tooltip_text(session->value_auto, insight_tr(
+        "Re-evaluate the last inspected expression after stops and thread/frame changes. Draft edits require Inspect Expression."));
+    gtk_box_pack_start(GTK_BOX(page), session->value_auto, FALSE, FALSE, 0);
+    g_ptr_array_add(session->paused_controls, session->value_auto);
     session->value_rows = gtk_tree_store_new(8, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING,
         G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_UINT, G_TYPE_UINT, G_TYPE_UINT);
     session->value_tree = gtk_tree_view_new_with_model(GTK_TREE_MODEL(session->value_rows));

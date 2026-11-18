@@ -170,7 +170,7 @@ static void native_fill_context(NativeDebug *session, const char *record, gboole
 
 /* EN: Count invalidation of session's value context after a confirmed selection.
  * RU: Считает сброс контекста значений session после подтверждённого выбора. */
-static void native_values_reset(NativeDebug *session)
+static void native_values_context_reset(NativeDebug *session)
 {
     (void)session;
     reset_count++;

@@ -91,7 +91,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
             {
                 if (session->assembly)
                     session->assembly->follow_needed = TRUE;
-                native_values_reset(session);
+                native_values_context_reset(session);
                 g_free(session->stop_detail);
                 session->stop_detail = native_catch_stop_detail(session, line);
                 if (!session->stop_detail)
@@ -148,7 +148,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
                 {
                     if (session->thread_policy)
                         session->thread_policy->needed = TRUE;
-                    native_values_reset(session);
+                    native_values_context_reset(session);
                     g_clear_pointer(&session->selected_thread, g_free);
                     g_clear_pointer(&session->selected_frame, g_free);
                     session->threads_needed = session->stack_needed = session->locals_needed = TRUE;

@@ -138,7 +138,7 @@ static gboolean native_remote_reply(NativeDebug *session, const gchar *record)
              * RU: Некоторые версии GDB сообщают начальную остановку только через ^connected. */
             session->running = FALSE;
             session->stopped = TRUE;
-            native_values_reset(session);
+            native_values_context_reset(session);
             session->threads_needed = session->stack_needed = session->locals_needed = TRUE;
             session->watch_next = 0;
             native_debug_observe(session, record);

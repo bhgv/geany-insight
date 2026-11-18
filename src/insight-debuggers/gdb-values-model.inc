@@ -23,8 +23,29 @@ static void native_values_reset(NativeDebug *session)
         insight_tr("Pause, choose a thread and frame, then inspect an expression."));
 }
 
-/* EN: Return a cleanup or root-creation command for session; cleanup selects which queue is considered.
- * RU: Возвращает команду удаления либо создания корня session; cleanup выбирает тип очереди. */
+/* EN: Invalidate session's stopped context and optionally reload the last explicitly
+ * inspected expression. Draft input never enables automatic evaluation; running targets
+ * and the default unchecked option leave the tree empty. No command is sent here.
+ * RU: Сбрасывает контекст session и при необходимости перечитывает последнее явно
+ * исследованное выражение. Черновик не включает автоматическое вычисление; при работе
+ * цели и выключенном флажке дерево пусто. Команды здесь не отправляются. */
+static void native_values_context_reset(NativeDebug *session)
+{
+    native_values_reset(session);
+    session->value_reload = session->stopped && session->value_auto &&
+        gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(session->value_auto)) &&
+        session->value_pending_expression && *session->value_pending_expression;
+    if (session->value_reload)
+        gtk_label_set_text(GTK_LABEL(session->value_status),
+            insight_tr("Refreshing selected context…"));
+}
+
+/* EN: Return an owned cleanup/root command for session; cleanup selects the queue.
+ * Reload the inspected expression, retaining any entry draft. Return NULL when busy,
+ * running or empty; capture the generation before dispatching root creation.
+ * RU: Возвращает команду удаления/создания для session; cleanup выбирает очередь.
+ * Перечитывает исследованное выражение, сохраняя черновик поля. При занятости,
+ * работе цели и пустом выражении возвращает NULL; фиксирует поколение запроса. */
 static gchar *native_values_next(NativeDebug *session, gboolean cleanup)
 {
     if (session->value_request != NATIVE_VALUE_NONE)
@@ -42,14 +63,16 @@ static gchar *native_values_next(NativeDebug *session, gboolean cleanup)
         return command;
     }
     session->value_reload = FALSE;
-    const gchar *expression = gtk_entry_get_text(GTK_ENTRY(session->value_expression));
+    const gchar *expression = session->value_pending_expression ? session->value_pending_expression :
+                              gtk_entry_get_text(GTK_ENTRY(session->value_expression));
     if (!session->stopped || !*expression)
         return NULL;
+    gchar *copy = g_strdup(expression);
     g_free(session->value_pending_expression);
-    session->value_pending_expression = g_strdup(expression);
+    session->value_pending_expression = copy;
     session->value_request = NATIVE_VALUE_CREATE;
     session->value_pending_generation = session->value_generation;
-    gchar *escaped = g_strescape(expression, NULL);
+    gchar *escaped = g_strescape(session->value_pending_expression, NULL);
     gchar *command = g_strdup_printf("-var-create insight_value_%u * \"%s\"",
                                      ++session->value_serial, escaped);
     g_free(escaped);

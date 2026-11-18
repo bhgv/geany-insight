@@ -282,8 +282,23 @@ and use **Change selected value**. Enter a C/C++ value expression and apply
 it. This modifies the paused program in the selected thread/frame. On success,
 locals, watches and graph values refresh; an existing tree is re-created and
 can be expanded again. Rejected writes preserve the previous snapshot and
-show GDB's error. Run, stop and thread/frame changes clear the tree; inspect
+show GDB's error. Run, stop and thread/frame changes clear the tree; with automatic refresh off, inspect
 the expression again in the new context. Stale asynchronous replies are discarded.
+
+### Follow an inspected expression
+
+Enable **Refresh inspected expression at each stop** on **Inspect values** to
+re-evaluate the last expression explicitly submitted with **Inspect Expression**
+after stops and confirmed thread/frame changes. This session option is off by
+default. It starts no inspection until an expression has been submitted.
+The root is recreated for the selected context; expand members again to load
+their current values. Expressions unavailable in a new frame show GDB's error
+and can be retried automatically at the next stop.
+
+Draft edits in the entry remain untouched and are not evaluated by automatic
+updates or by refreshing an already open tree. Press **Inspect Expression** to
+make the draft the active expression. Memory's automatic refresh is a separate
+setting.
 
 ## Data watchpoints and execution to cursor
 

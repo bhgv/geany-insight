@@ -185,6 +185,11 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 6 && threads_gui_value(window, "111"))
     {
+        GtkWidget *automatic = find(window, "insight-gdb-values-auto");
+        g_assert_nonnull(automatic);
+        g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(automatic)));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(automatic), TRUE);
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-inspect-expression")), "shared_value");
         gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-memory-address")), "&value");
         gtk_spin_button_set_value(GTK_SPIN_BUTTON(find(window, "insight-gdb-memory-size")), 4);
         if (click(window, "Read Memory"))
@@ -196,12 +201,22 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 8 && threads_gui_context(window, thread, frame, "211", "2007"))
     {
         g_assert_false(threads_gui_value(window, "111"));
-        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-inspect-expression")), "value");
-        if (click(window, "Inspect Expression"))
-            phase = 9;
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-inspect-expression"))),
+                        ==, "shared_value");
+        phase = 9;
     }
     else if (phase == 9 && threads_gui_value(window, "211"))
     {
+        GtkWidget *view = find(window, "insight-gdb-value-tree");
+        GtkWidget *page = gtk_widget_get_parent(gtk_widget_get_parent(view));
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        gtk_window_present(GTK_WINDOW(window));
+        gtk_widget_queue_draw(window);
+        phase = 21;
+    }
+    else if (phase == 21)
+    {
+        native_exit_gui_capture(window, "INSIGHT_GDB_VALUE_FOLLOW_CAPTURE");
         gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-memory-address")), "&value");
         if (click(window, "Read Memory"))
             phase = 10;
@@ -210,6 +225,7 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
              threads_gui_frame(window, "worker-one", "thread_checkpoint", &thread, &frame))
         phase = 11;
     else if (phase == 11 && threads_gui_context(window, thread, frame, "122", "1007") &&
+             threads_gui_value(window, "122") &&
              gtk_widget_is_sensitive(policy))
     {
         g_assert_true(gtk_combo_box_set_active_id(GTK_COMBO_BOX(policy), "step"));
@@ -222,6 +238,7 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 17 && threads_gui_context(window, thread, frame, "122", "1007") &&
              strstr(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-stop-reason"))), "Step complete"))
     {
+        g_assert_true(threads_gui_value(window, "122"));
         guint64 now = 0;
         g_assert_true(threads_gui_counter(window, &now));
         g_assert_cmpuint(now, ==, other_counter);
@@ -240,9 +257,11 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
             phase = 12;
     }
     else if (phase == 12 && threads_gui_context(window, thread, frame, "101", "1007") &&
+             threads_gui_value(window, "101") &&
              threads_gui_frame(window, "worker-one", "worker_leaf", &thread, &frame))
         phase = 13;
-    else if (phase == 13 && threads_gui_context(window, thread, frame, "111", "1007"))
+    else if (phase == 13 && threads_gui_context(window, thread, frame, "111", "1007") &&
+             threads_gui_value(window, "111"))
     {
         GtkWidget *tree = find(window, "insight-gdb-all-thread-stacks");
         GtkWidget *page = gtk_widget_get_parent(gtk_widget_get_parent(tree));
@@ -303,7 +322,7 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
     {
         native_exit_gui_capture(window, "INSIGHT_GDB_THREAD_POLICY_CAPTURE");
         g_print("C/C++ GTK: confirmed scheduler policy, step isolation and non-executing stack refresh passed.\n");
-        g_print("C/C++ GTK: worker/frame locals, TLS, shared globals, watches, value trees, memory and confirmed backtrace navigation passed.\n");
+        g_print("C/C++ GTK: worker/frame locals, TLS, shared globals, watches, automatic inspected-expression refresh, draft isolation, value trees, memory and confirmed backtrace navigation passed.\n");
         g_free(thread);
         g_free(frame);
         passed = TRUE;

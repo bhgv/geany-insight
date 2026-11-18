@@ -70,7 +70,7 @@ typedef struct {
     guint memory_generation, memory_pending_generation, memory_count;
     gboolean memory_needed, memory_pending;
     GtkTreeStore *value_rows;
-    GtkWidget *value_tree, *value_expression, *value_status, *locals_view;
+    GtkWidget *value_tree, *value_expression, *value_status, *value_auto, *locals_view;
     gchar *value_root, *value_pending_name, *value_pending_expression, *stop_detail, *data_command;
     GtkTreeRowReference *value_pending_row;
     GQueue value_cleanup;
@@ -137,6 +137,7 @@ static gboolean native_memory_reply(NativeDebug *session, const gchar *record);
 static void native_memory_inspect(NativeDebug *session, const gchar *expression);
 static void native_target_clear(NativeDebug *session);
 static void native_values_reset(NativeDebug *session);
+static void native_values_context_reset(NativeDebug *session);
 static gchar *native_values_next(NativeDebug *session, gboolean cleanup);
 static gboolean native_values_reply(NativeDebug *session, const gchar *record);
 static void native_data_refresh(NativeDebug *session);

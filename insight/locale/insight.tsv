@@ -3514,3 +3514,5 @@ Pause to read the target's thread execution policy.	Приостановите �
 step locks other threads for Step Into/Over; Continue and Step Out allow them. on keeps other threads stopped, including on Continue.	step блокирует остальные потоки при Step Into/Over; Continue и Step Out разрешают их. on удерживает остальные потоки, в том числе при Continue.
 Refresh thread stacks	Обновить стеки потоков
 Refreshing selected context…	Обновление выбранного контекста…
+Refresh inspected expression at each stop	Обновлять исследованное выражение при каждой остановке
+Re-evaluate the last inspected expression after stops and thread/frame changes. Draft edits require Inspect Expression.	Повторно вычислять последнее исследованное выражение при остановках и смене потока/кадра. Черновик вычисляется только по команде «Исследовать выражение».
