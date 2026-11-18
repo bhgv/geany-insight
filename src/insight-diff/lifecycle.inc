@@ -23,22 +23,63 @@ static void clear_diff(Merge *m)
     g_ptr_array_set_size(m->history,0);
     m->position=0;
 }
-static void destroyed(GtkWidget *w,gpointer data) {
- (void)w;Merge *m=data;
- if(!view_defaults) view_defaults=g_key_file_new();
- view_save(m,view_defaults);open_compares=g_list_remove(open_compares,m);
- g_object_set_data(G_OBJECT(m->window),"insight-diff-state",NULL);
- if(m->alignment_idle) g_source_remove(m->alignment_idle);
- if(m->syntax_idle) g_source_remove(m->syntax_idle);for(guint i=0;i<3;i++) { g_signal_handlers_disconnect_by_data(m->syntax_buffers[i],m);g_object_unref(m->syntax_buffers[i]); }g_clear_pointer(&m->answers,g_ptr_array_unref);g_free(m->answer_base);g_free(m->syntax_path);
- if(m->cancel) g_cancellable_cancel(m->cancel);
- g_clear_object(&m->cancel);
- /* Child text widgets can already be destroyed here; their buffer owns the marks. */
- g_signal_handlers_disconnect_by_data(m->output,m);g_signal_handlers_disconnect_by_data(m->selection,m);
- for(int i=0;i<2;i++) { g_signal_handlers_disconnect_by_data(m->adjustments[i],m);g_object_unref(m->adjustments[i]);g_signal_handlers_disconnect_by_data(m->horizontal[i],m);g_object_unref(m->horizontal[i]);g_ptr_array_unref(m->alignment[i]); }
- g_object_unref(m->output);g_object_unref(m->selection);
- g_free(m->resolutions);g_free(m->marks);insight_diff_clear(&m->diff);g_ptr_array_free(m->history,TRUE);
- for(int i=0;i<2;i++) { g_free(m->sources[i]);g_free(m->loaded_paths[i]);g_free(m->picked[i]); }
- for(gint i=0;i<2;i++) { g_clear_pointer(&m->map_blocks[i],g_array_unref);g_clear_object(&m->maps[i]); }
- GtkWidget *controls[G_N_ELEMENTS(view_checks)];view_controls(m,controls);for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) g_object_unref(controls[i]);g_object_unref(m->zoom);
- g_clear_object(&m->font_css);g_free(m->saved);g_object_unref(m->list);if(m->review_destroy) m->review_destroy(m->review_data);g_free(m);
+/* EN: Release the comparison in data after w is destroyed, including private snapshot ranges; cancel pending work.
+ * RU: Освобождает сравнение data после уничтожения w, включая диапазоны снимков; отменяет незавершённую работу. */
+static void destroyed(GtkWidget *w,gpointer data)
+{
+    (void)w;
+    Merge *m=data;
+    if(!view_defaults) view_defaults=g_key_file_new();
+    view_save(m,view_defaults);
+    open_compares=g_list_remove(open_compares,m);
+    g_object_set_data(G_OBJECT(m->window),"insight-diff-state",NULL);
+    if(m->alignment_idle) g_source_remove(m->alignment_idle);
+    if(m->syntax_idle) g_source_remove(m->syntax_idle);
+    for(guint i=0;i<3;i++)
+    {
+        g_signal_handlers_disconnect_by_data(m->syntax_buffers[i],m);
+        g_object_unref(m->syntax_buffers[i]);
+    }
+    g_clear_pointer(&m->answers,g_ptr_array_unref);
+    g_free(m->answer_base);
+    g_free(m->syntax_path);
+    if(m->cancel) g_cancellable_cancel(m->cancel);
+    g_clear_object(&m->cancel);
+    /* Child text widgets can already be destroyed here; their buffer owns the marks. */ g_signal_handlers_disconnect_by_data(m->output,m);
+    g_signal_handlers_disconnect_by_data(m->selection,m);
+    for(int i=0;i<2;i++)
+    {
+        g_signal_handlers_disconnect_by_data(m->adjustments[i],m);
+        g_object_unref(m->adjustments[i]);
+        g_signal_handlers_disconnect_by_data(m->horizontal[i],m);
+        g_object_unref(m->horizontal[i]);
+        g_ptr_array_unref(m->alignment[i]);
+    }
+    g_object_unref(m->output);
+    g_object_unref(m->selection);
+    g_free(m->resolutions);
+    g_free(m->marks);
+    insight_diff_clear(&m->diff);
+    g_ptr_array_free(m->history,TRUE);
+    for(int i=0;i<2;i++)
+    {
+        g_clear_pointer(&m->symbols[i],g_ptr_array_unref);
+        g_free(m->sources[i]);
+        g_free(m->loaded_paths[i]);
+        g_free(m->picked[i]);
+    }
+    for(gint i=0;i<2;i++)
+    {
+        g_clear_pointer(&m->map_blocks[i],g_array_unref);
+        g_clear_object(&m->maps[i]);
+    }
+    GtkWidget *controls[G_N_ELEMENTS(view_checks)];
+    view_controls(m,controls);
+    for(guint i=0;i<G_N_ELEMENTS(view_checks);i++) g_object_unref(controls[i]);
+    g_object_unref(m->zoom);
+    g_clear_object(&m->font_css);
+    g_free(m->saved);
+    g_object_unref(m->list);
+    if(m->review_destroy) m->review_destroy(m->review_data);
+    g_free(m);
 }
