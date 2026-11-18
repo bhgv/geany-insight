@@ -91,19 +91,42 @@ static gboolean native_entry_gui_step(GtkWidget *window, GtkWidget *tabs)
     return G_SOURCE_CONTINUE;
 }
 
-/* EN: End window's real GDB while paused with populated locals; verify terminal cleanup in phases 14..15.
- * Return CONTINUE while asynchronous shutdown drains, REMOVE after the assertions and GTK exit.
- * RU: Завершает настоящий GDB окна window на паузе с переменными; проверяет очистку в фазах 14..15.
- * Возвращает CONTINUE до завершения асинхронного отключения, REMOVE после проверок и выхода GTK. */
+/* EN: Exercise window's failed-backend recovery in phases 14..22 with real GDB and unsaved form changes.
+ * Check stale-data cleanup, explicit reopen, restored settings/points/watches and a subsequent explicit run.
+ * Return CONTINUE while asynchronous work drains, REMOVE after the assertions and GTK exit.
+ * RU: Проверяет восстановление GDB окна window в фазах 14..22 с настоящим GDB и несохранёнными настройками.
+ * Проверяет очистку, явное открытие, перенос настроек/точек/наблюдений и последующий явный запуск.
+ * Возвращает CONTINUE до завершения асинхронных действий, REMOVE после проверок и выхода GTK. */
 static gboolean native_backend_gui_step(GtkWidget *window)
 {
     GtkWidget *command = find(window, "GDB command, e.g. break main");
     GtkWidget *resume = find(window, "Continue");
+    GtkWidget *run = find(window, "Run");
     GtkWidget *locals = find(window, "insight-gdb-frame-variables");
     GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(locals));
     if (phase == 14 && gtk_widget_is_sensitive(resume) &&
         gtk_widget_is_sensitive(command) && gtk_tree_model_iter_n_children(model, NULL) > 0)
     {
+        g_assert_false(gtk_widget_is_sensitive(find(window, "insight-gdb-reopen")));
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-launch-arguments")), "17");
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host")), "recovery-test-host");
+        gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-attach-pid")), "12345");
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(find(window, "insight-gdb-ssh-port")), 2222);
+        gtk_entry_set_text(GTK_ENTRY(find(window, "GDB watch expression")), "argc");
+        g_assert_true(click(window, "Add Watch"));
+        phase = 16;
+    }
+    else if (phase == 16 && gtk_widget_is_sensitive(command))
+    {
+        gtk_entry_set_text(GTK_ENTRY(find(window, "Function or file:line")), "main");
+        g_assert_true(click(window, "Add Breakpoint"));
+        phase = 17;
+    }
+    else if (phase == 17 && gtk_widget_is_sensitive(command))
+    {
+        GtkTreeModel *points = gtk_tree_view_get_model(GTK_TREE_VIEW(find(window, "insight-gdb-breakpoints")));
+        if (gtk_tree_model_iter_n_children(points, NULL) == 0)
+            return G_SOURCE_CONTINUE;
         gtk_entry_set_text(GTK_ENTRY(command), "quit");
         g_signal_emit_by_name(command, "activate");
         phase = 15;
@@ -118,7 +141,47 @@ static gboolean native_backend_gui_step(GtkWidget *window)
             g_assert_false(gtk_widget_is_sensitive(find(window, inactive[i])));
         g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 0);
         g_assert_false(gtk_widget_is_sensitive(command));
+        g_assert_true(gtk_widget_is_sensitive(find(window, "insight-gdb-reopen")));
         g_print("C/C++ GTK: GDB shutdown from a populated paused context clears stale data and disables execution.\n");
+        GtkWidget *tabs = find(window, "inspection notebook");
+        GtkWidget *page = gtk_widget_get_parent(find(window, "insight-gdb-stop-at-main"));
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        phase = 22;
+    }
+    else if (phase == 22)
+    {
+        native_exit_gui_capture(window, "INSIGHT_GDB_RECOVERY_CAPTURE");
+        g_assert_true(click(window, "Open new GDB session"));
+        phase = 18;
+    }
+    else if (phase == 18 && gtk_widget_is_sensitive(run))
+    {
+        g_assert_false(gtk_widget_is_sensitive(resume));
+        g_assert_false(gtk_widget_is_sensitive(find(window, "insight-gdb-reopen")));
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-launch-arguments"))), ==, "17");
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-ssh-host"))), ==, "recovery-test-host");
+        g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(find(window, "insight-gdb-attach-pid"))), ==, "12345");
+        g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(find(window, "insight-gdb-ssh-port"))), ==, 2222);
+        g_assert_true(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-stop-at-main"))));
+        GtkTreeModel *points = gtk_tree_view_get_model(GTK_TREE_VIEW(find(window, "insight-gdb-breakpoints")));
+        g_assert_cmpint(gtk_tree_model_iter_n_children(points, NULL), >, 0);
+        g_assert_nonnull(find(window, "argc"));
+        g_assert_true(click(window, "Run"));
+        phase = 19;
+    }
+    else if (phase == 19 && gtk_widget_is_sensitive(resume) && has_local(window, "argc", "2"))
+    {
+        g_assert_nonnull(find(window, "argc = 2"));
+        g_assert_true(click(window, "Continue"));
+        phase = 20;
+    }
+    else if (phase == 20 && gtk_widget_is_sensitive(run))
+    {
+        const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-stop-reason")));
+        g_assert_nonnull(strstr(status, "Program exited with code 17."));
+        g_print("C/C++ GTK: explicit fresh GDB preserves unsaved launch/SSH settings, persistent points and watches; explicit Run succeeds.\n");
         passed = TRUE;
         gtk_widget_destroy(window);
         gtk_main_quit();

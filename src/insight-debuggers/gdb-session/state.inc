@@ -52,6 +52,8 @@ typedef struct {
     GSubprocess *process;
     GDataInputStream *output;
     GCancellable *cancel;
+    gchar *gdb_executable, *target_executable;
+    GtkWidget *reopen;
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
     NativeAssembly *assembly;

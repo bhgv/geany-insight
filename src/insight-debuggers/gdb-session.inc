@@ -60,6 +60,7 @@ static void native_debug_update(NativeDebug *session)
     gtk_widget_set_sensitive(session->source, session->stopped && session->stop_file && session->stop_line);
     gtk_widget_set_sensitive(session->load_lua, !session->running);
     gtk_widget_set_sensitive(session->unload_lua, !session->running && session->observer != NULL);
+    gtk_widget_set_sensitive(session->reopen, session->backend_failed && !session->closed);
     native_remote_update(session);
 }
 
@@ -100,6 +101,8 @@ static void native_debug_free(gpointer data)
     insight_lua_debug_free(session->observer);
     g_hash_table_unref(session->editor_points);
     g_free(session->editor_point_pending);
+    g_free(session->gdb_executable);
+    g_free(session->target_executable);
     g_free(session->stop_detail);
     g_free(session->data_command);
     g_free(session->memory_address);

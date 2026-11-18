@@ -938,3 +938,5 @@ dist_insightdocmedia_DATA += insight/docs/media/include-refresh.svg
 dist_insightdocmedia_DATA += insight/docs/media/include-profile.jpg
 
 dist_insightdocmedia_DATA += insight/docs/media/native-expression-follow.jpg insight/docs/media/native-memory-follow.jpg
+
+EXTRA_DIST += insight/tests/native_debugger_reopen_test.py

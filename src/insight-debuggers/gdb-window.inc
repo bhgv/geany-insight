@@ -2,9 +2,59 @@
 /* EN: GDB debugger window and executable selection.
  * RU: Окно отладчика GDB и выбор исполняемого файла. */
 
-/* EN: Launch gdb with target and display the native debugger window.
- * RU: Запускает gdb для target и открывает окно отладчика. */
-static void native_debug_show(const gchar *gdb, const gchar *target)
+static gboolean native_debug_show(const gchar *gdb, const gchar *target, NativeDebug *previous);
+
+/* EN: Copy previous's editable launch/SSH settings and persistent recipes into fresh session in memory.
+ * Restore supported points, watches and manual address names; never copy runtime values, connect or run.
+ * RU: Копирует изменённые настройки запуска/SSH и постоянные рецепты previous в новый session в памяти.
+ * Восстанавливает поддерживаемые точки, наблюдения и ручные имена адресов; не переносит значения и не запускает цель. */
+static void native_debug_recover_settings(NativeDebug *session, NativeDebug *previous)
+{
+    for (guint i = 0; i < G_N_ELEMENTS(native_profile_names); i++)
+        gtk_entry_set_text(GTK_ENTRY(native_profile_entry(session, i)),
+            gtk_entry_get_text(GTK_ENTRY(native_profile_entry(previous, i))));
+    GtkWidget *entries[] = {session->remote->directory, session->remote->pid};
+    GtkWidget *old_entries[] = {previous->remote->directory, previous->remote->pid};
+    for (guint i = 0; i < G_N_ELEMENTS(entries); i++)
+        gtk_entry_set_text(GTK_ENTRY(entries[i]), gtk_entry_get_text(GTK_ENTRY(old_entries[i])));
+    GtkWidget *spins[] = {session->remote->port, session->remote->server_port};
+    GtkWidget *old_spins[] = {previous->remote->port, previous->remote->server_port};
+    for (guint i = 0; i < G_N_ELEMENTS(spins); i++)
+        gtk_spin_button_set_value(GTK_SPIN_BUTTON(spins[i]),
+            gtk_spin_button_get_value(GTK_SPIN_BUTTON(old_spins[i])));
+    GtkWidget *toggles[] = {session->remote->remember, session->remote->start_server, session->launch_main};
+    GtkWidget *old_toggles[] = {previous->remote->remember, previous->remote->start_server, previous->launch_main};
+    for (guint i = 0; i < G_N_ELEMENTS(toggles); i++)
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(toggles[i]),
+            gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(old_toggles[i])));
+    gtk_combo_box_set_active(GTK_COMBO_BOX(session->remote->mode),
+        gtk_combo_box_get_active(GTK_COMBO_BOX(previous->remote->mode)));
+    GKeyFile *profile = g_key_file_new();
+    g_key_file_set_integer(profile, "debugger", "version", 4);
+    native_profile_debug_store(previous, profile);
+    native_name_profile_store(previous, profile);
+    native_name_profile_load(session, profile);
+    native_profile_debug_load(session, profile);
+    g_key_file_unref(profile);
+}
+
+/* EN: Reopen data's failed session from button using its original GDB and target; keep the old window on spawn failure.
+ * RU: По button открывает новый сеанс вместо аварийного data с прежними GDB и целью; при ошибке запуска сохраняет старое окно. */
+static void native_debug_reopen(GtkButton *button, gpointer data)
+{
+    (void)button;
+    NativeDebug *session = data;
+    if (session->closed || !session->backend_failed)
+        return;
+    if (native_debug_show(session->gdb_executable, session->target_executable, session))
+        gtk_widget_destroy(session->window);
+}
+
+/* EN: Launch gdb for target and display a fresh debugger, optionally copying previous's settings in memory.
+ * Return TRUE after opening, FALSE on spawn failure; previous remains owned by its existing window.
+ * RU: Запускает gdb для target и открывает новое окно, при наличии previous копирует настройки в памяти.
+ * Возвращает TRUE после открытия, FALSE при ошибке процесса; previous остаётся во владении прежнего окна. */
+static gboolean native_debug_show(const gchar *gdb, const gchar *target, NativeDebug *previous)
 {
     gchar *directory = g_path_get_dirname(target);
     GSubprocessLauncher *launcher = g_subprocess_launcher_new(
@@ -19,7 +69,7 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     {
         ui_set_statusbar(TRUE, insight_tr("Cannot open GDB: %s"), error->message);
         g_clear_error(&error);
-        return;
+        return FALSE;
     }
 
     GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("C/C++ Debugger"),
@@ -30,6 +80,8 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     insight_panel_help_attach(box, "native-debugger.md");
     NativeDebug *session = g_new0(NativeDebug, 1);
     session->window = dialog;
+    session->gdb_executable = g_strdup(gdb);
+    session->target_executable = g_strdup(target);
     session->paused_controls = g_ptr_array_new();
     session->point_markers = g_ptr_array_new_with_free_func(native_marker_free);
     session->stop_markers = g_ptr_array_new_with_free_func(native_marker_free);
@@ -66,6 +118,13 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
         g_signal_connect(button, "clicked", G_CALLBACK(native_debug_clicked), dialog);
         gtk_container_add(GTK_CONTAINER(toolbar), button);
     }
+    session->reopen = gtk_button_new_with_label(insight_tr("Open new GDB session"));
+    gtk_widget_set_name(session->reopen, "insight-gdb-reopen");
+    gtk_widget_set_sensitive(session->reopen, FALSE);
+    gtk_widget_set_tooltip_text(session->reopen, insight_tr(
+        "Open a fresh GDB with current launch/SSH settings, watches and persistent breakpoints. Connect or Run explicitly."));
+    g_signal_connect(session->reopen, "clicked", G_CALLBACK(native_debug_reopen), session);
+    gtk_container_add(GTK_CONTAINER(toolbar), session->reopen);
     session->source = gtk_button_new_with_label(insight_tr("Open Source"));
     g_signal_connect(session->source, "clicked", G_CALLBACK(native_debug_source), session);
     gtk_container_add(GTK_CONTAINER(toolbar), session->source);
@@ -209,12 +268,16 @@ static void native_debug_show(const gchar *gdb, const gchar *target)
     g_signal_connect_object(geany_object, "document-open", G_CALLBACK(native_source_document), dialog, G_CONNECT_AFTER);
     g_signal_connect_object(geany_object, "document-activate", G_CALLBACK(native_source_document), dialog, G_CONNECT_AFTER);
     g_signal_connect(tabs, "switch-page", G_CALLBACK(native_all_stacks_page), dialog);
-    native_profile_load(session, TRUE);
+    if (previous)
+        native_debug_recover_settings(session, previous);
+    else
+        native_profile_load(session, TRUE);
     gtk_widget_show_all(dialog);
 
     g_data_input_stream_read_line_async(session->output, G_PRIORITY_DEFAULT,
         session->cancel, native_debug_read, g_object_ref(dialog));
     native_debug_send(dialog, "-gdb-set mi-async on");
+    return TRUE;
 }
 
 /* EN: Pick local symbols and a GDB client from item; data is unused. Prefer multiarch GDB on Windows; report a missing client without spawning.
@@ -260,7 +323,7 @@ static void debug_native_executable(GtkMenuItem *item, gpointer data)
     gchar *client = target ? g_find_program_in_path(gtk_entry_get_text(GTK_ENTRY(gdb_entry))) : NULL;
     gtk_widget_destroy(chooser);
     if (target && client)
-        native_debug_show(client, target);
+        native_debug_show(client, target, NULL);
     else if (target)
         ui_set_statusbar(TRUE, "%s", insight_tr("GDB was not found. Choose an installed GDB executable."));
     g_free(client);

@@ -3518,3 +3518,5 @@ Refresh inspected expression at each stop	Обновлять исследова�
 Re-evaluate the last inspected expression after stops and thread/frame changes. Draft edits require Inspect Expression.	Повторно вычислять последнее исследованное выражение при остановках и смене потока/кадра. Черновик вычисляется только по команде «Исследовать выражение».
 Memory snapshot — %s; bytes: %u.	Снимок памяти — %s; байт: %u.
 Repeat the last explicit read after stops and context changes. Read Memory applies draft fields; block navigation keeps the confirmed size.	Повторять последнее явное чтение при остановках и смене контекста. «Прочитать память» применяет черновики; переходы между блоками сохраняют подтверждённый размер.
+Open new GDB session	Открыть новый сеанс GDB
+Open a fresh GDB with current launch/SSH settings, watches and persistent breakpoints. Connect or Run explicitly.	Открыть новый GDB с текущими настройками запуска/SSH, наблюдениями и постоянными точками. Подключитесь или запустите программу явно.

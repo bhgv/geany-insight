@@ -540,4 +540,6 @@ After a confirmed thread or frame change, previous locals disappear immediately 
 
 A read/write failure or GDB shutdown ends the current session: stale variables, stacks, memory and source highlights are cleared, and execution commands become unavailable. The status shows **GDB session ended.**; the console records the failure reason when available. Late replies cannot restore old data. The session's own SSH tunnel and remote-server launch process are closed.
 
-Close the debugger window and open **Debug C/C++ Executable** again. **Restart** restarts the program inside a working GDB; when GDB itself has ended, open a new session. A normal program exit still allows **Run** and **Restart**.
+After GDB ends, **Open new GDB session** becomes available. It uses the same GDB and executable and copies current, including unsaved, launch/SSH settings, watches, confirmed persistent source/exception breakpoints and manual address names. The saved profile is not overwritten. Connect or Run explicitly after the new window opens. If GDB cannot start, the original window stays open.
+
+Runtime values, address/temporary breakpoints, watchpoints, Lua observers and old memory/instruction snapshots are not transferred. **Restart** restarts the program inside a working GDB. A normal program exit still allows **Run** and **Restart** without a new window.
