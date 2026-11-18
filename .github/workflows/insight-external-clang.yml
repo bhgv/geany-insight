@@ -1,3 +1,5 @@
+# EN: Build compiler dependencies from source and verify both native editor build systems.
+# RU: Собирает зависимости компилятора из исходников и проверяет обе системы сборки редактора.
 name: Insight compiler built from external sources
 on:
   push:
@@ -48,7 +50,9 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson autoconf automake autopoint libtool pkg-config libgtk-3-dev gettext python3-docutils patchelf xvfb xauth
+          # EN: The editor build driver requires gperf even when the compiler SDK is cached.
+          # RU: Сборщику редактора нужен gperf, даже когда SDK компилятора взят из кэша.
+          sudo apt-get install -y --no-install-recommends build-essential cmake ninja-build python3 meson autoconf automake autopoint libtool pkg-config libgtk-3-dev gettext gperf python3-docutils patchelf xvfb xauth
       - name: Select actual legacy CMake
         if: matrix.cmake != 'system'
         run: |
