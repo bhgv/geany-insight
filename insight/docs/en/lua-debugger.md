@@ -432,3 +432,5 @@ If a frame-selection request fails, the selector returns to the last accepted fr
 Shared script-debugger interface after **Stop**: the production Python window with an isolated test program. Frame rows and stack are empty, stepping and source navigation are unavailable, and Restart remains available.
 
 ![Cleared context after Stop](../media/script-debugger-stop.jpg)
+
+Continue and stepping remove the previous stop highlight. A new line is highlighted after an accepted stop; running or input-waiting execution does not retain the old pause marker.

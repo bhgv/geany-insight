@@ -410,3 +410,11 @@ Python pauses at its next traced source line. If the program is waiting in `inpu
 Production Python debugger with an isolated test program: Pause has been requested while the program remains in `input()`. Submit text or **Send EOF**; Stop and Restart remain available.
 
 ![Python Pause waiting for input](media/script-debugger-input.jpg)
+
+Continue and stepping remove the previous stop highlight. A new line is highlighted after an accepted stop; running or input-waiting execution does not retain the old pause marker.
+
+## Reading text stdin
+
+The console supports `input()`, `sys.stdin.readline(n)`, `sys.stdin.read(n)` and `sys.stdin.read()` through EOF. Sizes count Unicode characters. Submitting with Enter adds a newline, which also counts toward the size. Partial reads preserve the remainder for the next read. An empty submitted line is a newline; use **Send EOF** to end input.
+
+`read(n)` waits for the requested character count or EOF and may need several submissions. `read()` collects input until **Send EOF**. For example, after submitting `Я🙂x`, `read(3)` returns those three characters and the following `readline()` receives the remaining newline without another input request.

@@ -6,7 +6,7 @@
 """
 
 import importlib.machinery
-import io
+import importlib.util
 import json
 import os
 import queue
@@ -15,16 +15,22 @@ import threading
 import traceback
 import types
 
+# EN: Load the installed I/O helper by exact sibling path under Python -I, without adding the project to sys.path.
+# RU: Загружает установленный обработчик ввода-вывода по точному соседнему пути при Python -I, не меняя sys.path проекта.
+_io_spec = importlib.util.spec_from_file_location("insight_python_debug_io",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "python-debug", "io.py"))
+_io_module = importlib.util.module_from_spec(_io_spec)
+_io_spec.loader.exec_module(_io_module)
+encode = _io_module.encode
+read_commands = _io_module.read_commands
+Protocol = _io_module.Protocol
+DebugConsole = _io_module.DebugConsole
+DebugInput = _io_module.DebugInput
+
 MAX_NODES = 96
 MAX_EDGES = 224
 MAX_DEPTH = 6
 MAX_MEMBERS = 16
-
-
-# Encode a protocol field without allowing a value to introduce delimiters.
-# Кодирует поле протокола, чтобы значение не могло добавить разделители.
-def encode(text):
-    return text.encode("utf-8", errors="replace").hex()
 
 
 # Format built-in scalars without calling user-defined repr or properties.
@@ -146,34 +152,6 @@ class WatchSnapshot:
             yield str(source)
             yield str(target)
             yield encode(label)
-
-
-# Read control commands in parallel so Pause can interrupt a Python loop.
-# Читает команды параллельно, чтобы Pause мог остановить цикл Python.
-def read_commands(descriptor, commands, input_lines, observer_replies):
-    pending = b""
-    while True:
-        chunk = os.read(descriptor, 4096)
-        if not chunk:
-            break
-        lines = (pending + chunk).split(b"\n")
-        pending = lines.pop()
-        for line in lines:
-            command = line.decode("ascii", errors="replace").rstrip("\r")
-            if command.startswith("input "):
-                try:
-                    input_lines.put(bytes.fromhex(command[6:]).decode("utf-8") + "\n")
-                except ValueError:
-                    input_lines.put(None)
-            elif command.startswith("observe "):
-                observer_replies.put(command[8:])
-            elif command == "eof":
-                input_lines.put(None)
-            else:
-                commands.put(command)
-    input_lines.put(None)
-    observer_replies.put("off")
-    commands.put("quit")
 
 
 # Format selectable frames and the locals of the frame being inspected.
@@ -434,95 +412,6 @@ class OverlayFinder:
                 spec.loader = OverlaySourceLoader(fullname, spec.origin, source)
                 return spec
         return None
-
-
-class Protocol:
-    # Serialize output and debugger packets, including writes from other threads.
-    # Упорядочивает вывод и пакеты отладчика, включая записи из других потоков.
-    def __init__(self, stream):
-        self.stream = stream
-        self.lock = threading.Lock()
-        self.remaining = 256 * 1024
-
-    # Send one complete debugger packet.
-    # Отправляет один целый пакет отладчика.
-    def write(self, packet):
-        with self.lock:
-            self.stream.write(packet)
-            self.stream.flush()
-
-    # Forward a bounded amount of user output as separate packets.
-    # Передаёт ограниченный объём вывода программы отдельными пакетами.
-    def console(self, text):
-        with self.lock:
-            if not self.remaining:
-                return
-            encoded = text[:self.remaining].encode("utf-8", errors="replace")
-            clipped = len(encoded) > self.remaining or len(text) > self.remaining
-            payload = encoded[:self.remaining].decode("utf-8", errors="ignore")
-            self.remaining -= min(len(encoded), self.remaining)
-            for start in range(0, len(payload), 2048):
-                self.stream.write("O\t" + encode(payload[start:start + 2048]) + "\n")
-            if clipped or not self.remaining:
-                self.remaining = 0
-                self.stream.write("O\t" + encode("\n[Python output limit reached]\n") + "\n")
-            self.stream.flush()
-
-
-class DebugConsole(io.TextIOBase):
-    # Connect a Python text stream to the editor console.
-    # Подключает текстовый поток Python к консоли редактора.
-    def __init__(self, protocol):
-        self.protocol = protocol
-
-    # Report the stream as writable for Python's text I/O callers.
-    # Объявляет поток доступным для записи через текстовый ввод-вывод Python.
-    def writable(self):
-        return True
-
-    # Keep print() and logging output separate from debugger control packets.
-    # Отделяет print() и журналирование от управляющих пакетов отладчика.
-    def write(self, text):
-        if not isinstance(text, str):
-            raise TypeError("expected text")
-        if text:
-            self.protocol.console(text)
-        return len(text)
-
-class DebugInput(io.TextIOBase):
-    # Connect Python text input to the editor console.
-    # Подключает текстовый ввод Python к консоли редактора.
-    def __init__(self, protocol, lines):
-        self.protocol = protocol
-        self.lines = lines
-        self.pending = ""
-        self.eof = False
-        self.lock = threading.Lock()
-
-    # Report support for text input.
-    # Сообщает о поддержке текстового ввода.
-    def readable(self):
-        return True
-
-    # Request a line when buffered text is exhausted.
-    # Запрашивает строку, когда буфер ввода пуст.
-    def readline(self, size=-1):
-        with self.lock:
-            if self.closed:
-                raise ValueError("I/O operation on closed stream")
-            if size == 0 or self.eof:
-                return ""
-            if not self.pending:
-                self.protocol.write("I\n")
-                line = self.lines.get()
-                if line is None:
-                    self.eof = True
-                    return ""
-                self.pending = line
-            if size < 0:
-                size = len(self.pending)
-            text, self.pending = self.pending[:size], self.pending[size:]
-            return text
 
 
 # Execute the buffer in a separate process; keep script output off the protocol.

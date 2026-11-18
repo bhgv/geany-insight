@@ -58,6 +58,20 @@ static void debug_clear_frame_context(ScriptDebugWindow *view)
     debug_update_stack_frames(view, NULL);
 }
 
+/* EN: Remove view's previous pause marker and disable source navigation before execution or context replacement.
+ * Keep source text intact; a later accepted stop supplies the new marker.
+ * RU: Удаляет прежний маркер паузы view и отключает переход к исходнику перед исполнением либо заменой контекста.
+ * Сохраняет текст исходника; новая принятая остановка установит новый маркер. */
+static void debug_clear_source_pause(ScriptDebugWindow *view)
+{
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
+    GtkTextIter first, last;
+    gtk_text_buffer_get_bounds(buffer, &first, &last);
+    gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
+    view->paused_line = 0;
+    gtk_widget_set_sensitive(view->go_to_source, FALSE);
+}
+
 /* EN: Update view for result and line. Publish error to Messages on failure when
  * the Python protocol has not already supplied diagnostic rows.
  * RU: Обновляет view по result и line. При ошибке публикует error в «Сообщениях»,
@@ -66,9 +80,7 @@ static void debug_show_result(ScriptDebugWindow *view, gint result, unsigned lon
 {
     GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
     GtkTextIter first, last;
-    gtk_text_buffer_get_bounds(buffer, &first, &last);
-    gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
-    view->paused_line = 0;
+    debug_clear_source_pause(view);
     InsightLuaDebug *observer = view->python ? view->python_observer : view->engine;
 
     if (result == 1 && line > 0)

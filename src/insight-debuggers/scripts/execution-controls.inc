@@ -85,8 +85,10 @@ static InsightPythonDebug *debug_new_python_engine(const gchar *filename, const 
     return engine;
 }
 
-/* Capture the selected action and schedule its first VM slice. */
-/* Сохраняет выбранное действие и планирует первую порцию выполнения. */
+/* EN: Validate view's breakpoints and schedule mode; clear the old pause marker only when execution is accepted.
+ * Invalid settings retain the current paused context and report an error without running.
+ * RU: Проверяет точки view и планирует mode; снимает старый маркер паузы только при принятом запуске.
+ * Неверные настройки сохраняют текущую паузу и сообщают ошибку без исполнения. */
 static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
 {
     if ((!view->engine && !view->python_engine) || debug_is_running(view))
@@ -129,7 +131,7 @@ static void debug_window_step(ScriptDebugWindow *view, InsightLuaStep mode)
     view->inspection_frame = 0;
     view->inspecting_frame = FALSE;
     gtk_widget_set_sensitive(view->stack_frames, FALSE);
-    view->paused_line = 0;
+    debug_clear_source_pause(view);
     view->watch_graph = NULL;
     gtk_widget_trigger_tooltip_query(view->source_view);
     view->watch_selected = -1;
@@ -314,8 +316,10 @@ static gboolean debug_apply_python_observer(InsightLuaDebug **observer, const gc
     return TRUE;
 }
 
-/* Start a fresh VM on the same source snapshot, keeping the breakpoints. */
-/* Создаёт новую виртуальную машину для того же снимка и сохраняет точки останова. */
+/* EN: Restart view in data from the original snapshot; button is unused. Allocate replacements before releasing the old VM.
+ * Failure preserves the old session and reports an error; success clears the old pause marker and retains breakpoints.
+ * RU: Перезапускает view из data из исходного снимка; button не используется. Создаёт замену до освобождения прежней VM.
+ * Ошибка сохраняет прежний сеанс и показывает пояснение; успех снимает старый маркер паузы, сохраняя точки. */
 static void debug_restart(GtkButton *button, gpointer data)
 {
     (void)button;
@@ -375,7 +379,7 @@ static void debug_restart(GtkButton *button, gpointer data)
         view->python_console_bytes = 0;
     }
     g_clear_pointer(&view->watch_previous_values, g_hash_table_unref);
-    view->paused_line = 0;
+    debug_clear_source_pause(view);
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
     gtk_widget_set_sensitive(view->step_controls, TRUE);
     gtk_widget_set_sensitive(view->stop, TRUE);
@@ -403,7 +407,7 @@ static void debug_stop(GtkButton *button, gpointer data)
     g_clear_pointer(&view->python_engine, insight_python_debug_free);
     g_clear_pointer(&view->python_graph, g_free);
     g_clear_pointer(&view->python_stack, g_free);
-    view->paused_line = 0;
+    debug_clear_source_pause(view);
     gtk_widget_set_sensitive(view->step_controls, FALSE);
     gtk_widget_set_sensitive(view->go_to_source, FALSE);
     gtk_widget_set_sensitive(view->stop, FALSE);
@@ -411,10 +415,6 @@ static void debug_stop(GtkButton *button, gpointer data)
     gtk_widget_set_sensitive(view->breakpoints, TRUE);
     if (view->file_breakpoint_button)
         gtk_widget_set_sensitive(view->file_breakpoint_button, TRUE);
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view->source_view));
-    GtkTextIter first, last;
-    gtk_text_buffer_get_bounds(buffer, &first, &last);
-    gtk_text_buffer_remove_tag(buffer, view->current_line_tag, &first, &last);
     debug_set_text(view->stack_view, "");
     gtk_label_set_text(GTK_LABEL(view->status), "Debugging stopped");
 }

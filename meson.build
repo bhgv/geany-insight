@@ -1232,6 +1232,7 @@ meson.add_install_script(python, meson.project_source_root() / 'insight/tools/in
   '--destination', cdata.get('GEANY_DATA_DIR') / 'fonts')
 
 install_data('insight/tools/ai_client.py', 'insight/tools/remote_pack.py', 'insight/tools/python_debug.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools')
+install_data('insight/tools/python-debug/io.py', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'tools' / 'python-debug')
 
 install_data('insight/docs/relation-results.md', install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs')
 

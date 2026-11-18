@@ -190,6 +190,7 @@ static void debug_current_script(GtkMenuItem *item, gpointer data)
     GtkWidget *pane = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_box_pack_start(GTK_BOX(box), pane, TRUE, TRUE, 0);
     view->source_view = debug_create_view(pane, TRUE);
+    gtk_widget_set_name(view->source_view, "insight-script-source");
     GtkWidget *inspection = gtk_notebook_new();
     gtk_paned_pack2(GTK_PANED(pane), inspection, TRUE, FALSE);
     GtkWidget *stack_pane = gtk_paned_new(GTK_ORIENTATION_VERTICAL);

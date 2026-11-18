@@ -10,7 +10,7 @@
 #include <glib/gstdio.h>
 #include <string.h>
 
-static gboolean python, failing, console_mode, passed;
+static gboolean python, failing, console_mode, read_mode, passed;
 static guint phase;
 static GtkWidget *editor_window;
 
@@ -223,8 +223,67 @@ static gboolean drive_console(GtkWidget *window)
     return G_SOURCE_CONTINUE;
 }
 
-/* EN: Drive a small nested-call fixture from data's unused timer; return REMOVE after all lifecycle assertions pass.
- * RU: Управляет небольшой фикстурой вложенных вызовов из таймера с неиспользуемым data; возвращает REMOVE после всех проверок. */
+/* EN: Verify window's running text-read fixture has no stale pause marker; return REMOVE after Unicode/EOF checks.
+ * RU: Проверяет отсутствие старого маркера паузы в выполняющемся window; возвращает REMOVE после проверок Unicode/EOF. */
+static gboolean drive_read(GtkWidget *window)
+{
+    GtkWidget *input = find(window, "insight-python-input");
+    const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-script-status")));
+    if (phase == 1 && gtk_widget_is_sensitive(find(window, "Continue")))
+    {
+        g_assert_true(click(window, "Continue"));
+        phase = 2;
+    }
+    else if (phase == 2 && gtk_widget_is_sensitive(input))
+    {
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(find(window, "insight-script-source")));
+        GtkTextTag *tag = gtk_text_tag_table_lookup(gtk_text_buffer_get_tag_table(buffer), "insight-debug-line");
+        g_assert_nonnull(tag);
+        GtkTextIter first;
+        gtk_text_buffer_get_start_iter(buffer, &first);
+        g_assert_false(gtk_text_iter_has_tag(&first, tag));
+        g_assert_false(gtk_text_iter_forward_to_tag_toggle(&first, tag));
+        g_assert_false(gtk_widget_is_sensitive(find(window, "Go to Source")));
+        gtk_entry_set_text(GTK_ENTRY(input), "Я🙂x");
+        g_signal_emit_by_name(input, "activate");
+        phase = 3;
+    }
+    else if (phase == 3 && gtk_widget_is_sensitive(input))
+    {
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
+        phase = 4;
+    }
+    else if (phase == 4)
+    {
+        capture(window, "INSIGHT_SCRIPT_READ_CAPTURE");
+        gtk_entry_set_text(GTK_ENTRY(input), "東京");
+        g_signal_emit_by_name(input, "activate");
+        phase = 5;
+    }
+    else if (phase == 5 && gtk_widget_is_sensitive(input))
+    {
+        g_assert_true(click(window, "Send EOF"));
+        phase = 6;
+    }
+    else if (phase == 6 && strstr(status, "script finished"))
+    {
+        assert_cleared(window);
+        gchar *output = view_text(find(window, "insight-python-console"));
+        g_assert_nonnull(strstr(output, "parts=('Я🙂x', '\\n', '東京\\n')"));
+        g_free(output);
+        g_print("Python GTK: read(3) counts Unicode characters, readline preserves the remainder, read() waits for EOF and running source markers are cleared.\n");
+        passed = TRUE;
+        gtk_widget_destroy(window);
+        gtk_menu_item_activate(GTK_MENU_ITEM(ui_lookup_widget(editor_window, "menu_quit1")));
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
+/* EN: Drive the selected script scenario from the timer with unused data; return REMOVE after all lifecycle assertions pass.
+ * RU: Управляет выбранным сценарием скрипта из таймера с неиспользуемым data; возвращает REMOVE после всех проверок. */
 static gboolean drive(gpointer data)
 {
     (void)data;
@@ -248,6 +307,8 @@ static gboolean drive(gpointer data)
     GtkWidget *window = debug_window();
     if (!window)
         return G_SOURCE_CONTINUE;
+    if (read_mode)
+        return drive_read(window);
     if (console_mode)
         return drive_console(window);
     GtkWidget *frames = find(window, "insight-script-frames");
@@ -335,8 +396,8 @@ static gboolean timeout(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Run language argv[1] and normal/error/console argv[2] in a temporary editor profile; return nonzero on failure.
- * RU: Проверяет язык argv[1] и normal/error/console argv[2] во временном профиле редактора; возвращает ненулевой код при ошибке. */
+/* EN: Run language argv[1] and normal/error/console/read argv[2] in a temporary editor profile; return nonzero on failure.
+ * RU: Проверяет язык argv[1] и normal/error/console/read argv[2] во временном профиле редактора; возвращает ненулевой код при ошибке. */
 int main(int argc, char **argv)
 {
     if (!g_getenv("GEANY_RUN_GUI_TESTS") || !g_getenv("DISPLAY"))
@@ -345,6 +406,7 @@ int main(int argc, char **argv)
     python = !strcmp(argv[1], "python");
     failing = !strcmp(argv[2], "error");
     console_mode = python && !strcmp(argv[2], "console");
+    read_mode = python && !strcmp(argv[2], "read");
     gchar *directory = g_dir_make_tmp("script-lifecycle-XXXXXX", NULL);
     g_assert_nonnull(directory);
     gchar *profile = g_build_filename(directory, "profile", NULL);
@@ -357,6 +419,8 @@ int main(int argc, char **argv)
         "local function inner()\n    local value = 41\n    value = value + 1\n    return value\nend\nlocal answer = inner()\n";
     if (console_mode)
         body = "first = input('first: ')\nprint('first=' + first)\ntry:\n    second = input('second: ')\nexcept EOFError:\n    print('eof')\nprint('done')\n";
+    if (read_mode)
+        body = "import sys\nprefix = sys.stdin.read(3)\nsuffix = sys.stdin.readline()\nrest = sys.stdin.read()\nprint('parts=' + repr((prefix, suffix, rest)))\n";
     gchar *code = g_strconcat(body, failing ? (python ? "raise RuntimeError('fixture failure')\n" :
         "error('fixture failure')\n") : "", NULL);
     g_assert_true(g_file_set_contents(source, code, -1, NULL));
