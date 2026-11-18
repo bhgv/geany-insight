@@ -20,7 +20,7 @@ SEND_STATE = r'''/* EN: Exercise real asynchronous GIO writes to a local echo pr
 enum {NATIVE_REMOTE_SYSROOT, NATIVE_REMOTE_CONNECT};
 typedef struct {int pending;} NativeRemote;
 typedef struct {
-    gboolean closed, pending, writing, entry_pending;
+    gboolean closed, backend_failed, pending, writing, entry_pending;
     guint value_generation, frame_pending_generation;
     NativeRemote *remote;
     GSubprocess *process;
@@ -103,7 +103,7 @@ int main(int argc, char **argv)
     g_object_set_data(dialog, "native-debug", &session);
     if (!strcmp(argv[2], "guards"))
     {
-        gboolean *flags[] = {&session.closed, &session.pending, &session.writing};
+        gboolean *flags[] = {&session.closed, &session.backend_failed, &session.pending, &session.writing};
         for (guint index = 0; index < G_N_ELEMENTS(flags); index++)
         {
             *flags[index] = TRUE;
@@ -429,8 +429,8 @@ class NativeFrameReplies(unittest.TestCase):
     def test_dispatch_generation(self):
         self.exercise_dispatch('write')
 
-    # EN: Verify self's ignored busy/closed/SSH-owned requests cannot overwrite the outstanding generation.
-    # RU: Проверяет сохранение поколения self при игнорировании занятых/закрытых запросов и собственных SSH-прерываний.
+    # EN: Verify self's ignored busy/closed/failed/SSH-owned requests cannot overwrite the outstanding generation.
+    # RU: Проверяет сохранение поколения self при игнорировании занятых/закрытых/аварийных запросов и собственных SSH-прерываний.
     def test_dispatch_guards(self):
         self.exercise_dispatch('guards')
 

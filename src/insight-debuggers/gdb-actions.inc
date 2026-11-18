@@ -55,16 +55,16 @@ static void native_debug_observe(NativeDebug *session, const gchar *record)
 }
 
 /* EN: Complete the GDB read from stream/result for dialog in data, update execution state and schedule its next read.
- * EOF or read failure clears the target and disables the session; frame data is delegated to its reply handler.
+ * EOF or read failure ends the protocol; late replies are ignored; frame data is delegated to its reply handler.
  * RU: Завершает чтение GDB из stream/result для окна data, обновляет исполнение и запрашивает следующую строку.
- * EOF либо ошибка чтения очищает цель и отключает сеанс; данные кадра передаются обработчику ответов. */
+ * EOF либо ошибка чтения завершает протокол; поздние ответы игнорируются; данные кадра передаются обработчику ответов. */
 static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer data)
 {
     GtkWidget *dialog = data;
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
     GError *error = NULL;
     gchar *line = g_data_input_stream_read_line_finish(G_DATA_INPUT_STREAM(stream), result, NULL, &error);
-    if (!session->closed && line)
+    if (!session->closed && !session->backend_failed && line)
     {
         g_strchomp(line);
         native_assembly_console(session, line);
@@ -185,10 +185,7 @@ static void native_debug_read(GObject *stream, GAsyncResult *result, gpointer da
     }
     else if (!session->closed)
     {
-        native_target_clear(session);
-        insight_queue_clear_full(&session->launch_commands, g_free);
-        session->ready = session->kill_pending = FALSE;
-        native_debug_log(session, error ? error->message : insight_tr("GDB session ended."));
+        native_backend_lost(session, error ? error->message : NULL);
         native_debug_update(session);
     }
     g_free(line);

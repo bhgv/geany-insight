@@ -54,6 +54,28 @@ static void native_target_clear(NativeDebug *session)
     native_watch_refresh(session, FALSE);
 }
 
+/* EN: Terminate session's backend protocol after EOF or an I/O failure; message is optional diagnostic text.
+ * Clear stale target data, queued work and owned SSH transports once. Late callbacks cannot revive the backend.
+ * RU: Завершает протокол session после EOF либо ошибки ввода-вывода; message — необязательный текст ошибки.
+ * Однократно очищает старые данные цели, очередь и собственные SSH-транспорты. Поздние ответы не оживляют сеанс. */
+static void native_backend_lost(NativeDebug *session, const gchar *message)
+{
+    if (session->closed || session->backend_failed)
+        return;
+    session->backend_failed = TRUE;
+    native_target_clear(session);
+    native_remote_drop(session);
+    insight_queue_clear_full(&session->launch_commands, g_free);
+    session->ready = session->pending = session->kill_pending = FALSE;
+    session->watch_pending = NULL;
+    session->locals_pending = session->points_pending = FALSE;
+    session->context_pending = NATIVE_CONTEXT_NONE;
+    g_clear_pointer(&session->editor_point_pending, g_free);
+    g_cancellable_cancel(session->cancel);
+    session->stop_detail = g_strdup(insight_tr("GDB session ended."));
+    native_debug_log(session, message ? message : session->stop_detail);
+}
+
 /* EN: Clear session's exited target using record and retain the readable exit reason across duplicate
  * notifications; the caller updates controls. No-code group notifications preserve an existing detail.
  * RU: Очищает завершённую цель session по record и сохраняет понятную причину при повторных

@@ -535,3 +535,9 @@ Instructions, names, hardware points, source navigation and address history are 
 [Disassembly and code navigation](native-disassembly.md)
 
 After a confirmed thread or frame change, previous locals disappear immediately and saved expressions show “Refreshing selected context…” until GDB replies. Expression names are retained. A rejected selection preserves the confirmed context’s values. The graph header shows `?` while the frame ID is not yet confirmed.
+
+## When GDB itself ends
+
+A read/write failure or GDB shutdown ends the current session: stale variables, stacks, memory and source highlights are cleared, and execution commands become unavailable. The status shows **GDB session ended.**; the console records the failure reason when available. Late replies cannot restore old data. The session's own SSH tunnel and remote-server launch process are closed.
+
+Close the debugger window and open **Debug C/C++ Executable** again. **Restart** restarts the program inside a working GDB; when GDB itself has ended, open a new session. A normal program exit still allows **Run** and **Restart**.

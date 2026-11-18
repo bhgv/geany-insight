@@ -91,12 +91,50 @@ static gboolean native_entry_gui_step(GtkWidget *window, GtkWidget *tabs)
     return G_SOURCE_CONTINUE;
 }
 
+/* EN: End window's real GDB while paused with populated locals; verify terminal cleanup in phases 14..15.
+ * Return CONTINUE while asynchronous shutdown drains, REMOVE after the assertions and GTK exit.
+ * RU: Завершает настоящий GDB окна window на паузе с переменными; проверяет очистку в фазах 14..15.
+ * Возвращает CONTINUE до завершения асинхронного отключения, REMOVE после проверок и выхода GTK. */
+static gboolean native_backend_gui_step(GtkWidget *window)
+{
+    GtkWidget *command = find(window, "GDB command, e.g. break main");
+    GtkWidget *resume = find(window, "Continue");
+    GtkWidget *locals = find(window, "insight-gdb-frame-variables");
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(locals));
+    if (phase == 14 && gtk_widget_is_sensitive(resume) &&
+        gtk_widget_is_sensitive(command) && gtk_tree_model_iter_n_children(model, NULL) > 0)
+    {
+        gtk_entry_set_text(GTK_ENTRY(command), "quit");
+        g_signal_emit_by_name(command, "activate");
+        phase = 15;
+    }
+    else if (phase == 15)
+    {
+        const gchar *status = gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-stop-reason")));
+        if (!strstr(status, "GDB session ended."))
+            return G_SOURCE_CONTINUE;
+        const gchar *inactive[] = {"Run", "Restart", "Continue", "Pause", "Stop", "Open Source"};
+        for (guint i = 0; i < G_N_ELEMENTS(inactive); i++)
+            g_assert_false(gtk_widget_is_sensitive(find(window, inactive[i])));
+        g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 0);
+        g_assert_false(gtk_widget_is_sensitive(command));
+        g_print("C/C++ GTK: GDB shutdown from a populated paused context clears stale data and disables execution.\n");
+        passed = TRUE;
+        gtk_widget_destroy(window);
+        gtk_main_quit();
+        return G_SOURCE_REMOVE;
+    }
+    return G_SOURCE_CONTINUE;
+}
+
 /* EN: Advance normal/nonzero/signal/relaunch checks in window using shared phase; tabs selects Console
  * for the screenshot. End GTK only after status, inactive controls and empty stopped context agree.
  * RU: Продвигает проверки нормального/ненулевого/сигнального выхода и перезапуска в window через phase;
  * tabs выбирает консоль для снимка. Завершает GTK после согласования статуса, кнопок и пустого контекста. */
 static gboolean native_exit_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
+    if (phase >= 14)
+        return native_backend_gui_step(window);
     if (phase >= 8)
         return native_entry_gui_step(window, tabs);
     GtkWidget *run = find(window, "Run");
@@ -159,10 +197,9 @@ static gboolean native_exit_gui_step(GtkWidget *window, GtkWidget *tabs)
     else if (phase == 7 && strstr(text, "Program exited with code 0."))
     {
         g_print("C/C++ GTK: normal/nonzero/signal exit status, cleared context and relaunch passed.\n");
-        passed = TRUE;
-        gtk_widget_destroy(window);
-        gtk_main_quit();
-        return G_SOURCE_REMOVE;
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(window, "insight-gdb-stop-at-main")), TRUE);
+        g_assert_true(click(window, "Run"));
+        phase = 14;
     }
     return G_SOURCE_CONTINUE;
 }

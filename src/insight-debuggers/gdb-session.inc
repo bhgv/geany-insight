@@ -294,8 +294,8 @@ static void native_debug_resume(GtkWidget *dialog, NativeDebug *session)
     }
 }
 
-/* EN: Finish writing to stream from result and advance dialog in data.
- * RU: Завершает запись в stream по result и продолжает работу dialog из data. */
+/* EN: Finish stream writing from result for dialog in data; transport failure clears the target and ends the protocol.
+ * RU: Завершает запись stream по result для dialog из data; ошибка транспорта очищает цель и завершает протокол. */
 static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer data)
 {
     GtkWidget *dialog = data;
@@ -306,14 +306,7 @@ static void native_debug_written(GObject *stream, GAsyncResult *result, gpointer
     if (!session->closed)
     {
         if (!ok)
-        {
-            native_debug_log(session, error->message);
-            session->pending = session->ready = session->resume = FALSE;
-            session->watch_pending = NULL;
-            g_clear_pointer(&session->editor_point_pending, g_free);
-            session->locals_pending = FALSE;
-            session->context_pending = NATIVE_CONTEXT_NONE;
-        }
+            native_backend_lost(session, error ? error->message : NULL);
         native_debug_update(session);
         native_debug_resume(dialog, session);
     }
@@ -353,13 +346,13 @@ static gchar *native_debug_scoped(NativeDebug *session, const gchar *command)
 }
 
 /* EN: Send command to dialog's GDB session and record its frame generation before the asynchronous write.
- * Busy/closed sessions ignore the request; the write callback reports transport errors.
+ * Busy/closed/failed sessions ignore the request; the write callback reports transport errors.
  * RU: Отправляет command сеансу GDB окна dialog и запоминает поколение кадра перед асинхронной записью.
- * Занятый/закрытый сеанс игнорирует запрос; обработчик записи сообщает ошибки транспорта. */
+ * Занятый/закрытый/аварийный сеанс игнорирует запрос; обработчик записи сообщает ошибки транспорта. */
 static void native_debug_send(GtkWidget *dialog, const gchar *command)
 {
     NativeDebug *session = g_object_get_data(G_OBJECT(dialog), "native-debug");
-    if (session->closed || session->pending || session->writing)
+    if (session->closed || session->backend_failed || session->pending || session->writing)
         return;
     if (native_attach_interrupt(session, command))
         return;

@@ -16,10 +16,19 @@ STATE = r'''typedef void GtkWidget;
 typedef struct {void *head, *tail; guint length;} GQueue;
 typedef struct {
     gboolean pending, writing, ready, running, stopped, stop_requested, kill_pending;
+    gboolean closed, backend_failed, locals_pending, points_pending;
+    void *watch_pending, *cancel;
+    int context_pending;
+    char *editor_point_pending, *stop_detail;
     GQueue launch_commands;
     GtkWidget *launch_status;
 } NativeDebug;
 #define TRUE 1
+#define NATIVE_CONTEXT_NONE 0
+#define g_clear_pointer(pointer, destroy) do { \
+    destroy(*(pointer)); \
+    *(pointer) = NULL; \
+} while (0)
 #define GTK_LABEL(value) (value)
 #define G_OBJECT(value) (value)
 extern void g_queue_push_tail(GQueue *, void *);
@@ -90,6 +99,29 @@ static void gtk_label_set_text(GtkWidget *label, const char *text)
     (void)label;
     g_free(error_message);
     error_message = g_strdup(text);
+}
+
+/* EN: Record teardown of session's owned transport without starting SSH.
+ * RU: Запоминает очистку собственного транспорта session без запуска SSH. */
+static void native_remote_drop(NativeDebug *session)
+{
+    (void)session;
+}
+
+/* EN: Accept the fixture's cancel handle; production uses GIO cancellation.
+ * RU: Принимает фиктивный cancel; производственный код использует отмену GIO. */
+static void g_cancellable_cancel(void *cancel)
+{
+    (void)cancel;
+}
+
+/* EN: Capture session's diagnostic message without a GTK console.
+ * RU: Запоминает диагностический message сеанса session без консоли GTK. */
+static void native_debug_log(NativeDebug *session, const char *message)
+{
+    (void)session;
+    g_free(error_message);
+    error_message = g_strdup(message);
 }
 '''
 
@@ -185,11 +217,32 @@ int main(int argc, char **argv)
             *flags[index] = original;
         }
     }
+    else if (!strcmp(argv[1], "backend-error") || !strcmp(argv[1], "backend-eof"))
+    {
+        session.running = session.pending = session.kill_pending = TRUE;
+        session.locals_pending = session.points_pending = TRUE;
+        session.context_pending = 4;
+        session.watch_pending = &session;
+        session.editor_point_pending = g_strdup("main");
+        g_queue_push_tail(&session.launch_commands, g_strdup("-exec-run"));
+        const char *message = !strcmp(argv[1], "backend-error") ? "Broken pipe" : NULL;
+        native_backend_lost(&session, message);
+        assert(session.backend_failed && !session.ready && !session.pending && !session.running);
+        assert(!session.stopped && !session.kill_pending && !session.locals_pending);
+        assert(!session.points_pending && !session.watch_pending && !session.context_pending);
+        assert(!session.editor_point_pending && !session.launch_commands.length && clear_count == 1);
+        assert(!strcmp(session.stop_detail, "GDB session ended."));
+        assert(!strcmp(error_message, message ? message : session.stop_detail));
+        native_backend_lost(&session, "late cancellation");
+        assert(clear_count == 1 && !strcmp(session.stop_detail, "GDB session ended."));
+        assert(!strcmp(error_message, message ? message : session.stop_detail));
+    }
     else
         assert(FALSE);
     insight_queue_clear_full(&session.launch_commands, g_free);
     g_free(sent_command);
     g_free(error_message);
+    g_free(session.stop_detail);
     return 0;
 }
 '''
@@ -206,7 +259,7 @@ class NativeLifecycle(unittest.TestCase):
         declarations += STATE
         helpers = [function('src/insight-debuggers/gdb-context.inc', 'native_debug_field')]
         helpers += [function('src/insight-debuggers/gdb-lifecycle.inc', name)
-                    for name in ('native_lifecycle_request', 'native_launch_next', 'native_lifecycle_reply')]
+                    for name in ('native_lifecycle_request', 'native_launch_next', 'native_lifecycle_reply', 'native_backend_lost')]
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             source = folder / 'lifecycle.c'
@@ -250,6 +303,16 @@ class NativeLifecycle(unittest.TestCase):
     # RU: Проверяет ожидание завершения команды/записи и готовности отладчика перед действиями self.
     def test_busy_session(self):
         self.exercise('busy')
+
+    # EN: Verify self's write error invalidates target data and queues exactly once despite late callbacks.
+    # RU: Проверяет однократную очистку цели и очередей self при ошибке записи и поздних обработчиках.
+    def test_backend_write_failure(self):
+        self.exercise('backend-error')
+
+    # EN: Verify self's EOF uses the same teardown and retains the visible session-ended reason.
+    # RU: Проверяет ту же очистку self при EOF и сохранение видимой причины завершения сеанса.
+    def test_backend_eof(self):
+        self.exercise('backend-eof')
 
 
 if __name__ == '__main__':

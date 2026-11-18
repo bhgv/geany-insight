@@ -107,7 +107,7 @@ typedef struct {
     gboolean resume;
     GHashTable *editor_points;
     gchar *editor_point_pending;
-    gboolean closed, ready, running, stopped, pending, writing, entry_pending;
+    gboolean closed, backend_failed, ready, running, stopped, pending, writing, entry_pending;
 } NativeDebug;
 
 static void native_assembly_prepare(NativeDebug *session, gchar *request, const gchar *expression);
@@ -138,6 +138,7 @@ static gchar *native_memory_next(NativeDebug *session);
 static gboolean native_memory_reply(NativeDebug *session, const gchar *record);
 static void native_memory_inspect(NativeDebug *session, const gchar *expression);
 static void native_target_clear(NativeDebug *session);
+static void native_backend_lost(NativeDebug *session, const gchar *message);
 static void native_values_reset(NativeDebug *session);
 static void native_values_context_reset(NativeDebug *session);
 static gchar *native_values_next(NativeDebug *session, gboolean cleanup);
