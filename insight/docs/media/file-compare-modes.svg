@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="340" viewBox="0 0 960 340" role="img" aria-labelledby="title desc">
+<title id="title">File Compare modes</title>
+<desc id="desc">Schematic: browsing shows the difference list and two read-only sources. Merge mode adds editable Result. Switching preserves Result and Undo history.</desc>
+<rect width="960" height="340" rx="12" fill="#f3f6fa"/>
+<g font-family="sans-serif" font-size="16" fill="#223348">
+<text x="28" y="34" font-size="21" font-weight="bold">File Compare: browsing</text>
+<text x="514" y="34" font-size="21" font-weight="bold">Merge mode</text>
+<g stroke="#8799ad" fill="#fff">
+<rect x="28" y="54" width="112" height="218" rx="5"/>
+<rect x="150" y="54" width="145" height="218" rx="5"/>
+<rect x="305" y="54" width="145" height="218" rx="5"/>
+<rect x="514" y="54" width="112" height="218" rx="5"/>
+<rect x="636" y="54" width="145" height="105" rx="5"/>
+<rect x="791" y="54" width="145" height="105" rx="5"/>
+<rect x="636" y="171" width="300" height="101" rx="5" fill="#e7f3e9"/>
+</g>
+<text x="40" y="81">Differences</text><text x="40" y="111" font-size="13">Symbol / scope</text>
+<text x="163" y="81">Left</text><text x="318" y="81">Right</text>
+<text x="163" y="107" font-size="13">Read-only</text><text x="318" y="107" font-size="13">Read-only</text>
+<text x="526" y="81">Differences</text><text x="526" y="111" font-size="13">Symbol / scope</text>
+<text x="649" y="81">Left</text><text x="804" y="81">Right</text>
+<text x="649" y="107" font-size="13">Read-only</text><text x="804" y="107" font-size="13">Read-only</text>
+<text x="649" y="199" font-weight="bold">Result — editable</text>
+<text x="649" y="226" font-size="14">Take Left / Take Right · Undo / Redo</text>
+<text x="28" y="311">Switching modes preserves Result and Undo history. Source files stay read-only.</text>
+</g></svg>

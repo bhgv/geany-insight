@@ -1315,4 +1315,5 @@ install_data(
   'insight/docs/media/script-debugger-stop.jpg',
   'insight/docs/media/script-debugger-input.jpg',
   'insight/docs/media/script-debugger-read.jpg',
+  'insight/docs/media/file-compare-modes.svg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

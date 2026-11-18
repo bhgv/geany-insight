@@ -349,3 +349,7 @@ Ordinary file comparisons open in browsing mode: differences on the left and two
 **Symbol / scope** identifies a definition containing the entire changed block. C/C++ supports functions, methods and recognized compound definitions; Verilog/SystemVerilog supports modules, functions/tasks and recognized related constructs. The bundled parser reads each compared snapshot, independently of the live buffer or another version’s project index. Different names show both versions. Extents are lexical: macros and build configurations are not evaluated. Ambiguous, cross-definition and unsupported blocks show **No symbol context** and retain their line ranges. Row tooltips expose the complete label.
 
 Use **Compare** to apply new paths or comparison settings. Switching modes writes no files. An unsaved hidden Result retains its dirty title and the normal close guard.
+
+![File Compare modes](../media/file-compare-modes.svg)
+
+Mode schematic: source panes remain read-only; switching retains Result and its history.
