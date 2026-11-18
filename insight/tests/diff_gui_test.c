@@ -17,6 +17,7 @@ static gchar *editor_path;static guint editor_line;
 #include "diff-gui/legacy.inc"
 #include "diff-gui/modes.inc"
 #include "diff-gui/symbol-navigation.inc"
+#include "diff-gui/symbol-browser.inc"
 
 /* EN: Run isolated comparison regressions with argc/argv for GTK; failed assertions terminate the fixture.
  * RU: Запускает изолированные проверки с argc/argv для GTK; неудачная проверка завершает фикстуру. */

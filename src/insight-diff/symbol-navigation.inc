@@ -2,6 +2,7 @@
 /* EN: Navigate definitions and literal occurrences within immutable compared source snapshots.
  * RU: Навигация по определениям и текстовым вхождениям внутри неизменных снимков сравнения. */
 typedef struct { guint side; gint offset; } DiffSymbolLocation;
+static void diff_symbol_browser(Merge *m, guint side);
 
 /* EN: Return an owned identifier at side's caret/selection in m, or NULL; never change selection or search options.
  * RU: Возвращает собственный идентификатор у курсора/выделения стороны side в m либо NULL; не меняет выделение и поиск. */
@@ -75,6 +76,7 @@ static void diff_symbol_jump(Merge *m, guint side, gint offset, gboolean remembe
     GtkTextIter at;
     if (remember)
     {
+        g_clear_pointer(&m->symbol_future, g_array_unref);
         gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
         DiffSymbolLocation location = {side, gtk_text_iter_get_offset(&at)};
         if (!m->symbol_history)
@@ -167,19 +169,35 @@ static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
     g_object_unref(model);
 }
 
-/* EN: Execute action (0 definition, 1 literal occurrences, 2 back) on source side of m; never write files or Result.
- * RU: Выполняет action (0 определение, 1 текстовые вхождения, 2 назад) для стороны side в m; не меняет файлы и Result. */
+/* EN: Execute action (0 definition, 1 occurrences, 2 back, 3 symbols, 4 forward) on source side of m; never write files or Result.
+ * RU: Выполняет action (0 определение, 1 вхождения, 2 назад, 3 символы, 4 вперёд) для стороны side в m; не меняет файлы и Result. */
 static void diff_symbol_action(Merge *m, guint side, guint action)
 {
     if (m->busy || side > 1 || !m->sources[side])
         return;
-    if (action == 2)
+    if (action == 3)
     {
-        if (m->symbol_history && m->symbol_history->len)
+        diff_symbol_browser(m, side);
+        return;
+    }
+    if (action == 2 || action == 4)
+    {
+        GArray **from = action == 2 ? &m->symbol_history : &m->symbol_future;
+        GArray **to = action == 2 ? &m->symbol_future : &m->symbol_history;
+        if (*from && (*from)->len)
         {
-            guint index = m->symbol_history->len - 1;
-            DiffSymbolLocation location = g_array_index(m->symbol_history, DiffSymbolLocation, index);
-            g_array_set_size(m->symbol_history, index);
+            guint index = (*from)->len - 1;
+            DiffSymbolLocation location = g_array_index(*from, DiffSymbolLocation, index);
+            GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));
+            GtkTextIter current;
+            gtk_text_buffer_get_iter_at_mark(buffer, &current, gtk_text_buffer_get_insert(buffer));
+            DiffSymbolLocation origin = {side, gtk_text_iter_get_offset(&current)};
+            if (!*to)
+                *to = g_array_new(FALSE, FALSE, sizeof(DiffSymbolLocation));
+            if ((*to)->len == 128)
+                g_array_remove_index(*to, 0);
+            g_array_append_val(*to, origin);
+            g_array_set_size(*from, index);
             diff_symbol_jump(m, location.side, location.offset, FALSE);
         }
         return;
@@ -211,7 +229,7 @@ static void diff_symbol_activate(GtkWidget *widget, gpointer window)
     Merge *m = g_object_get_data(G_OBJECT(window), "insight-diff-state");
     guint code = GPOINTER_TO_UINT(g_object_get_data(G_OBJECT(widget), "symbol-action"));
     if (m)
-        diff_symbol_action(m, code / 3, code % 3);
+        diff_symbol_action(m, code / 8, code % 8);
 }
 
 /* EN: Add source view's definition/occurrence/back actions to menu for m in data; callbacks expire with its window.
@@ -220,11 +238,11 @@ static void diff_symbol_menu(GtkTextView *view, GtkWidget *menu, gpointer data)
 {
     Merge *m = data;
     guint side = GTK_WIDGET(view) == m->views[1];
-    const gchar *labels[] = {"Go to definition — F12", "Text occurrences in snapshot — Shift+F12", "Back — Ctrl+Alt+Left"};
-    for (guint action = 0; action < 3; action++)
+    const gchar *labels[] = {"Go to definition — F12", "Text occurrences in snapshot — Shift+F12", "Back — Ctrl+Alt+Left", "Symbols in snapshot — Ctrl+Shift+O", "Forward — Ctrl+Alt+Right"};
+    for (guint action = 0; action < G_N_ELEMENTS(labels); action++)
     {
         GtkWidget *item = gtk_menu_item_new_with_label(insight_tr(labels[action]));
-        g_object_set_data(G_OBJECT(item), "symbol-action", GUINT_TO_POINTER(side * 3 + action));
+        g_object_set_data(G_OBJECT(item), "symbol-action", GUINT_TO_POINTER(side * 8 + action));
         gtk_widget_set_sensitive(item, !m->busy);
         gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
         g_signal_connect_object(item, "activate", G_CALLBACK(diff_symbol_activate), m->window, 0);
@@ -232,8 +250,8 @@ static void diff_symbol_menu(GtkTextView *view, GtkWidget *menu, gpointer data)
     }
 }
 
-/* EN: Handle F12/Shift+F12 and Ctrl+Alt+Left only in source view for m in data; return whether consumed.
- * RU: Обрабатывает F12/Shift+F12 и Ctrl+Alt+Left только в исходнике view для m из data; возвращает признак обработки. */
+/* EN: Handle definition/occurrence, symbol browser and back/forward shortcuts only in source view for m in data; return whether consumed.
+ * RU: Обрабатывает определения/вхождения, список символов и назад/вперёд только в исходнике view для m из data; возвращает признак обработки. */
 static gboolean diff_symbol_key(GtkWidget *view, GdkEventKey *event, gpointer data)
 {
     Merge *m = data;
@@ -244,9 +262,14 @@ static gboolean diff_symbol_key(GtkWidget *view, GdkEventKey *event, gpointer da
         diff_symbol_action(m, side, !!(modifiers & GDK_SHIFT_MASK));
         return TRUE;
     }
-    if (event->keyval == GDK_KEY_Left && modifiers == (GDK_CONTROL_MASK | GDK_MOD1_MASK))
+    if ((event->keyval == GDK_KEY_o || event->keyval == GDK_KEY_O) && modifiers == (GDK_CONTROL_MASK | GDK_SHIFT_MASK))
     {
-        diff_symbol_action(m, side, 2);
+        diff_symbol_action(m, side, 3);
+        return TRUE;
+    }
+    if ((event->keyval == GDK_KEY_Left || event->keyval == GDK_KEY_Right) && modifiers == (GDK_CONTROL_MASK | GDK_MOD1_MASK))
+    {
+        diff_symbol_action(m, side, event->keyval == GDK_KEY_Left ? 2 : 4);
         return TRUE;
     }
     return FALSE;
@@ -256,14 +279,14 @@ static gboolean diff_symbol_key(GtkWidget *view, GdkEventKey *event, gpointer da
  * RU: Добавляет команды и клавиши исходников в файловое сравнение m, сохраняя прежнее поведение AI review. */
 static void diff_symbol_tools(Merge *m)
 {
-    const gchar *labels[] = {"Definition", "Text occurrences…", "Back"};
+    const gchar *labels[] = {"Definition", "Text occurrences…", "Back", "Symbols…"};
     for (guint side = 0; side < 2; side++)
     {
         GtkWidget *column = gtk_widget_get_parent(gtk_widget_get_parent(m->headers[side]));
         GtkWidget *row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
         gtk_box_pack_start(GTK_BOX(column), row, FALSE, FALSE, 0);
         gtk_box_reorder_child(GTK_BOX(column), row, 1);
-        for (guint action = 0; action < 3; action++)
+        for (guint action = 0; action < G_N_ELEMENTS(labels); action++)
         {
             GtkWidget *control = gtk_button_new_with_label(insight_tr(labels[action]));
             gchar *name = g_strdup_printf("insight-diff-symbol-%u-%u", side, action);
@@ -271,7 +294,7 @@ static void diff_symbol_tools(Merge *m)
             g_free(name);
             gtk_widget_set_tooltip_text(control, insight_tr(
                 "Definitions use this version only. Occurrences are case-sensitive whole-word text matches, including comments and strings."));
-            g_object_set_data(G_OBJECT(control), "symbol-action", GUINT_TO_POINTER(side * 3 + action));
+            g_object_set_data(G_OBJECT(control), "symbol-action", GUINT_TO_POINTER(side * 8 + action));
             g_signal_connect_object(control, "clicked", G_CALLBACK(diff_symbol_activate), m->window, 0);
             gtk_box_pack_start(GTK_BOX(row), control, FALSE, FALSE, 0);
         }

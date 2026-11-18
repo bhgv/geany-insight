@@ -119,6 +119,43 @@ static void capture(GtkWidget *window, const gchar *variable)
     g_object_unref(pixels);
 }
 
+/* EN: Capture the retained dialog in data after its filtered list and preview have painted, then accept it.
+ * RU: Снимает сохранённый dialog из data после отрисовки фильтра и предпросмотра, затем подтверждает выбор. */
+static gboolean capture_symbols(gpointer data)
+{
+    GtkWidget *dialog = data;
+    capture(dialog, "INSIGHT_FILE_SYMBOLS_CAPTURE");
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
+    return G_SOURCE_REMOVE;
+}
+
+/* EN: Inspect the real symbol browser after painting, capture it and choose the filtered Verilog function; data is unused.
+ * RU: Проверяет настоящий список символов после отрисовки, снимает его и выбирает функцию Verilog; data не используется. */
+static gboolean browse_symbols(gpointer data)
+{
+    (void)data;
+    GList *windows = gtk_window_list_toplevels();
+    GtkWidget *dialog = NULL;
+    for (GList *it = windows; it; it = it->next)
+        if (!g_strcmp0(gtk_widget_get_name(it->data), "insight-diff-symbol-browser"))
+            dialog = it->data;
+    g_list_free(windows);
+    g_assert_nonnull(dialog);
+    GtkWidget *tree = find(dialog, "insight-diff-symbol-list");
+    GtkTreeModel *model = gtk_tree_view_get_model(GTK_TREE_VIEW(tree));
+    g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), >=, 2);
+    gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(find(dialog, "insight-diff-symbol-changed")), TRUE);
+    gtk_entry_set_text(GTK_ENTRY(find(dialog, "insight-diff-symbol-filter")), "VALUE");
+    g_assert_cmpint(gtk_tree_model_iter_n_children(model, NULL), ==, 1);
+    gchar *preview = text(find(dialog, "insight-diff-symbol-preview"));
+    g_assert_nonnull(strstr(preview, "module Top;"));
+    g_assert_null(strstr(preview, "stale_live_buffer"));
+    g_free(preview);
+    gtk_widget_queue_draw(dialog);
+    g_timeout_add_full(G_PRIORITY_DEFAULT, 150, capture_symbols, g_object_ref(dialog), g_object_unref);
+    return G_SOURCE_REMOVE;
+}
+
 /* EN: Advance the isolated fixture from unused data; test exact on-disk versions even with a different live buffer.
  * Return REMOVE after C++/Verilog, layout and retained-result assertions; failures abort the test.
  * RU: Продвигает фикстуру из неиспользуемого data; проверяет дисковые версии при отличающемся живом буфере.
@@ -234,6 +271,14 @@ static gboolean drive(gpointer data)
         gtk_text_buffer_get_iter_at_offset(buffer, &at, original);
         gtk_text_buffer_place_cursor(buffer, &at);
         click(window, "insight-diff-symbol-0-0");
+        gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+        g_assert_cmpint(gtk_text_iter_get_line(&at), ==, 4);
+        click(window, "insight-diff-symbol-0-2");
+        gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+        g_assert_cmpint(gtk_text_iter_get_offset(&at), ==, original);
+        phase = 6;
+        g_timeout_add(200, browse_symbols, NULL);
+        click(window, "insight-diff-symbol-0-3");
         gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
         g_assert_cmpint(gtk_text_iter_get_line(&at), ==, 4);
         click(window, "insight-diff-symbol-0-2");

@@ -969,3 +969,5 @@ EXTRA_DIST += insight/tests/diff-gui/hunks-and-navigation.inc insight/tests/diff
 EXTRA_DIST += insight/tests/diff-gui/symbol-navigation.inc
 
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-code.jpg insight/docs/media/file-compare-merge.jpg
+
+EXTRA_DIST += insight/tests/diff-gui/symbol-browser.inc

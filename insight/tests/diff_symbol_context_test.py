@@ -25,7 +25,8 @@ typedef int gboolean;
 typedef struct {void **pdata; guint len;} GPtrArray;
 typedef struct {char *name; size_t begin, end;} InsightDiffSymbol;
 typedef struct {size_t a_begin,a_end,b_begin,b_end;} InsightDiffHunk;
-typedef struct {char *sources[2]; GPtrArray *symbols[2];} Merge;
+typedef struct {InsightDiffHunk *hunks; size_t count;} InsightDiff;
+typedef struct {char *sources[2]; GPtrArray *symbols[2]; InsightDiff diff;} Merge;
 #define TRUE 1
 #define FALSE 0
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -60,7 +61,14 @@ int main(void)
     void *left_items[] = {&outer,&inner,&ambiguous};
     void *right_items[] = {&right};
     GPtrArray left = {left_items,2}, right_ranges = {right_items,1};
-    Merge m = {{source,source},{&left,&right_ranges}};
+    Merge m = {.sources={source,source},.symbols={&left,&right_ranges}};
+    InsightDiffHunk change = {5,5,10,12};
+    m.diff = (InsightDiff){&change,1};
+    assert(!diff_symbol_changed(&m,0,0,5));
+    assert(diff_symbol_changed(&m,0,5,10));
+    assert(!diff_symbol_changed(&m,1,0,10));
+    assert(diff_symbol_changed(&m,1,11,15));
+    assert(!diff_symbol_changed(&m,1,12,15));
     assert(!strcmp(diff_symbols_owner(&m,0,4,7),"Inner"));
     assert(!strcmp(diff_symbols_owner(&m,0,12,17),"Outer"));
     assert(!diff_symbols_owner(&m,0,4,4));
@@ -111,6 +119,7 @@ class SnapshotSymbolContext(unittest.TestCase):
         helpers = ''.join(function('src/insight-diff/symbol-context.inc', name)
                           for name in ('diff_symbols_owner', 'diff_symbols_hunk'))
         helpers += function('src/insight-diff/symbol-navigation.inc', 'diff_symbol_matches')
+        helpers += function('src/insight-diff/symbol-browser.inc', 'diff_symbol_changed')
         helpers += ''.join(function('src/insight-diff-symbols.c', name)
                            for name in ('diff_symbol_word', 'diff_symbol_token', 'diff_symbol_named',
                                         'diff_symbol_line_end', 'diff_symbol_verilog'))

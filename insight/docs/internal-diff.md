@@ -365,3 +365,11 @@ Occurrences use the internal case-sensitive whole-word text search, including co
 ![Explicit merge mode](media/file-compare-merge.jpg)
 
 Real Linux editor window in an isolated GUI fixture: C++ snapshots, symbol labels, navigation controls and Result after taking a block from Right.
+
+## Symbol list for a compared version
+
+Each source's **Symbols…** button and **Ctrl+Shift+O** open functions, methods and compound definitions from that version. The filter matches a case-insensitive substring of the full scoped name. Column headers sort by name, line and change status. **Changed definitions only** keeps ranges intersecting differences; nesting can mark both a method and its class. This is a lexical range test, not a behavioral assessment. An insertion exactly after a definition ends does not belong to it.
+
+The preview uses the immutable snapshot with syntax highlighting; selecting a row does not move the source caret. Enter or double-click confirms navigation; Esc cancels. Ctrl+F focuses the filter, Down enters the list. Empty results disable navigation. Acceptance is rejected if the comparison changed in the meantime.
+
+**Ctrl+Alt+Left/Right** navigate backward/forward. A new jump after going back clears the forward branch; a successful new comparison clears both histories. Result and its Undo remain separate.

@@ -3543,3 +3543,12 @@ Back — Ctrl+Alt+Left	Назад — Ctrl+Alt+Влево
 Definition	Определение
 Text occurrences…	Текстовые вхождения…
 Definitions use this version only. Occurrences are case-sensitive whole-word text matches, including comments and strings.	Определения берутся только из этой версии. Вхождения — текстовые совпадения целого слова с учётом регистра, включая комментарии и строки.
+Symbols in this snapshot	Символы в этом снимке
+Symbols in snapshot — Ctrl+Shift+O	Символы в снимке — Ctrl+Shift+O
+Forward — Ctrl+Alt+Right	Вперёд — Ctrl+Alt+Вправо
+Symbols…	Символы…
+Left snapshot	Левый снимок
+Right snapshot	Правый снимок
+Filter symbol names	Фильтр имён символов
+Changed definitions only	Только изменённые определения
+%u of %u symbols	%u из %u символов
