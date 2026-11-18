@@ -245,8 +245,9 @@ jobs:
       - name: Verify normal, nonzero and signal exits in the debugger window
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
-          cc -g -O0 insight/tests/native-debug/exits.c -o "$RUNNER_TEMP/native-gdb-exits"
-          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_GDB_EXIT_GUI=1 INSIGHT_GDB_ENTRY_CAPTURE="$PWD/native-gdb-entry.jpg" INSIGHT_GDB_EXIT_CAPTURE="$PWD/native-gdb-exit.jpg" INSIGHT_GDB_RECOVERY_CAPTURE="$PWD/native-gdb-recovery.jpg" INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-exit.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-exits" insight/tests/native-debug/entry-observer.lua "$RUNNER_TEMP/native-gdb-exit-profile"
+          cp insight/tests/native-debug/exits.c "$RUNNER_TEMP/native-gdb-exits.c"
+          cc -g -O0 "$RUNNER_TEMP/native-gdb-exits.c" -o "$RUNNER_TEMP/native-gdb-exits"
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_GDB_EXIT_GUI=1 INSIGHT_GDB_ENTRY_CAPTURE="$PWD/native-gdb-entry.jpg" INSIGHT_GDB_EXIT_CAPTURE="$PWD/native-gdb-exit.jpg" INSIGHT_GDB_RECOVERY_CAPTURE="$PWD/native-gdb-recovery.jpg" INSIGHT_GDB_SOURCE_FIXTURE="$RUNNER_TEMP/native-gdb-exits.c" INSIGHT_GDB_SOURCE_CAPTURE="$PWD/native-gdb-source-unavailable.jpg" INSIGHT_CI_DIAGNOSTIC_FILE=native-gdb-exit.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a _native/tests/test_insight_native_debugger_gui "$RUNNER_TEMP/native-gdb-exits" insight/tests/native-debug/entry-observer.lua "$RUNNER_TEMP/native-gdb-exit-profile"
       - name: Exercise GDB through an isolated real SSH gdbserver
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
@@ -269,6 +270,7 @@ jobs:
             native-gdb-exit.log
             native-gdb-exit.jpg
             native-gdb-recovery.jpg
+            native-gdb-source-unavailable.jpg
             native-gdb-entry.jpg
             native-gdb-remote.log
           retention-days: 3

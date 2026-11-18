@@ -91,10 +91,10 @@ static gboolean native_entry_gui_step(GtkWidget *window, GtkWidget *tabs)
     return G_SOURCE_CONTINUE;
 }
 
-/* EN: Exercise window's failed-backend recovery in phases 14..22 with real GDB and unsaved form changes.
+/* EN: Exercise window's failed-backend recovery in phases 14..25 with real GDB and unsaved form changes.
  * Check stale-data cleanup, explicit reopen, restored settings/points/watches and a subsequent explicit run.
  * Return CONTINUE while asynchronous work drains, REMOVE after the assertions and GTK exit.
- * RU: Проверяет восстановление GDB окна window в фазах 14..22 с настоящим GDB и несохранёнными настройками.
+ * RU: Проверяет восстановление GDB окна window в фазах 14..25 с настоящим GDB и несохранёнными настройками.
  * Проверяет очистку, явное открытие, перенос настроек/точек/наблюдений и последующий явный запуск.
  * Возвращает CONTINUE до завершения асинхронных действий, REMOVE после проверок и выхода GTK. */
 static gboolean native_backend_gui_step(GtkWidget *window)
@@ -174,6 +174,43 @@ static gboolean native_backend_gui_step(GtkWidget *window)
     else if (phase == 19 && gtk_widget_is_sensitive(resume) && has_local(window, "argc", "2"))
     {
         g_assert_nonnull(find(window, "argc = 2"));
+        const gchar *source = g_getenv("INSIGHT_GDB_SOURCE_FIXTURE");
+        if (source)
+        {
+            gchar *hidden = g_strconcat(source, ".hidden", NULL);
+            g_assert_cmpint(g_rename(source, hidden), ==, 0);
+            g_free(hidden);
+            g_assert_true(click(window, "Stack"));
+            phase = 23;
+        }
+        else
+        {
+            g_assert_true(click(window, "Continue"));
+            phase = 20;
+        }
+    }
+    else if (phase == 23 && gtk_widget_is_sensitive(command))
+    {
+        const gchar *message = gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-source-status")));
+        g_assert_nonnull(strstr(message, "Source file is unavailable locally:"));
+        g_assert_false(gtk_widget_is_sensitive(find(window, "Open Source")));
+        phase = 24;
+    }
+    else if (phase == 24)
+    {
+        native_exit_gui_capture(window, "INSIGHT_GDB_SOURCE_CAPTURE");
+        const gchar *source = g_getenv("INSIGHT_GDB_SOURCE_FIXTURE");
+        gchar *hidden = g_strconcat(source, ".hidden", NULL);
+        g_assert_cmpint(g_rename(hidden, source), ==, 0);
+        g_free(hidden);
+        g_assert_true(click(window, "Stack"));
+        phase = 25;
+    }
+    else if (phase == 25 && gtk_widget_is_sensitive(command))
+    {
+        g_assert_cmpstr(gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-source-status"))), ==, "");
+        g_assert_true(gtk_widget_is_sensitive(find(window, "Open Source")));
+        g_print("C/C++ GTK: missing local source is diagnosed without a file-open dialog; restored source re-enables navigation.\n");
         g_assert_true(click(window, "Continue"));
         phase = 20;
     }

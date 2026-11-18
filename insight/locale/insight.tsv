@@ -3520,3 +3520,5 @@ Memory snapshot — %s; bytes: %u.	Снимок памяти — %s; байт: %
 Repeat the last explicit read after stops and context changes. Read Memory applies draft fields; block navigation keeps the confirmed size.	Повторять последнее явное чтение при остановках и смене контекста. «Прочитать память» применяет черновики; переходы между блоками сохраняют подтверждённый размер.
 Open new GDB session	Открыть новый сеанс GDB
 Open a fresh GDB with current launch/SSH settings, watches and persistent breakpoints. Connect or Run explicitly.	Открыть новый GDB с текущими настройками запуска/SSH, наблюдениями и постоянными точками. Подключитесь или запустите программу явно.
+Source file is unavailable locally: %s. Check source mapping.	Исходный файл недоступен локально: %s. Проверьте сопоставление исходников.
+The selected frame has no source coordinates. Inspect the stack or assembly.	В выбранном кадре нет координат исходника. Исследуйте стек или ассемблер.

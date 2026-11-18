@@ -53,7 +53,7 @@ typedef struct {
     GDataInputStream *output;
     GCancellable *cancel;
     gchar *gdb_executable, *target_executable;
-    GtkWidget *reopen;
+    GtkWidget *reopen, *source_status;
     GtkWidget *status, *command, *location, *breakpoint, *load_lua, *unload_lua, *source, *buttons[NATIVE_ACTION_COUNT];
     GtkTextView *console, *watches;
     NativeAssembly *assembly;
@@ -154,6 +154,8 @@ static void native_run_to_cursor(GtkWidget *dialog);
 static gchar *native_stop_detail(const gchar *record);
 static gchar *native_launch_next(NativeDebug *session);
 static void native_source_stopped(NativeDebug *session);
+static gboolean native_source_available(NativeDebug *session);
+static void native_source_update(NativeDebug *session);
 static gchar *native_point_key(const gchar *filename, guint line);
 static gboolean native_attach_interrupt(NativeDebug *session, const gchar *command);
 static void native_attach_stopped(NativeDebug *session, const gchar *record);

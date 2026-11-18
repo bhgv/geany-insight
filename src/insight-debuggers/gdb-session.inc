@@ -57,7 +57,7 @@ static void native_debug_update(NativeDebug *session)
     gtk_widget_set_sensitive(session->watch_remove, idle && !session->running);
     gtk_widget_set_sensitive(session->location, idle && !session->running);
     gtk_widget_set_sensitive(session->breakpoint, idle && !session->running);
-    gtk_widget_set_sensitive(session->source, session->stopped && session->stop_file && session->stop_line);
+    native_source_update(session);
     gtk_widget_set_sensitive(session->load_lua, !session->running);
     gtk_widget_set_sensitive(session->unload_lua, !session->running && session->observer != NULL);
     gtk_widget_set_sensitive(session->reopen, session->backend_failed && !session->closed);

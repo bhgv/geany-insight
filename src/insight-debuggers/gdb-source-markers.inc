@@ -46,12 +46,50 @@ static void native_marker_add(GPtrArray *owned, const gchar *filename, guint lin
     }
 }
 
-/* EN: Open and highlight session's stopped source; clear the old highlight if unavailable.
- * RU: Открывает и подсвечивает исходник остановки session; удаляет старую подсветку при отсутствии позиции. */
+/* EN: Return whether session's paused source coordinates identify an existing absolute local file.
+ * Convert the UTF-8 GDB path to native encoding; absent/relative/unconvertible paths return FALSE.
+ * RU: Возвращает, указывают ли координаты остановки session на существующий абсолютный локальный файл.
+ * Преобразует путь GDB из UTF-8; отсутствующие/относительные/непреобразуемые пути дают FALSE. */
+static gboolean native_source_available(NativeDebug *session)
+{
+    if (!session->stopped || !session->stop_file || !*session->stop_file || !session->stop_line)
+        return FALSE;
+    gchar *filename = utils_get_locale_from_utf8(session->stop_file);
+    gboolean available = filename && g_path_is_absolute(filename) &&
+        g_file_test(filename, G_FILE_TEST_IS_REGULAR);
+    g_free(filename);
+    return available;
+}
+
+/* EN: Update session's source action and diagnostic without changing the selected frame or execution.
+ * Missing coordinates explain assembly fallback; unavailable files expose the full path in a tooltip.
+ * RU: Обновляет кнопку исходника и пояснение session без изменения выбранного кадра и исполнения.
+ * При отсутствии координат предлагает ассемблер; недоступный путь полностью показывается в подсказке. */
+static void native_source_update(NativeDebug *session)
+{
+    gboolean available = native_source_available(session);
+    gtk_widget_set_sensitive(session->source, available);
+    gchar *message = NULL;
+    if (session->stopped && !available)
+    {
+        if (session->stop_file && *session->stop_file && session->stop_line)
+            message = g_strdup_printf(insight_tr("Source file is unavailable locally: %s. Check source mapping."), session->stop_file);
+        else
+            message = g_strdup(insight_tr("The selected frame has no source coordinates. Inspect the stack or assembly."));
+    }
+    gchar *valid = g_utf8_make_valid(message ? message : "", -1);
+    gtk_label_set_text(GTK_LABEL(session->source_status), valid);
+    gtk_widget_set_tooltip_text(session->source_status, *valid ? valid : NULL);
+    g_free(valid);
+    g_free(message);
+}
+
+/* EN: Open and highlight session's existing stopped source; clear old highlights without opening missing files.
+ * RU: Открывает и подсвечивает существующий исходник остановки session; очищает старую подсветку без открытия отсутствующих файлов. */
 static void native_source_stopped(NativeDebug *session)
 {
     g_ptr_array_set_size(session->stop_markers, 0);
-    if (!session->stop_file || !session->stop_line)
+    if (!native_source_available(session))
         return;
     gchar *filename = utils_get_locale_from_utf8(session->stop_file);
     diff_source_open(filename, session->stop_line);

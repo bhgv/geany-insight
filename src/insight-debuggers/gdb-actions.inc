@@ -265,13 +265,13 @@ static void native_debug_breakpoint(GtkButton *button, gpointer data)
     g_free(escaped);
 }
 
-/* EN: Open the source at the last stop in data. button is unused.
- * RU: Открывает исходник последней остановки из data. button не используется. */
+/* EN: Open the existing local source at the last stop in data; button is unused, missing files are ignored.
+ * RU: Открывает существующий локальный исходник последней остановки data; button не используется, отсутствующие файлы пропускаются. */
 static void native_debug_source(GtkButton *button, gpointer data)
 {
     (void)button;
     NativeDebug *session = data;
-    if (session->stop_file && session->stop_line)
+    if (native_source_available(session))
     {
         gchar *path = utils_get_locale_from_utf8(session->stop_file);
         diff_source_open(path, session->stop_line);

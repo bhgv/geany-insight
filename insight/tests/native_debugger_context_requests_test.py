@@ -202,6 +202,13 @@ static void diff_source_open(const char *filename, guint line)
     source_count++;
 }
 
+/* EN: Treat session's synthetic frame paths as present; real filesystem availability is covered separately.
+ * RU: Считает синтетические пути кадров session доступными; настоящая файловая доступность проверяется отдельно. */
+static gboolean native_source_available(NativeDebug *session)
+{
+    return session->stopped && session->stop_file && session->stop_line;
+}
+
 /* EN: Record a valid stopped-line marker in owned; filename/line/type/color describe the requested marker.
  * RU: Запоминает допустимый маркер остановки в owned; filename/line/type/color описывают запрошенный маркер. */
 static void native_marker_add(GPtrArray *owned, const char *filename, guint line, int type, int color)

@@ -104,6 +104,14 @@ static gboolean native_debug_show(const gchar *gdb, const gchar *target, NativeD
     gtk_label_set_ellipsize(GTK_LABEL(session->status), PANGO_ELLIPSIZE_END);
     gtk_box_pack_start(GTK_BOX(box), session->status, FALSE, FALSE, 4);
 
+    session->source_status = gtk_label_new(NULL);
+    gtk_widget_set_name(session->source_status, "insight-gdb-source-status");
+    gtk_label_set_line_wrap(GTK_LABEL(session->source_status), TRUE);
+    gtk_label_set_max_width_chars(GTK_LABEL(session->source_status), 100);
+    gtk_label_set_lines(GTK_LABEL(session->source_status), 2);
+    gtk_label_set_ellipsize(GTK_LABEL(session->source_status), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), session->source_status, FALSE, FALSE, 0);
+
     GtkWidget *toolbar = gtk_flow_box_new();
     gtk_flow_box_set_selection_mode(GTK_FLOW_BOX(toolbar), GTK_SELECTION_NONE);
     gtk_flow_box_set_max_children_per_line(GTK_FLOW_BOX(toolbar), 6);

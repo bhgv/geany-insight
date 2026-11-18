@@ -114,8 +114,8 @@ static gboolean profile_point_rule(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Advance the remote scenario for window/tabs, including reconnect, detach, Stop and refused SSH.
- * RU: Продвигает удалённый сценарий window/tabs с переподключением, detach, Stop и отказом SSH. */
+/* EN: Advance window/tabs through SSH profiles, attach, refused-port retry and fresh-GDB recovery; never use external hosts.
+ * RU: Проверяет window/tabs с профилями SSH, attach, повтором после отказа порта и новым GDB; внешние узлы не используются. */
 static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;
@@ -361,12 +361,60 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
         {
             g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
             g_print("C/C++ remote GTK: profiles, SSH forwarding, source mapping, breakpoints, locals, watches, pause, PID attach/retry, detach, reconnect and Stop passed.\n");
-            passed = TRUE;
-            gtk_widget_destroy(window);
-            gtk_main_quit();
-            return G_SOURCE_REMOVE;
+            if (extended)
+            {
+                gtk_spin_button_set_value(GTK_SPIN_BUTTON(find(window, "insight-gdb-ssh-port")),
+                    atoi(g_getenv("INSIGHT_GDB_SSH_PORT")));
+                g_assert(click(window, "Connect gdbserver via SSH"));
+                phase = 50;
+            }
+            else
+            {
+                passed = TRUE;
+                gtk_widget_destroy(window);
+                gtk_main_quit();
+                return G_SOURCE_REMOVE;
+            }
         }
     }
     (void)tabs;
+    else if (phase == 50 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
+        phase = 51;
+    else if (phase == 51 && has_local(window, "marker", "41") && find(window, "marker = 41"))
+    {
+        GtkWidget *command = find(window, "GDB command, e.g. break main");
+        if (gtk_widget_is_sensitive(command))
+        {
+            gtk_entry_set_text(GTK_ENTRY(command), "quit");
+            g_signal_emit_by_name(command, "activate");
+            phase = 52;
+        }
+    }
+    else if (phase == 52 && click(window, "Open new GDB session"))
+        phase = 53;
+    else if (phase == 53 && gtk_widget_is_sensitive(find(window, "Connect gdbserver via SSH")))
+    {
+        g_assert_cmpint(gtk_combo_box_get_active(GTK_COMBO_BOX(find(window, "insight-gdb-connection-mode"))), ==, 2);
+        g_assert_cmpint(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(find(window, "insight-gdb-ssh-port"))),
+            ==, atoi(g_getenv("INSIGHT_GDB_SSH_PORT")));
+        g_assert(!gtk_widget_is_sensitive(find(window, "Run")));
+        g_assert(click(window, "Connect gdbserver via SSH"));
+        phase = 54;
+    }
+    else if (phase == 54 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
+        phase = 55;
+    else if (phase == 55 && source_markers() && has_local(window, "marker", "41") && find(window, "marker = 41") &&
+             click(window, "Stop"))
+        phase = 56;
+    else if (phase == 56 && click(window, "Detach and close SSH"))
+        phase = 57;
+    else if (phase == 57 && remote_test_status(window, "Remote disconnected"))
+    {
+        g_print("C/C++ remote GTK: refused-port retry, fresh GDB, explicit SSH reconnect, restored breakpoint/watch/source mapping and Run passed.\n");
+        passed = TRUE;
+        gtk_widget_destroy(window);
+        gtk_main_quit();
+        return G_SOURCE_REMOVE;
+    }
     return G_SOURCE_CONTINUE;
 }
