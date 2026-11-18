@@ -553,3 +553,7 @@ Production debugger window with GDB and an isolated test program: the session ha
 At a stop, the debugger checks the selected frame’s local source file. An unavailable path appears below the status with source-mapping guidance and its full text in a tooltip. **Open Source** becomes unavailable and the editor does not automatically open a missing file. A frame without source coordinates instead suggests inspecting the stack or assembly; this alone does not establish that the entire binary lacks debug symbols. Debugging remains available.
 
 For SSH, check the remote build’s source root against the matching local directory. After restoring a file, refresh the stack while paused: the diagnostic clears and navigation becomes available. After a refused SSH connection, correct the connection fields and retry Connect. If GDB itself ended, use **Open new GDB session**, then explicitly Connect and Run.
+
+Production GDB window with an isolated test program: the source file is temporarily absent, its exact path is shown, **Open Source** is unavailable and debugging commands remain available. Restoring the file and refreshing the stack restores navigation.
+
+![Unavailable local source](media/native-gdb-source-unavailable.jpg)

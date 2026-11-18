@@ -114,8 +114,10 @@ static gboolean profile_point_rule(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Advance window/tabs through SSH profiles, attach, refused-port retry and fresh-GDB recovery; never use external hosts.
- * RU: Проверяет window/tabs с профилями SSH, attach, повтором после отказа порта и новым GDB; внешние узлы не используются. */
+/* EN: Advance window/tabs through SSH profiles, attach, refused-port retry and fresh-GDB recovery on loopback only.
+ * Return CONTINUE while waiting, REMOVE after success and GTK shutdown; failed assertions abort the fixture.
+ * RU: Проверяет window/tabs с профилями SSH, attach, повтором после отказа порта и новым GDB только на loopback.
+ * Возвращает CONTINUE при ожидании, REMOVE после успеха и выхода GTK; неудачные проверки завершают фикстуру. */
 static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
 {
     gboolean extended = g_strcmp0(g_getenv("INSIGHT_GDB_REMOTE_MODE"), "1") != 0;

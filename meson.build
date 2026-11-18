@@ -1310,4 +1310,5 @@ install_data(
   'insight/docs/media/native-expression-follow.jpg',
   'insight/docs/media/native-memory-follow.jpg',
   'insight/docs/media/native-gdb-recovery.jpg',
+  'insight/docs/media/native-gdb-source-unavailable.jpg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')
