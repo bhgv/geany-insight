@@ -967,3 +967,5 @@ EXTRA_DIST += insight/tests/file_compare_gui_test.c
 EXTRA_DIST += insight/tests/diff-gui/hunks-and-navigation.inc insight/tests/diff-gui/overview-and-lifetime.inc insight/tests/diff-gui/preferences-and-review.inc
 
 EXTRA_DIST += insight/tests/diff-gui/symbol-navigation.inc
+
+dist_insightdocmedia_DATA += insight/docs/media/file-compare-code.jpg insight/docs/media/file-compare-merge.jpg
