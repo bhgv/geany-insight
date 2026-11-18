@@ -376,6 +376,12 @@ The status names the expression and byte count actually read, with the full
 expression available as a tooltip. A late response cannot replace a newer
 context or relabel itself using a subsequently queued request.
 
+Actual editor/GDB with the multithreaded test program: the second worker's
+four-byte `&value` snapshot is displayed. The `&shared_value` address and `128`
+size in the input fields are unapplied drafts; the status identifies the active read.
+
+![Memory snapshot with independent address and size drafts](media/native-memory-follow.jpg)
+
 ## Remote gdbserver over SSH
 
 At executable selection, choose a **local copy with debug symbols** matching the
