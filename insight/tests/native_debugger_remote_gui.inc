@@ -379,7 +379,9 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 50 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
         phase = 51;
-    else if (phase == 51 && has_local(window, "marker", "41") && find(window, "marker = 41"))
+    else if (phase == 51 && source_markers() && click(window, "Step Over"))
+        phase = 58;
+    else if (phase == 58 && has_local(window, "marker", "41") && find(window, "marker = 41"))
     {
         GtkWidget *command = find(window, "GDB command, e.g. break main");
         if (gtk_widget_is_sensitive(command))
@@ -402,7 +404,9 @@ static gboolean native_remote_gui_step(GtkWidget *window, GtkWidget *tabs)
     }
     else if (phase == 54 && remote_test_status(window, "SSH gdbserver connected") && click(window, "Run"))
         phase = 55;
-    else if (phase == 55 && source_markers() && has_local(window, "marker", "41") && find(window, "marker = 41") &&
+    else if (phase == 55 && source_markers() && click(window, "Step Over"))
+        phase = 59;
+    else if (phase == 59 && has_local(window, "marker", "41") && find(window, "marker = 41") &&
              click(window, "Stop"))
         phase = 56;
     else if (phase == 56 && click(window, "Detach and close SSH"))

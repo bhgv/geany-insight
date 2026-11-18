@@ -93,10 +93,10 @@ static gboolean native_entry_gui_step(GtkWidget *window, GtkWidget *tabs)
 
 /* EN: Exercise window's failed-backend recovery in phases 14..25 with real GDB and unsaved form changes.
  * Check stale-data cleanup, explicit reopen, restored settings/points/watches and a subsequent explicit run.
- * Return CONTINUE while asynchronous work drains, REMOVE after the assertions and GTK exit.
+ * Temporarily hide/restore the optional source fixture. Return CONTINUE while work drains, REMOVE after GTK exit.
  * RU: Проверяет восстановление GDB окна window в фазах 14..25 с настоящим GDB и несохранёнными настройками.
  * Проверяет очистку, явное открытие, перенос настроек/точек/наблюдений и последующий явный запуск.
- * Возвращает CONTINUE до завершения асинхронных действий, REMOVE после проверок и выхода GTK. */
+ * Временно скрывает/возвращает необязательный исходник фикстуры. Возвращает CONTINUE до завершения действий, REMOVE после выхода GTK. */
 static gboolean native_backend_gui_step(GtkWidget *window)
 {
     GtkWidget *command = find(window, "GDB command, e.g. break main");
@@ -194,6 +194,12 @@ static gboolean native_backend_gui_step(GtkWidget *window)
         const gchar *message = gtk_label_get_text(GTK_LABEL(find(window, "insight-gdb-source-status")));
         g_assert_nonnull(strstr(message, "Source file is unavailable locally:"));
         g_assert_false(gtk_widget_is_sensitive(find(window, "Open Source")));
+        GtkWidget *tabs = find(window, "inspection notebook");
+        GtkWidget *page = gtk_widget_get_parent(find(window, "insight-gdb-stop-at-main"));
+        gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
+        gtk_window_present(GTK_WINDOW(window));
+        gdk_window_raise(gtk_widget_get_window(window));
+        gtk_widget_queue_draw(window);
         phase = 24;
     }
     else if (phase == 24)
