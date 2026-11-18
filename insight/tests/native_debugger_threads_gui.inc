@@ -212,9 +212,9 @@ static gboolean native_threads_gui_step(GtkWidget *window, GtkWidget *tabs)
         gtk_notebook_set_current_page(GTK_NOTEBOOK(tabs), gtk_notebook_page_num(GTK_NOTEBOOK(tabs), page));
         gtk_window_present(GTK_WINDOW(window));
         gtk_widget_queue_draw(window);
-        phase = 21;
+        phase = 22;
     }
-    else if (phase == 21)
+    else if (phase == 22)
     {
         native_exit_gui_capture(window, "INSIGHT_GDB_VALUE_FOLLOW_CAPTURE");
         gtk_entry_set_text(GTK_ENTRY(find(window, "insight-gdb-memory-address")), "&value");
