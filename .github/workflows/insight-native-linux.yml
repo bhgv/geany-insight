@@ -172,10 +172,12 @@ jobs:
       - name: Install build dependencies
         timeout-minutes: 15
         run: |
-          # The regional Azure mirror can take ten minutes for this package set.
-          # Keep Ubuntu's signed repositories, using its main HTTPS mirror.
+          # EN: Regional Azure and EC2 mirrors can exhaust the package-install deadline.
+          # Use the main HTTPS mirror, preserving Ubuntu repository signatures.
+          # RU: Региональные зеркала Azure и EC2 могут исчерпать время установки.
+          # Используем основное HTTPS-зеркало, сохраняя подписи репозиториев Ubuntu.
           for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list /etc/apt/apt-mirrors.txt /etc/apt/apt-mirrors/*.txt; do
-            if test -f "$source"; then sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g; s|https://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"; fi
+            if test -f "$source"; then sudo sed -E -i 's|https?://([[:alnum:]-]+\.)*archive\.ubuntu\.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' "$source"; fi
           done
           timeout 90s sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 -o Acquire::Languages=none update -qq || echo "Package index refresh unavailable; using runner package indexes"
           sudo apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libgtk-3-dev libvte-2.91-dev libclang-dev libclang-cpp-dev llvm-dev patchelf cmake meson ninja-build gettext python3-docutils xvfb xauth poppler-utils gdb gdbserver openssh-server openbox
