@@ -90,13 +90,12 @@ static gboolean pick_block(GtkWidget *w, GdkEventButton *event, gpointer data)
         gsize end = side ? hunk->b_end : hunk->a_end;
         if (offset < begin || (offset >= end && (begin != end || offset != begin)))
             continue;
+        if (selected(m) == (gint)i)
+            return FALSE;
         GtkTreePath *path = gtk_tree_path_new_from_indices((gint)i, -1);
-        if (selected(m) != (gint)i)
-        {
-            g_signal_handlers_block_by_func(m->selection, G_CALLBACK(selection), m);
-            gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view), path, NULL, FALSE);
-            g_signal_handlers_unblock_by_func(m->selection, G_CALLBACK(selection), m);
-        }
+        g_signal_handlers_block_by_func(m->selection, G_CALLBACK(selection), m);
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view), path, NULL, FALSE);
+        g_signal_handlers_unblock_by_func(m->selection, G_CALLBACK(selection), m);
         gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(m->hunk_view), path, NULL, FALSE, 0, 0);
         gtk_tree_path_free(path);
         difference_controls(m);
