@@ -985,3 +985,6 @@ dist_insightdocmedia_DATA += insight/docs/media/project-membership-index.svg
 EXTRA_DIST += insight/tests/diff-gui/symbol-mouse.inc insight/tests/file-compare/mouse.inc
 
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-mouse.svg
+
+EXTRA_DIST += insight/tests/diff-gui/symbol-counterpart.inc
+dist_insightdocmedia_DATA += insight/docs/media/file-compare-counterpart.svg

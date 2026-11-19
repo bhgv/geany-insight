@@ -8,6 +8,7 @@
     file_compare_symbol_browser_test();
     file_compare_symbol_changes_test();
     file_compare_symbol_mouse_test();
+    file_compare_symbol_counterpart_test();
     line_navigation_test();
     search_options_test();
     replace_test();

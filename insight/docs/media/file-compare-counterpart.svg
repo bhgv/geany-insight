@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360">
+  <rect width="960" height="360" rx="16" fill="#eef2f6"/>
+  <g font-family="sans-serif" fill="#18334a">
+    <text x="28" y="38" font-size="23" font-weight="bold">Same definition · То же определение</text>
+    <text x="28" y="67" font-size="16">Ctrl+Shift+F12 · Full scoped name / Полное имя с областью</text>
+    <rect x="28" y="90" width="390" height="180" rx="10" fill="white" stroke="#bac9d6"/>
+    <rect x="542" y="90" width="390" height="180" rx="10" fill="white" stroke="#bac9d6"/>
+    <text x="47" y="120" font-size="17" font-weight="bold">Left / Слева</text>
+    <text x="562" y="120" font-size="17" font-weight="bold">Right / Справа</text>
+    <g font-family="monospace" font-size="18">
+      <text x="47" y="156">12  Box::work() {</text>
+      <rect x="80" y="167" width="312" height="28" fill="#fff1bd"/>
+      <text x="47" y="188">13      return 1; │</text>
+      <text x="47" y="220">14  }</text>
+      <rect x="576" y="135" width="330" height="28" fill="#d4efde"/>
+      <text x="562" y="156">47  Box::work() { │</text>
+      <text x="562" y="188">48      return 2;</text>
+      <text x="562" y="220">49  }</text>
+    </g>
+    <path d="M435 178 H525 M513 168 L525 178 L513 188" fill="none" stroke="#287d5a" stroke-width="4"/>
+    <text x="28" y="307" font-size="17">Back / Назад: Ctrl+Alt+Left · Forward / Вперёд: Ctrl+Alt+Right</text>
+    <text x="28" y="335" font-size="15">Duplicate names → chooser / Дубликаты → выбор · Result and Undo stay intact / Result и Undo сохраняются</text>
+  </g>
+</svg>

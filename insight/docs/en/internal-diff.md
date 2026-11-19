@@ -395,3 +395,11 @@ An ordinary click in changed text places the caret and activates that merge bloc
 **Ctrl+click** on an identifier acts like F12, resolving definitions in that version only; Ctrl+Alt+Left returns to the clicked reference. **Ctrl+Shift+click** opens textual occurrences like Shift+F12, including comments and strings. Whitespace, punctuation and margins do not start navigation. Right-click on a name targets context commands while preserving a selection containing the clicked position. Navigation gestures are ignored while comparing. These actions preserve Result text and its Undo history.
 
 ![Mouse navigation](../media/file-compare-mouse.svg)
+
+## Same definition in the other version
+
+Place the caret inside an indexed definition and press **Ctrl+Shift+F12**, or choose **Same definition in other version** in the source context menu. File Compare finds the smallest enclosing definition and matches its full scoped name in the opposite snapshot. Added lines do not affect the match. The command opens the start of that definition and moves focus to the other pane.
+
+**Ctrl+Alt+Left / Right** goes back and forward across both panes, retaining the original caret. Duplicate full names open a candidate chooser with line numbers. Missing or renamed definitions, ambiguous enclosing scopes and positions outside indexed definitions leave navigation unchanged and show a status message. Matching uses captured snapshot definitions, independently of the live editor or project index. It does not infer renames or overload signatures. Result text and Undo are preserved; stale chooser acceptance is rejected.
+
+![Same definition across versions](../media/file-compare-counterpart.svg)

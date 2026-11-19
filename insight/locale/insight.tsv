@@ -3564,3 +3564,7 @@ Place the caret inside an indexed definition.	Установите курсор 
 Left line	Строка слева
 Right line	Строка справа
 Ctrl+click: definition; Ctrl+Shift+click: text occurrences. Normal clicks and selections leave Result unchanged.	Ctrl+щелчок: определение; Ctrl+Shift+щелчок: текстовые вхождения. Обычные щелчки и выделение не меняют Result.
+No matching definition in the other snapshot.	В другой версии нет определения с таким полным именем.
+Matching definitions in the other snapshot	Совпадающие определения в другой версии
+Place the caret inside one indexed definition.	Установите курсор внутри одного индексированного определения.
+Same definition in other version — Ctrl+Shift+F12	То же определение в другой версии — Ctrl+Shift+F12

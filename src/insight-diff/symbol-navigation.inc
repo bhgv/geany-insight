@@ -104,9 +104,27 @@ static void diff_symbol_candidate(GtkTreeView *view, GtkTreePath *path, GtkTreeV
     gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_ACCEPT);
 }
 
-/* EN: Resolve query in side of m; jump directly for one candidate, offer a chooser for ambiguity, retain snapshots.
- * RU: Разрешает query стороны side в m; переходит к единственному кандидату либо предлагает выбор, сохраняя снимки. */
-static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
+/* EN: Visit offset on target in m, retaining the caret on origin for cross-pane Back/Forward.
+ * RU: Переходит к offset стороны target в m, сохраняя курсор origin для возврата между панелями. */
+static void diff_symbol_visit(Merge *m, guint origin, guint target, gint offset)
+{
+    if (origin == target)
+    {
+        diff_symbol_jump(m, target, offset, TRUE);
+        return;
+    }
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[origin]));
+    GtkTextIter at;
+    gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+    diff_symbol_jump(m, origin, gtk_text_iter_get_offset(&at), TRUE);
+    diff_symbol_jump(m, target, offset, FALSE);
+}
+
+/* EN: Resolve query in side of m, matching full names when exact is TRUE; remember origin's caret on acceptance.
+ * Offer a chooser for ambiguity and reject stale/closed comparisons without changing Result.
+ * RU: Разрешает query стороны side в m, сравнивая полные имена при exact; при переходе сохраняет курсор origin.
+ * Предлагает выбор при неоднозначности, отклоняет устаревшее/закрытое сравнение, не меняет Result. */
+static void diff_symbol_definition(Merge *m, guint side, const gchar *query, guint origin, gboolean exact)
 {
     GtkListStore *model = gtk_list_store_new(3, G_TYPE_STRING, G_TYPE_UINT, G_TYPE_INT);
     guint count = 0;
@@ -116,7 +134,11 @@ static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
     for (guint i = 0; symbols && i < MIN(symbols->len, 4096u); i++)
     {
         InsightDiffSymbol *symbol = symbols->pdata[i];
-        if (!diff_symbol_matches(symbol, query) || symbol->begin >= symbol->end || symbol->end > length)
+        if (!symbol || !symbol->name || !g_utf8_validate(symbol->name, -1, NULL) ||
+            symbol->begin >= symbol->end || symbol->end > length)
+            continue;
+        gboolean matches = exact ? !strcmp(symbol->name, query) : diff_symbol_matches(symbol, query);
+        if (!matches)
             continue;
         target = g_utf8_pointer_to_offset(m->sources[side], m->sources[side] + symbol->begin);
         GtkTextIter at;
@@ -127,14 +149,14 @@ static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
         count++;
     }
     if (count == 1)
-        diff_symbol_jump(m, side, target, TRUE);
+        diff_symbol_visit(m, origin, side, target);
     else if (!count)
-        message(m, insight_tr("No indexed definition in this snapshot."));
+        message(m, insight_tr(exact ? "No matching definition in the other snapshot." : "No indexed definition in this snapshot."));
     else
     {
         GtkWidget *window = g_object_ref(m->window);
         guint64 serial = m->history_serial;
-        GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr("Definitions in this snapshot"),
+        GtkWidget *dialog = gtk_dialog_new_with_buttons(insight_tr(exact ? "Matching definitions in the other snapshot" : "Definitions in this snapshot"),
             GTK_WINDOW(window), GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
             insight_tr("Cancel"), GTK_RESPONSE_CANCEL, insight_tr("Go to definition"), GTK_RESPONSE_ACCEPT, NULL);
         g_object_ref(dialog);
@@ -161,7 +183,7 @@ static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
             gtk_tree_selection_get_selected(selection, &selected_model, &row))
         {
             gtk_tree_model_get(selected_model, &row, 2, &target, -1);
-            diff_symbol_jump(m, side, target, TRUE);
+            diff_symbol_visit(m, origin, side, target);
         }
         gtk_widget_destroy(dialog);
         g_object_unref(selection);
@@ -171,12 +193,41 @@ static void diff_symbol_definition(Merge *m, guint side, const gchar *query)
     g_object_unref(model);
 }
 
-/* EN: Execute action (0 definition, 1 occurrences, 2 back, 3 symbols, 4 forward, 5 scope changes) on source side of m; never write files or Result.
- * RU: Выполняет action (0 определение, 1 вхождения, 2 назад, 3 символы, 4 вперёд, 5 изменения области) для стороны side в m; не меняет файлы и Result. */
+/* EN: Find the smallest unambiguous definition containing side's caret in m and visit its exact scoped name on the other side.
+ * Missing, renamed or ambiguous owners report a status; duplicate target names use the existing candidate chooser.
+ * RU: Находит наименьшее однозначное определение у курсора side в m и переходит к полному имени в другой версии.
+ * Отсутствие, переименование или неоднозначность области сообщает в статусе; дубликаты цели открывают выбор. */
+static void diff_symbol_counterpart(Merge *m, guint side)
+{
+    if (m->busy || side > 1 || !m->sources[side] || !m->sources[1 - side])
+        return;
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(m->views[side]));
+    GtkTextIter at;
+    gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+    const gchar *byte = g_utf8_offset_to_pointer(m->sources[side], gtk_text_iter_get_offset(&at));
+    gsize begin = byte - m->sources[side];
+    const gchar *name = *byte ? diff_symbols_owner(m, side, begin, g_utf8_next_char(byte) - m->sources[side]) : NULL;
+    if (!name)
+    {
+        message(m, insight_tr("Place the caret inside one indexed definition."));
+        return;
+    }
+    gchar *query = g_strdup(name);
+    diff_symbol_definition(m, 1 - side, query, side, TRUE);
+    g_free(query);
+}
+
+/* EN: Execute action (0 definition, 1 occurrences, 2 back, 3 symbols, 4 forward, 5 scope changes, 6 other version) on source side of m; never write files or Result.
+ * RU: Выполняет action (0 определение, 1 вхождения, 2 назад, 3 символы, 4 вперёд, 5 изменения области, 6 другая версия) для стороны side в m; не меняет файлы и Result. */
 static void diff_symbol_action(Merge *m, guint side, guint action)
 {
     if (m->busy || side > 1 || !m->sources[side])
         return;
+    if (action == 6)
+    {
+        diff_symbol_counterpart(m, side);
+        return;
+    }
     if (action == 5)
     {
         diff_scope_current(m, side);
@@ -216,7 +267,7 @@ static void diff_symbol_action(Merge *m, guint side, guint action)
         return;
     }
     if (!action)
-        diff_symbol_definition(m, side, query);
+        diff_symbol_definition(m, side, query, side, FALSE);
     else
     {
         gtk_entry_set_text(GTK_ENTRY(m->find_entry), query);
@@ -245,7 +296,7 @@ static void diff_symbol_menu(GtkTextView *view, GtkWidget *menu, gpointer data)
 {
     Merge *m = data;
     guint side = GTK_WIDGET(view) == m->views[1];
-    const gchar *labels[] = {"Go to definition — F12", "Text occurrences in snapshot — Shift+F12", "Back — Ctrl+Alt+Left", "Symbols in snapshot — Ctrl+Shift+O", "Forward — Ctrl+Alt+Right", "Changes in definition — Ctrl+Shift+D"};
+    const gchar *labels[] = {"Go to definition — F12", "Text occurrences in snapshot — Shift+F12", "Back — Ctrl+Alt+Left", "Symbols in snapshot — Ctrl+Shift+O", "Forward — Ctrl+Alt+Right", "Changes in definition — Ctrl+Shift+D", "Same definition in other version — Ctrl+Shift+F12"};
     for (guint action = 0; action < G_N_ELEMENTS(labels); action++)
     {
         GtkWidget *item = gtk_menu_item_new_with_label(insight_tr(labels[action]));
@@ -264,6 +315,11 @@ static gboolean diff_symbol_key(GtkWidget *view, GdkEventKey *event, gpointer da
     Merge *m = data;
     guint side = view == m->views[1];
     guint modifiers = event->state & (GDK_CONTROL_MASK | GDK_MOD1_MASK | GDK_SHIFT_MASK);
+    if (event->keyval == GDK_KEY_F12 && modifiers == (GDK_CONTROL_MASK | GDK_SHIFT_MASK))
+    {
+        diff_symbol_action(m, side, 6);
+        return TRUE;
+    }
     if (event->keyval == GDK_KEY_F12 && !(modifiers & (GDK_CONTROL_MASK | GDK_MOD1_MASK)))
     {
         diff_symbol_action(m, side, !!(modifiers & GDK_SHIFT_MASK));

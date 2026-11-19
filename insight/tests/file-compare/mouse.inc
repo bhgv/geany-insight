@@ -33,8 +33,8 @@ static void native_source_click(GtkWidget *view, gint offset, guint modifiers)
     }
 }
 
-/* EN: Verify a normal source click, F12 and Ctrl-click against each captured C++ version in window, retaining Result bytes.
- * RU: Проверяет обычный щелчок, F12 и Ctrl-щелчок по каждому снимку C++ в window, сохраняя байты Result. */
+/* EN: Verify mouse/F12 navigation and exact cross-version method matching in window, retaining Result bytes.
+ * RU: Проверяет мышь/F12 и точное сопоставление методов версий в window, сохраняя байты Result. */
 static void native_compare_mouse(GtkWidget *window)
 {
     for (guint side = 0; side < 2; side++)
@@ -61,6 +61,23 @@ static void native_compare_mouse(GtkWidget *window)
         gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
         g_assert_cmpint(gtk_text_iter_get_line(&at), ==, 2);
         click(window, side ? "insight-diff-symbol-1-2" : "insight-diff-symbol-0-2");
+        gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
+        g_assert_cmpint(gtk_text_iter_get_offset(&at), ==, offset);
+        GdkEventKey counterpart = {0};
+        counterpart.keyval = GDK_KEY_F12;
+        counterpart.state = GDK_CONTROL_MASK | GDK_SHIFT_MASK;
+        gboolean handled = FALSE;
+        g_signal_emit_by_name(view, "key-press-event", &counterpart, &handled);
+        g_assert_true(handled);
+        GtkWidget *other = find(window, side ? "insight-diff-left" : "insight-diff-right");
+        GtkTextBuffer *other_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(other));
+        gtk_text_buffer_get_iter_at_mark(other_buffer, &at, gtk_text_buffer_get_insert(other_buffer));
+        GtkTextIter end = at;
+        gtk_text_iter_forward_to_line_end(&end);
+        gchar *line = gtk_text_buffer_get_text(other_buffer, &at, &end, FALSE);
+        g_assert_nonnull(strstr(line, "calc"));
+        g_free(line);
+        click(window, side ? "insight-diff-symbol-0-2" : "insight-diff-symbol-1-2");
         gtk_text_buffer_get_iter_at_mark(buffer, &at, gtk_text_buffer_get_insert(buffer));
         g_assert_cmpint(gtk_text_iter_get_offset(&at), ==, offset);
         g_free(source);
