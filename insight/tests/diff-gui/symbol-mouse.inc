@@ -38,6 +38,21 @@ static void source_mouse_click(GtkWidget *view, gint offset, guint modifiers)
     source_mouse_event(view, offset, GDK_BUTTON_RELEASE, 1, modifiers);
 }
 
+/* EN: Let GTK finish its previous multi-click gesture on view before starting an independent test gesture.
+ * RU: Даёт GTK завершить предыдущую серию щелчков в view перед независимым проверочным жестом. */
+static void source_mouse_finish_gesture(GtkWidget *view)
+{
+    gint milliseconds = 0;
+    g_object_get(gtk_widget_get_settings(view), "gtk-double-click-time", &milliseconds, NULL);
+    gint64 deadline = g_get_monotonic_time() + (milliseconds + 50) * G_TIME_SPAN_MILLISECOND;
+    while (g_get_monotonic_time() < deadline)
+    {
+        flush();
+        g_usleep(1000);
+    }
+    flush();
+}
+
 /* EN: Send the complete documented double-click sequence at offset in view, including the extra GDK notification.
  * RU: Передаёт полную документированную последовательность двойного щелчка у offset в view, включая уведомление GDK. */
 static void source_mouse_double_click(GtkWidget *view, gint offset)
@@ -61,6 +76,9 @@ static void source_mouse_baseline(void)
     gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
     gtk_widget_show_all(window);
     flush();
+    source_mouse_click(view, 1, 0);
+    source_mouse_click(view, 4, GDK_SHIFT_MASK);
+    source_mouse_finish_gesture(view);
     source_mouse_double_click(view, 1);
     GtkTextIter begin, end;
     g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
@@ -137,6 +155,7 @@ static void file_compare_symbol_mouse_test(void)
     gtk_text_buffer_get_iter_at_offset(buffer, &begin, call_offset + 1);
     gtk_text_buffer_place_cursor(buffer, &begin);
     flush();
+    source_mouse_finish_gesture(m->views[0]);
     source_mouse_double_click(m->views[0], call_offset + 1);
     g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
     word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
