@@ -38,6 +38,40 @@ static void source_mouse_click(GtkWidget *view, gint offset, guint modifiers)
     source_mouse_event(view, offset, GDK_BUTTON_RELEASE, 1, modifiers);
 }
 
+/* EN: Feed the documented double-click sequence at offset in view, including GDK's extra second-press notification.
+ * RU: Передаёт документированную последовательность двойного щелчка у offset в view с дополнительным уведомлением GDK. */
+static void source_mouse_double_click(GtkWidget *view, gint offset)
+{
+    source_mouse_click(view, offset, 0);
+    source_mouse_event(view, offset, GDK_BUTTON_PRESS, 1, 0);
+    source_mouse_event(view, offset, GDK_2BUTTON_PRESS, 1, 0);
+    source_mouse_event(view, offset, GDK_BUTTON_RELEASE, 1, 0);
+}
+
+/* EN: Verify the synthetic double-click protocol on an unmodified read-only GTK text view before testing editor handlers.
+ * RU: Проверяет протокол двойного щелчка на обычном текстовом поле GTK перед проверкой обработчиков редактора. */
+static void source_mouse_baseline(void)
+{
+    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+    GtkWidget *view = gtk_text_view_new();
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 140);
+    gtk_container_add(GTK_CONTAINER(window), view);
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+    gtk_text_buffer_set_text(buffer, "work() tail", -1);
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+    gtk_widget_show_all(window);
+    flush();
+    source_mouse_double_click(view, 1);
+    GtkTextIter begin, end;
+    g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
+    gchar *word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
+    g_assert_cmpstr(word, ==, "work");
+    g_free(word);
+    gtk_widget_destroy(window);
+    flush();
+    g_print("GTK mouse baseline: documented double-click sequence selects a complete word.\n");
+}
+
 /* EN: Invoke the context gesture at offset in m's left source without opening GTK's popup; return the callback result.
  * RU: Вызывает контекстный жест у offset левого исходника m без открытия меню GTK; возвращает результат обработчика. */
 static gboolean source_mouse_context(Merge *m, gint offset)
@@ -63,6 +97,7 @@ static gboolean source_mouse_context(Merge *m, gint offset)
  * RU: Проверяет курсор, двойное/Shift-выделение, определения и текстовые вхождения без изменения Result. */
 static void file_compare_symbol_mouse_test(void)
 {
+    source_mouse_baseline();
     const gchar *before = "// я\nint work() {\n return 1;\n}\n\nint caller() { return work() + 1; }\n";
     const gchar *after = "// я\nint work() {\n return 2;\n}\n\nint caller() { return work() + 2; }\n";
     gchar *directory = g_dir_make_tmp("symbol-mouse-XXXXXX", NULL);
@@ -99,10 +134,7 @@ static void file_compare_symbol_mouse_test(void)
     gchar *word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
     g_assert_cmpstr(word, ==, "work");
     g_free(word);
-    /* EN: Feed GTK two complete primary clicks so its multipress recognizer counts the gesture.
-     * RU: Передаём GTK два полных левых щелчка, чтобы распознаватель посчитал кратность жеста. */
-    source_mouse_click(m->views[0], call_offset + 1, 0);
-    source_mouse_click(m->views[0], call_offset + 1, 0);
+    source_mouse_double_click(m->views[0], call_offset + 1);
     g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
     word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
     g_assert_cmpstr(word, ==, "work");
