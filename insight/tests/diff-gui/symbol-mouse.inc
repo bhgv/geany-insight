@@ -2,8 +2,8 @@
 /* EN: Exercise real GTK source mouse events together with active merge blocks and snapshot navigation.
  * RU: Проверяет настоящие события мыши GTK вместе с выбором блока сведения и навигацией по снимку. */
 
-/* EN: Send type/button/modifiers at character offset in view through GTK main event dispatch with a real pointer device.
- * RU: Передаёт type/button/modifiers у символьного offset в view через главный диспетчер GTK с настоящим устройством. */
+/* EN: Send type/button/modifiers at character offset in view through the GDK test backend and drain real queued GTK events.
+ * RU: Передаёт type/button/modifiers у символьного offset в view через тестовый backend GDK и обрабатывает настоящую очередь GTK. */
 static void source_mouse_event(GtkWidget *view, gint offset, GdkEventType type, guint button, guint modifiers)
 {
     GtkTextIter at;
@@ -13,21 +13,11 @@ static void source_mouse_event(GtkWidget *view, gint offset, GdkEventType type, 
     gint x, y;
     gtk_text_view_buffer_to_window_coords(GTK_TEXT_VIEW(view), GTK_TEXT_WINDOW_TEXT,
         rect.x + MAX(1, rect.width / 4), rect.y + rect.height / 2, &x, &y);
-    GdkEvent *event = gdk_event_new(type);
-    event->button.window = g_object_ref(gtk_text_view_get_window(GTK_TEXT_VIEW(view), GTK_TEXT_WINDOW_TEXT));
-    event->button.send_event = TRUE;
-    event->button.time = (guint32)(g_get_monotonic_time() / 1000);
-    event->button.button = button;
-    event->button.state = modifiers | (type == GDK_BUTTON_RELEASE ? GDK_BUTTON1_MASK : 0);
-    event->button.x = x;
-    event->button.y = y;
-    gint root_x, root_y;
-    gdk_window_get_origin(event->button.window, &root_x, &root_y);
-    event->button.x_root = root_x + x;
-    event->button.y_root = root_y + y;
-    gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(view))));
-    gtk_main_do_event(event);
-    gdk_event_free(event);
+    GdkWindow *window = gtk_text_view_get_window(GTK_TEXT_VIEW(view), GTK_TEXT_WINDOW_TEXT);
+    g_assert_true(gdk_test_simulate_button(window, x, y, button,
+        modifiers | (type == GDK_BUTTON_RELEASE ? GDK_BUTTON1_MASK : 0), type));
+    gdk_display_sync(gtk_widget_get_display(view));
+    flush();
 }
 
 /* EN: Send a primary press/release at offset in view, optionally with modifiers; normal GTK handlers remain active.
@@ -38,38 +28,45 @@ static void source_mouse_click(GtkWidget *view, gint offset, guint modifiers)
     source_mouse_event(view, offset, GDK_BUTTON_RELEASE, 1, modifiers);
 }
 
-/* EN: Feed the documented double-click sequence at offset in view, including GDK's extra second-press notification.
- * RU: Передаёт документированную последовательность двойного щелчка у offset в view с дополнительным уведомлением GDK. */
+/* EN: Send two complete backend clicks at offset in view; GDK generates the double-click notification itself.
+ * RU: Передаёт два полных щелчка у offset в view; GDK сам формирует уведомление о двойном щелчке. */
 static void source_mouse_double_click(GtkWidget *view, gint offset)
 {
     source_mouse_click(view, offset, 0);
-    source_mouse_event(view, offset, GDK_BUTTON_PRESS, 1, 0);
-    source_mouse_event(view, offset, GDK_2BUTTON_PRESS, 1, 0);
-    source_mouse_event(view, offset, GDK_BUTTON_RELEASE, 1, 0);
+    source_mouse_click(view, offset, 0);
 }
 
-/* EN: Verify the synthetic double-click protocol on an unmodified read-only GTK text view before testing editor handlers.
- * RU: Проверяет протокол двойного щелчка на обычном текстовом поле GTK перед проверкой обработчиков редактора. */
+/* EN: Verify backend double clicks on plain read-only GTK views, both with and without an existing selection.
+ * RU: Проверяет двойные щелчки на обычных полях GTK с заранее выделенным словом и без него. */
 static void source_mouse_baseline(void)
 {
-    GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    GtkWidget *view = gtk_text_view_new();
-    gtk_window_set_default_size(GTK_WINDOW(window), 400, 140);
-    gtk_container_add(GTK_CONTAINER(window), view);
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
-    gtk_text_buffer_set_text(buffer, "work() tail", -1);
-    gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
-    gtk_widget_show_all(window);
-    flush();
-    source_mouse_double_click(view, 1);
-    GtkTextIter begin, end;
-    g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
-    gchar *word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
-    g_assert_cmpstr(word, ==, "work");
-    g_free(word);
-    gtk_widget_destroy(window);
-    flush();
-    g_print("GTK mouse baseline: documented double-click sequence selects a complete word.\n");
+    for (guint selected_word = 0; selected_word < 2; selected_word++)
+    {
+        GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+        GtkWidget *view = gtk_text_view_new();
+        gtk_window_set_default_size(GTK_WINDOW(window), 400, 140);
+        gtk_container_add(GTK_CONTAINER(window), view);
+        GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(view));
+        gtk_text_buffer_set_text(buffer, "work() tail", -1);
+        gtk_text_view_set_editable(GTK_TEXT_VIEW(view), FALSE);
+        gtk_widget_show_all(window);
+        flush();
+        GtkTextIter begin, end;
+        if (selected_word)
+        {
+            gtk_text_buffer_get_start_iter(buffer, &begin);
+            gtk_text_buffer_get_iter_at_offset(buffer, &end, 4);
+            gtk_text_buffer_select_range(buffer, &begin, &end);
+        }
+        source_mouse_double_click(view, 1);
+        g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
+        gchar *word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
+        g_assert_cmpstr(word, ==, "work");
+        g_free(word);
+        gtk_widget_destroy(window);
+        flush();
+    }
+    g_print("GTK mouse baseline: backend double click retains a complete word, with and without prior selection.\n");
 }
 
 /* EN: Invoke the context gesture at offset in m's left source without opening GTK's popup; return the callback result.
