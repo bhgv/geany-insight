@@ -96,9 +96,10 @@ static void file_compare_symbol_mouse_test(void)
     gchar *word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
     g_assert_cmpstr(word, ==, "work");
     g_free(word);
+    /* EN: Feed GTK two complete primary clicks so its multipress recognizer counts the gesture.
+     * RU: Передаём GTK два полных левых щелчка, чтобы распознаватель посчитал кратность жеста. */
     source_mouse_click(m->views[0], call_offset + 1, 0);
-    source_mouse_event(m->views[0], call_offset + 1, GDK_2BUTTON_PRESS, 1, 0);
-    source_mouse_event(m->views[0], call_offset + 1, GDK_BUTTON_RELEASE, 1, 0);
+    source_mouse_click(m->views[0], call_offset + 1, 0);
     g_assert_true(gtk_text_buffer_get_selection_bounds(buffer, &begin, &end));
     word = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
     g_assert_cmpstr(word, ==, "work");
