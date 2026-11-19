@@ -1,11 +1,44 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
-# No Pester or network required. Run in Windows PowerShell 5.1 and PowerShell 7.
+# EN: Validate bootstrap plans, diagnostics and native folder controls without Pester or network.
+# RU: Проверяет планы, диагностику сборщика и выбор папок без Pester и сети.
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $scriptPath = Join-Path $PSScriptRoot '..\tools\setup-windows.ps1'
 $tokens = $null; $errors = $null
-$null = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
+$setupAst = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
+# EN: Exercise the actual production error expression, including the reported C++ scope-resolution false positive.
+# RU: Проверяет настоящее выражение поиска ошибок, включая ложное совпадение с областью имён C++ из отчёта.
+$patterns = @($setupAst.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.StringConstantExpressionAst] -and
+        $node.Value.Contains('undefined reference')
+}, $true))
+if ($patterns.Count -ne 1) { throw 'Could not identify the build error diagnostic expression.' }
+$pattern = $patterns[0].Value
+$jobsFunction = $setupAst.Find({
+    param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Get-InsightAutomaticJobs'
+}, $true)
+if (-not $jobsFunction) { throw 'Automatic job policy is missing.' }
+. ([scriptblock]::Create($jobsFunction.Extent.Text))
+foreach ($case in @(@(16, 0, 1), @(16, 4GB, 1), @(16, 8GB, 1),
+                    @(16, 9GB, 2), @(16, 64GB, 2), @(1, 64GB, 1))) {
+    if ((Get-InsightAutomaticJobs $case[0] $case[1]) -ne $case[2]) {
+        throw "Unsafe automatic concurrency for CPU/memory case: $case"
+    }
+}
+foreach ($line in @('184 |     OnDeallocated(Error::success());',
+                   '    llvm::Error::success();', 'warning: use Error::success() here')) {
+    if ($line -match $pattern) { throw "C++ source text was reported as a build error: $line" }
+}
+foreach ($line in @('file.cpp:184:3: error: invalid conversion',
+                   'g++.exe: fatal error: Killed signal terminated program cc1plus',
+                   'ld.exe: undefined reference to symbol', 'ld.exe: cannot find -lmissing',
+                   'cc1plus.exe: out of memory allocating 2101247 bytes')) {
+    if ($line -notmatch $pattern) { throw "Build diagnostic was missed: $line" }
+}
 $offlineHelper = Join-Path $PSScriptRoot '..\tools\windows-offline.ps1'
 $null = [Management.Automation.Language.Parser]::ParseFile($offlineHelper, [ref]$tokens, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }

@@ -134,6 +134,13 @@ $bash = Join-Path $MsysRoot 'usr\bin\bash.exe'
 $envNames = @('INSIGHT_OFFLINE','GIT_ALLOW_PROTOCOL','INSIGHT_BUNDLE_PATH','INSIGHT_MSYS_SKIP_TLS_VERIFY','MSYSTEM','CHERE_INVOKING','INSIGHT_BOOTSTRAP_MIRROR','INSIGHT_BOOTSTRAP_PACKAGES','INSIGHT_BOOTSTRAP_SOURCE','INSIGHT_BOOTSTRAP_FETCH','INSIGHT_BOOTSTRAP_INTERNAL','INSIGHT_BOOTSTRAP_INSTALL','INSIGHT_BOOTSTRAP_PROVIDER','INSIGHT_BOOTSTRAP_JOBS','INSIGHT_BOOTSTRAP_BUILD_LOG','INSIGHT_BOOTSTRAP_CACHE','INSIGHT_BOOTSTRAP_BASH')
 $previous = @{}
 foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+# EN: Bound automatic concurrency using CpuJobs and currently AvailableBytes; reserve 1 GiB and budget 4 GiB per job, capped at two.
+# RU: Ограничивает параллельность по CpuJobs и свободным AvailableBytes; резервирует 1 ГиБ и 4 ГиБ на задачу, максимум две.
+function Get-InsightAutomaticJobs([int]$CpuJobs, [long]$AvailableBytes) {
+    $budget = [Math]::Max(0, $AvailableBytes - 1GB)
+    $memoryJobs = [Math]::Max(1, [Math]::Floor($budget / 4GB))
+    return [int][Math]::Max(1, [Math]::Min(2, [Math]::Min($CpuJobs, $memoryJobs)))
+}
 function Wait-InsightProcess([Diagnostics.Process]$Child, [string]$Stage) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     while (-not $Child.WaitForExit(20000)) {
@@ -381,11 +388,10 @@ git -C "$source_dir" rev-parse HEAD
         if ($Jobs -eq 0) {
             $cpuJobs = [Environment]::ProcessorCount
             try {
-                $memory = (Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).TotalPhysicalMemory
-                $memoryJobs = [Math]::Max(1, [Math]::Floor($memory / 3GB))
-                $Jobs = [Math]::Min($cpuJobs, $memoryJobs)
+                $available = (Get-CimInstance -ClassName Win32_OperatingSystem -ErrorAction Stop).FreePhysicalMemory * 1KB
+                $Jobs = Get-InsightAutomaticJobs $cpuJobs $available
             } catch {
-                $Jobs = [Math]::Min($cpuJobs, 2)
+                $Jobs = 1
             }
         }
         $env:INSIGHT_BOOTSTRAP_JOBS = [string]$Jobs
@@ -428,10 +434,13 @@ exit "${statuses[1]}"
         } catch {
             if (Test-Path -LiteralPath $buildLog) {
                 $firstFailure = Select-String -LiteralPath $buildLog -Pattern '^\s*FAILED:' | Select-Object -First 1
-                $firstError = Select-String -LiteralPath $buildLog -Pattern '(?:fatal error:|\berror:|undefined reference|cannot find -l)' |
+                $firstError = Select-String -LiteralPath $buildLog -Pattern '(?:fatal error:(?!:)|\berror:(?!:)|undefined reference|cannot find -l|out of memory|cannot allocate memory|Killed signal terminated program)' |
                     Select-Object -First 1
                 if ($firstFailure) { Write-Host "[First failed command] $($firstFailure.Line.Trim())" }
                 if ($firstError) { Write-Host "[First build error] $($firstError.Line.Trim())" }
+                if ($firstError -and $firstError.Line -match 'out of memory|cannot allocate memory|Killed signal terminated program') {
+                    Write-Host '[Recovery] Rerun the same build command with -Jobs 1. Keep the build directory to reuse completed objects.'
+                }
                 # EN: Include the underlying install exception, not just Meson's generic OSError summary.
                 # RU: Показываем исходное исключение установки, а не только общее сообщение OSError от Meson.
                 $installError = Select-String -LiteralPath $buildLog -Pattern '(?:PermissionError:|FileNotFoundError:|OSError:|\[WinError \d+\]|\[Errno \d+\]|Font installation failed:)' |

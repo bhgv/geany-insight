@@ -239,3 +239,9 @@ are saved under `_editor-build/logs`. `--plan` and `--help` do not write logs.
 исключение Python в журнале. Сохраните полный журнал по пути из консоли:
 одного сообщения Meson `Unhandled python OSError` недостаточно для определения
 причины. Поддерживается промежуточная установка через `DESTDIR`.
+
+## Compiler failure reports
+
+A line of C++ source such as `OnDeallocated(Error::success());` is not a compiler diagnostic. The build error summary excludes `Error::` scope resolution. If compilation fails, retain the complete log named after **Build log**; the failed object name alone does not identify the cause. Attach that log when reporting a failure, including the compiler command and diagnostics after the first `FAILED:` line. Do not delete the build directory before collecting it.
+
+If the log says `cc1plus.exe: out of memory allocating ...`, the compiler ran out of memory. Rerun the same command with **`-Jobs 1`**, preserving the source/build/install folders. Ninja reuses completed objects. Automatic Windows parallelism now uses currently free physical memory, reserves 1 GiB, budgets 4 GiB per job and caps concurrency at two. If memory detection fails, it uses one job. An explicit positive `-Jobs` overrides this policy; it does not guarantee that even one compiler process fits available memory.
