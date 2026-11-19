@@ -383,3 +383,7 @@ Real Linux editor dialog in an isolated GUI fixture: filtered changed Verilog de
 Select a definition in the symbol browser and choose **Changes in definition…**, enabled for changed ranges. In a source pane, **Ctrl+Shift+D** or the context-menu action opens changes for the smallest unambiguous indexed definition at the caret. The list includes only blocks intersecting that definition in the selected version; insertions after its end are excluded. A block crossing the definition boundary is shown in full.
 
 The dialog shows original comparison block numbers, both source line numbers and two independent syntax-highlighted snapshot previews. **Previous/Next change**, F3 and Shift+F3 step without closing the dialog and stop at the endpoints. **Copy change** copies the selected block's old and new text. Enter or double-click selects that block in the main comparison and retains the prior source position in back/forward history. Cancellation, preview and copying leave the main selection, files and Result unchanged. Stale acceptance is rejected.
+
+![Changes in one definition](media/file-compare-scope.jpg)
+
+Real Linux editor window in an isolated GUI fixture: one changed Verilog function block, both source line numbers and persistent old/new text highlighting.

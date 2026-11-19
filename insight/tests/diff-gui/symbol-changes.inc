@@ -3,8 +3,8 @@
  * RU: Проверяет просмотр изменений определения на настоящих блоках сравнения и неизменных предпросмотрах. */
 typedef struct { Merge *m; gint response; gboolean stale, close_parent; } ScopeResponse;
 
-/* EN: Exercise the active scope dialog for response; assert local stepping/copy/preview, then accept, cancel or retire it.
- * RU: Проверяет открытый диалог области response: переходы, копирование и предпросмотр; принимает, отменяет либо закрывает его. */
+/* EN: Exercise the active scope dialog for response; assert local stepping/copy/preview, then accept, cancel or retire it; return REMOVE.
+ * RU: Проверяет открытый диалог области response: переходы, копирование и предпросмотр; принимает, отменяет либо закрывает его; возвращает REMOVE. */
 static gboolean scope_response(gpointer data)
 {
     ScopeResponse *response = data;

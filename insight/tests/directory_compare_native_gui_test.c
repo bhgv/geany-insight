@@ -36,8 +36,8 @@ static gboolean save_selected_result(gpointer data) {
 static gboolean choose_search_match(gpointer data) {
  (void)data;GtkWidget *dialog=window_named("insight-diff-search-results");g_assert_nonnull(dialog);GtkWidget *tree=named(dialog,"insight-diff-search-results-list");g_assert_cmpint(gtk_tree_model_iter_n_children(gtk_tree_view_get_model(GTK_TREE_VIEW(tree)),NULL),==,1);gtk_entry_set_text(GTK_ENTRY(named(dialog,"insight-diff-search-filter")),"8080");gtk_button_clicked(GTK_BUTTON(named(dialog,"insight-diff-search-copy")));gchar *text=gtk_clipboard_wait_for_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD)),*path=g_build_filename(right,"config.ini",NULL),*expected=g_strdup_printf("File\tLine\tColumn\tText\n%s\t1\t1\tport = 8080\n",path);g_assert_cmpstr(text,==,expected);g_free(text);g_free(path);g_free(expected);GtkTreePath *row=gtk_tree_path_new_first();gtk_tree_view_set_cursor(GTK_TREE_VIEW(tree),row,NULL,FALSE);gtk_tree_path_free(row);gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(named(dialog,"insight-diff-search-field-2")),FALSE);gtk_dialog_response(GTK_DIALOG(dialog),GTK_RESPONSE_YES);return G_SOURCE_REMOVE;
 }
-/* EN: Advance the production directory/file comparison fixture from unused data; explicitly enable merge before Result edits.
- * RU: Продвигает проверку сравнения каталогов/файлов из неиспользуемого data; явно включает сведение перед правками Result. */
+/* EN: Advance the production directory/file comparison fixture from unused data; explicitly enable merge before Result edits; return whether to continue.
+ * RU: Продвигает проверку сравнения каталогов/файлов из неиспользуемого data; явно включает сведение перед правками Result; возвращает признак продолжения. */
 static gboolean step(gpointer data)
 {
     (void)data;

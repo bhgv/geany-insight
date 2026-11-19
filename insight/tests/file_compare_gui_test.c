@@ -119,8 +119,8 @@ static void capture(GtkWidget *window, const gchar *variable)
     g_object_unref(pixels);
 }
 
-/* EN: Capture the scoped change dialog after painting and verify paired Verilog snapshots before accepting.
- * RU: Снимает диалог изменений после отрисовки и проверяет два снимка Verilog перед подтверждением. */
+/* EN: Capture the scoped change dialog after painting and verify paired Verilog snapshots before accepting; return REMOVE.
+ * RU: Снимает диалог изменений после отрисовки и проверяет два снимка Verilog перед подтверждением; возвращает REMOVE. */
 static gboolean capture_scope(gpointer data)
 {
     (void)data;
@@ -144,8 +144,8 @@ static gboolean capture_scope(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* EN: Capture the retained dialog in data after its filtered list and preview have painted, then accept it.
- * RU: Снимает сохранённый dialog из data после отрисовки фильтра и предпросмотра, затем подтверждает выбор. */
+/* EN: Capture the retained dialog in data after painting and request its scope review; return REMOVE.
+ * RU: Снимает сохранённый dialog из data после отрисовки и запрашивает изменения определения; возвращает REMOVE. */
 static gboolean capture_symbols(gpointer data)
 {
     GtkWidget *dialog = data;
