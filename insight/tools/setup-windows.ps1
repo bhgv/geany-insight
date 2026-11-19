@@ -137,7 +137,7 @@ foreach ($name in $envNames) { $previous[$name] = [Environment]::GetEnvironmentV
 # EN: Bound automatic concurrency using CpuJobs and currently AvailableBytes; reserve 1 GiB and budget 4 GiB per job, capped at two.
 # RU: Ограничивает параллельность по CpuJobs и свободным AvailableBytes; резервирует 1 ГиБ и 4 ГиБ на задачу, максимум две.
 function Get-InsightAutomaticJobs([int]$CpuJobs, [long]$AvailableBytes) {
-    $budget = [Math]::Max(0, $AvailableBytes - 1GB)
+    $budget = [Math]::Max([long]0, [long]($AvailableBytes - 1GB))
     $memoryJobs = [Math]::Max(1, [Math]::Floor($budget / 4GB))
     return [int][Math]::Max(1, [Math]::Min(2, [Math]::Min($CpuJobs, $memoryJobs)))
 }
