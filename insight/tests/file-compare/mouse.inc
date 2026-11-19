@@ -24,7 +24,7 @@ static void native_source_click(GtkWidget *view, gint offset, guint modifiers)
         event->button.x = x;
         event->button.y = y;
         gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(view))));
-        gtk_widget_event(view, event);
+        gtk_main_do_event(event);
         gdk_event_free(event);
     }
 }

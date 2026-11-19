@@ -2,9 +2,9 @@
 /* EN: Exercise real GTK source mouse events together with active merge blocks and snapshot navigation.
  * RU: Проверяет настоящие события мыши GTK вместе с выбором блока сведения и навигацией по снимку. */
 
-/* EN: Send type/button/modifiers at character offset in view through GTK, with a real pointer device; return whether consumed.
- * RU: Передаёт type/button/modifiers у символьного offset в view через GTK с настоящим устройством; возвращает обработку. */
-static gboolean source_mouse_event(GtkWidget *view, gint offset, GdkEventType type, guint button, guint modifiers)
+/* EN: Send type/button/modifiers at character offset in view through GTK main event dispatch with a real pointer device.
+ * RU: Передаёт type/button/modifiers у символьного offset в view через главный диспетчер GTK с настоящим устройством. */
+static void source_mouse_event(GtkWidget *view, gint offset, GdkEventType type, guint button, guint modifiers)
 {
     GtkTextIter at;
     gtk_text_buffer_get_iter_at_offset(gtk_text_view_get_buffer(GTK_TEXT_VIEW(view)), &at, offset);
@@ -22,9 +22,8 @@ static gboolean source_mouse_event(GtkWidget *view, gint offset, GdkEventType ty
     event->button.x = x;
     event->button.y = y;
     gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(view))));
-    gboolean handled = gtk_widget_event(view, event);
+    gtk_main_do_event(event);
     gdk_event_free(event);
-    return handled;
 }
 
 /* EN: Send a primary press/release at offset in view, optionally with modifiers; normal GTK handlers remain active.
