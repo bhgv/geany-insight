@@ -7,6 +7,27 @@ static gint selected(Merge *m) {
  if(gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(m->hunk_view)),&model,&it)) gtk_tree_model_get(model,&it,0,&id,-1);
  return id;
 }
+/* EN: Refresh m's difference actions/status without changing source carets or scroll positions; return the selected block ID.
+ * RU: Обновляет команды/статус различия m без изменения курсоров и прокрутки исходников; возвращает ID выбранного блока. */
+static gint difference_controls(Merge *m)
+{
+    gint id = selected(m);
+    for (guint side = 0; side < 2; side++)
+    {
+        gtk_widget_set_sensitive(m->take[side], !m->busy && !m->browse && id >= 0);
+        gtk_widget_set_sensitive(m->take_all[side], !m->busy && !m->browse && m->diff.count > 0);
+    }
+    gtk_widget_set_sensitive(m->previous, m->diff.count && id != 0);
+    gtk_widget_set_sensitive(m->next, m->diff.count && (id < 0 || (gsize)(id + 1) < m->diff.count));
+    if (id >= 0 && (gsize)id < m->diff.count)
+    {
+        gchar *label = g_strdup_printf("Difference %d of %zu", id + 1, m->diff.count);
+        message(m, label);
+        g_free(label);
+    }
+    return id;
+}
+
 static void navigate(Merge *m,gint direction) {
  if(!m->diff.count) return;
  gint id=selected(m);
@@ -42,20 +63,43 @@ static void sync_scroll(GtkAdjustment *adjustment,gpointer data) {
  gtk_adjustment_set_value(m->adjustments[1-side],y);
  m->scrolling=FALSE;
 }
-static gboolean pick_block(GtkWidget *w,GdkEventButton *event,gpointer data) {
- Merge *m=data;if(event->button!=1 || !m->diff.count) return FALSE;
- int side=w==m->views[1];gint x,y;GtkTextIter it;
- gtk_text_view_window_to_buffer_coords(GTK_TEXT_VIEW(w),gtk_text_view_get_window_type(GTK_TEXT_VIEW(w),event->window),(gint)event->x,(gint)event->y,&x,&y);
- gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(w),&it,x,y);
- size_t offset=(size_t)(g_utf8_offset_to_pointer(m->sources[side],gtk_text_iter_get_offset(&it))-m->sources[side]);
- for(size_t i=0;i<m->diff.count;i++) {
-  InsightDiffHunk *h=&m->diff.hunks[i];size_t a=side ? h->b_begin : h->a_begin,z=side ? h->b_end : h->a_end;
-  if(offset>=a && (offset<z || (a==z && offset==a))) {
-   GtkTreePath *path=gtk_tree_path_new_from_indices((gint)i,-1);
-   gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view),path,NULL,FALSE);gtk_tree_path_free(path);return TRUE;
-  }
- }
- return FALSE;
+static void selection(GtkTreeSelection *s, gpointer data);
+
+/* EN: Track an ordinary primary text press in w for m in data, preserving GTK caret/selection handling.
+ * Ignore busy sessions and modified/multiple clicks. Always return FALSE so GTK can place or extend the text caret.
+ * RU: Отслеживает обычное нажатие в тексте w для m из data, сохраняя обработку курсора/выделения GTK.
+ * Пропускает занятые сеансы, модификаторы и кратные щелчки. Всегда FALSE для обычной обработки текста GTK. */
+static gboolean pick_block(GtkWidget *w, GdkEventButton *event, gpointer data)
+{
+    Merge *m = data;
+    guint side = w == m->views[1];
+    if (event->button != 1 || event->type != GDK_BUTTON_PRESS || m->busy || m->changing ||
+        !m->sources[side] || !m->diff.count || (event->state & gtk_accelerator_get_default_mod_mask()) ||
+        gtk_text_view_get_window_type(GTK_TEXT_VIEW(w), event->window) != GTK_TEXT_WINDOW_TEXT)
+        return FALSE;
+    gint x, y;
+    GtkTextIter at;
+    gtk_text_view_window_to_buffer_coords(GTK_TEXT_VIEW(w), GTK_TEXT_WINDOW_TEXT,
+        (gint)event->x, (gint)event->y, &x, &y);
+    gtk_text_view_get_iter_at_location(GTK_TEXT_VIEW(w), &at, x, y);
+    gsize offset = g_utf8_offset_to_pointer(m->sources[side], gtk_text_iter_get_offset(&at)) - m->sources[side];
+    for (gsize i = 0; i < m->diff.count; i++)
+    {
+        InsightDiffHunk *hunk = &m->diff.hunks[i];
+        gsize begin = side ? hunk->b_begin : hunk->a_begin;
+        gsize end = side ? hunk->b_end : hunk->a_end;
+        if (offset < begin || (offset >= end && (begin != end || offset != begin)))
+            continue;
+        GtkTreePath *path = gtk_tree_path_new_from_indices((gint)i, -1);
+        g_signal_handlers_block_by_func(m->selection, G_CALLBACK(selection), m);
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(m->hunk_view), path, NULL, FALSE);
+        gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(m->hunk_view), path, NULL, FALSE, 0, 0);
+        g_signal_handlers_unblock_by_func(m->selection, G_CALLBACK(selection), m);
+        gtk_tree_path_free(path);
+        difference_controls(m);
+        break;
+    }
+    return FALSE;
 }
 static gint chars(const gchar *s,size_t offset) { return (gint)g_utf8_pointer_to_offset(s,s+offset); }
 static void highlight(Merge *m,int side,size_t begin,size_t end) {
@@ -70,14 +114,7 @@ static void selection(GtkTreeSelection *s,gpointer data)
     (void)s;
     Merge *m=data;
     if(m->changing) return;
-    gint id=selected(m);
-    for(int side=0;side<2;side++)
-    {
-        gtk_widget_set_sensitive(m->take[side],!m->busy && !m->browse && id>=0);
-        gtk_widget_set_sensitive(m->take_all[side],!m->busy && !m->browse && m->diff.count>0);
-    }
-    gtk_widget_set_sensitive(m->previous,m->diff.count && id!=0);
-    gtk_widget_set_sensitive(m->next,m->diff.count && (id<0 || (size_t)(id+1)<m->diff.count));
+    gint id=difference_controls(m);
     if(id<0 || (size_t)id>=m->diff.count) return;
     InsightDiffHunk *h=&m->diff.hunks[id];
     m->scrolling=TRUE;
@@ -99,9 +136,7 @@ static void selection(GtkTreeSelection *s,gpointer data)
         gtk_text_view_scroll_to_iter(GTK_TEXT_VIEW(m->views[side]),&a,0.1,TRUE,0.0,0.5);
     }
     m->scrolling=FALSE;
-    gchar *label=g_strdup_printf("Difference %d of %zu",id+1,m->diff.count);
-    message(m,label);
-    g_free(label);
+
 }
 static void edit_source(Merge *m,guint side) {
  if(side>1 || m->busy || !source_opener || !m->loaded_paths[side]) return;

@@ -4,6 +4,7 @@
 typedef struct { guint side; gint offset; } DiffSymbolLocation;
 static void diff_symbol_browser(Merge *m, guint side);
 static void diff_scope_current(Merge *m, guint side);
+static gboolean diff_symbol_mouse(GtkWidget *view, GdkEventButton *event, gpointer data);
 
 /* EN: Return an owned identifier at side's caret/selection in m, or NULL; never change selection or search options.
  * RU: Возвращает собственный идентификатор у курсора/выделения стороны side в m либо NULL; не меняет выделение и поиск. */
@@ -309,6 +310,9 @@ static void diff_symbol_tools(Merge *m)
             g_signal_connect_object(control, "clicked", G_CALLBACK(diff_symbol_activate), m->window, 0);
             gtk_box_pack_start(GTK_BOX(row), control, FALSE, FALSE, 0);
         }
+        gtk_widget_set_tooltip_text(m->views[side], insight_tr(
+            "Ctrl+click: definition; Ctrl+Shift+click: text occurrences. Normal clicks and selections leave Result unchanged."));
+        g_signal_connect(m->views[side], "button-press-event", G_CALLBACK(diff_symbol_mouse), m);
         g_signal_connect(m->views[side], "populate-popup", G_CALLBACK(diff_symbol_menu), m);
         g_signal_connect(m->views[side], "key-press-event", G_CALLBACK(diff_symbol_key), m);
         gtk_widget_show_all(row);

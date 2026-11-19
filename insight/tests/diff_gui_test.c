@@ -19,6 +19,7 @@ static gchar *editor_path;static guint editor_line;
 #include "diff-gui/symbol-navigation.inc"
 #include "diff-gui/symbol-browser.inc"
 #include "diff-gui/symbol-changes.inc"
+#include "diff-gui/symbol-mouse.inc"
 
 /* EN: Run isolated comparison regressions with argc/argv for GTK; failed assertions terminate the fixture.
  * RU: Запускает изолированные проверки с argc/argv для GTK; неудачная проверка завершает фикстуру. */

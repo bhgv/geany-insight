@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330" role="img" aria-labelledby="title desc">
+<title id="title">File Compare mouse navigation</title>
+<desc id="desc">Normal text clicks set the caret and active difference. Shift and double clicks retain text selection. Control click resolves a definition in that snapshot; Control Shift click lists literal occurrences. Result text changes only through explicit merge or edit actions.</desc>
+<rect width="900" height="330" rx="12" fill="#f3f6fa"/>
+<g font-family="sans-serif" fill="#223348">
+<text x="24" y="34" font-size="21" font-weight="bold">Mouse navigation in either source snapshot</text>
+<g stroke="#bdcad8" fill="#fff">
+<rect x="24" y="54" width="852" height="46" rx="5"/>
+<rect x="24" y="107" width="852" height="46" rx="5"/>
+<rect x="24" y="160" width="852" height="46" rx="5"/>
+<rect x="24" y="213" width="852" height="46" rx="5"/>
+</g>
+<g font-size="17">
+<text x="40" y="83" font-weight="bold">Click in text</text><text x="324" y="83">Caret position + active merge block</text>
+<text x="40" y="136" font-weight="bold">Double-click / Shift-click</text><text x="324" y="136">Word / extended text selection</text>
+<text x="40" y="189" font-weight="bold">Ctrl+click on a name</text><text x="324" y="189">Definition in this version + navigation history</text>
+<text x="40" y="242" font-weight="bold">Ctrl+Shift+click</text><text x="324" y="242">Case-sensitive whole-word text occurrences</text>
+</g>
+<text x="24" y="301" font-size="16">These source gestures preserve Result text and its Undo history.</text>
+</g></svg>

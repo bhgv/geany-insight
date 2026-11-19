@@ -387,3 +387,11 @@ The dialog shows original comparison block numbers, both source line numbers and
 ![Changes in one definition](media/file-compare-scope.jpg)
 
 Real Linux editor window in an isolated GUI fixture: one changed Verilog function block, both source line numbers and persistent old/new text highlighting.
+
+## Mouse navigation in compared sources
+
+An ordinary click in changed text places the caret and activates that merge block, preserving positions and selections in other panes. Double-click selects a word and Shift-click extends selection; GTK's normal text selection remains available. Difference-list selection and block keyboard commands still reveal the complete block.
+
+**Ctrl+click** on an identifier acts like F12, resolving definitions in that version only; Ctrl+Alt+Left returns to the clicked reference. **Ctrl+Shift+click** opens textual occurrences like Shift+F12, including comments and strings. Whitespace, punctuation and margins do not start navigation. Right-click on a name targets context commands while preserving a selection containing the clicked position. Navigation gestures are ignored while comparing. These actions preserve Result text and its Undo history.
+
+![Mouse navigation](media/file-compare-mouse.svg)

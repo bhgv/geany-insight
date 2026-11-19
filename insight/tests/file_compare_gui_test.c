@@ -17,10 +17,10 @@ static guint phase;
 static gboolean passed;
 static const gchar *left_code =
     "int global_value = 1;\n\nint alpha(int x)\n{\n    return x + 1;\n}\n\n\n"
-    "class Box\n{\npublic:\n    int calc()\n    {\n        return 7;\n    }\n};\n";
+    "class Box\n{\npublic:\n    int calc()\n    {\n        return alpha(7);\n    }\n};\n";
 static const gchar *right_code =
     "int global_value = 2;\n\nint renamed_alpha(int x)\n{\n    return x + 2;\n}\n\n\n"
-    "class Box\n{\npublic:\n    int calc()\n    {\n        return 9;\n    }\n};\n";
+    "class Box\n{\npublic:\n    int calc()\n    {\n        return renamed_alpha(9);\n    }\n};\n";
 
 /* EN: Find key by widget name or command caption below widget, including menu subtrees; return NULL when absent.
  * RU: Ищет key по имени виджета или подписи команды под widget, включая подменю; возвращает NULL при отсутствии. */
@@ -182,6 +182,8 @@ static gboolean browse_symbols(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+#include "file-compare/mouse.inc"
+
 /* EN: Advance the isolated fixture from unused data; test exact on-disk versions even with a different live buffer.
  * Return REMOVE after C++/Verilog, layout and retained-result assertions; failures abort the test.
  * RU: Продвигает фикстуру из неиспользуемого data; проверяет дисковые версии при отличающемся живом буфере.
@@ -232,6 +234,7 @@ static gboolean drive(gpointer data)
         gchar *left = text(find(window, "insight-diff-left"));
         g_assert_cmpstr(left, ==, left_code);
         g_free(left);
+        native_compare_mouse(window);
         GtkWidget *split = find(window, "insight-diff-browser-split");
         g_assert_cmpint(gtk_orientable_get_orientation(GTK_ORIENTABLE(split)), ==, GTK_ORIENTATION_HORIZONTAL);
         GtkTreeSelection *selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(find(window, "insight-diff-differences")));

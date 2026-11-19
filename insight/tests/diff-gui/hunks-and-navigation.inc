@@ -7,6 +7,7 @@
     file_compare_symbol_navigation_test();
     file_compare_symbol_browser_test();
     file_compare_symbol_changes_test();
+    file_compare_symbol_mouse_test();
     line_navigation_test();
     search_options_test();
     replace_test();
@@ -98,10 +99,11 @@
     }
     ;
     mouse.button=1;
+    mouse.type=GDK_BUTTON_PRESS;
     mouse.window=gtk_text_view_get_window(GTK_TEXT_VIEW(m->views[0]),GTK_TEXT_WINDOW_TEXT);
     mouse.x=x;
     mouse.y=y;
-    g_assert_true(pick_block(m->views[0],&mouse,m));
+    g_assert_false(pick_block(m->views[0],&mouse,m));
     g_assert_cmpint(selected(m),==,1);
     navigate(m,-1);
     GdkEventKey event=
