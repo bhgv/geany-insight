@@ -20,7 +20,7 @@ static void native_source_click(GtkWidget *view, gint offset, guint modifiers)
         event->button.send_event = TRUE;
         event->button.time = GDK_CURRENT_TIME;
         event->button.button = 1;
-        event->button.state = modifiers;
+        event->button.state = modifiers | (release ? GDK_BUTTON1_MASK : 0);
         event->button.x = x;
         event->button.y = y;
         gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(view))));
