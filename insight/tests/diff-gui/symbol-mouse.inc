@@ -16,11 +16,15 @@ static void source_mouse_event(GtkWidget *view, gint offset, GdkEventType type, 
     GdkEvent *event = gdk_event_new(type);
     event->button.window = g_object_ref(gtk_text_view_get_window(GTK_TEXT_VIEW(view), GTK_TEXT_WINDOW_TEXT));
     event->button.send_event = TRUE;
-    event->button.time = GDK_CURRENT_TIME;
+    event->button.time = (guint32)(g_get_monotonic_time() / 1000);
     event->button.button = button;
     event->button.state = modifiers | (type == GDK_BUTTON_RELEASE ? GDK_BUTTON1_MASK : 0);
     event->button.x = x;
     event->button.y = y;
+    gint root_x, root_y;
+    gdk_window_get_origin(event->button.window, &root_x, &root_y);
+    event->button.x_root = root_x + x;
+    event->button.y_root = root_y + y;
     gdk_event_set_device(event, gdk_seat_get_pointer(gdk_display_get_default_seat(gtk_widget_get_display(view))));
     gtk_main_do_event(event);
     gdk_event_free(event);
