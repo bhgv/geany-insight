@@ -157,3 +157,11 @@ Turning off automatic inclusion in a legacy project freezes the current files in
 The file list uses a shared moving-window control: at most 256 GTK rows, bidirectional scrolling and Home/End/Page Up/Page Down over the complete result. Search and sorting run in a background job over all files. Result metadata stays in memory; source text is not loaded into table rows. The old 10000-file traversal cap is removed; project membership and database tables accept up to one million entries.
 
 Panel contents no longer force the main window minimum height beyond the usable desktop. Oversized saved startup geometry is clamped to the monitor workarea.
+
+## Project membership and the symbol index
+
+The file list shows regular files selected by project membership rules. An unknown extension or binary content alone does not remove an otherwise included file from that list. Depending on inclusion rules, it can remain a project member after reindexing. The symbol index is built separately: unsupported or binary content can contribute no symbols. No symbols does not mean no project membership.
+
+After a file is deleted from disk, a successful rescan updates the list. Reindexing should not duplicate file rows. File browsing and symbol navigation therefore have separate result sets.
+
+![Project membership and indexing](media/project-membership-index.svg)

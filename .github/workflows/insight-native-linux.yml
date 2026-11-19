@@ -254,6 +254,18 @@ jobs:
             file-compare-scope.jpg
           retention-days: 3
           if-no-files-found: ignore
+      - name: Verify SSH failures and project membership before optional integrations
+        run: |
+          LANG=C.UTF-8 GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 INSIGHT_CI_DIAGNOSTIC_FILE=core-regressions.log python3 insight/tools/run_ci_diagnostic.py xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --num-processes 1 --print-errorlogs 'Insight native SSH shell connection GUI' 'Insight overview GUI'
+      - name: Publish SSH and project membership diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-regression-diagnostics
+          path: |
+            core-regressions.log
+            _native/meson-logs/testlog.txt
+          retention-days: 3
       - name: Exercise native GDB values and data watchpoints
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
@@ -415,7 +427,7 @@ jobs:
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
           membership_failed=0
-          INSIGHT_MEMBERSHIP_CAPTURE="$PWD/project-membership.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight project membership browser GUI' 'Insight master file list project GUI' 'Insight typed nonrecursive MFL directories GUI' 'Insight overview GUI' || membership_failed=1
+          INSIGHT_MEMBERSHIP_CAPTURE="$PWD/project-membership.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight project membership browser GUI' 'Insight master file list project GUI' 'Insight typed nonrecursive MFL directories GUI' || membership_failed=1
           cp _native/meson-logs/testlog.txt project-membership-testlog.txt
           exit "$membership_failed"
       - name: Publish project membership check evidence
@@ -437,10 +449,10 @@ jobs:
         run: |
           INSIGHT_MENU_CAPTURE_DIR="$PWD" INSIGHT_MACOS_WINDOWS_CAPTURE="$PWD/macos-independent-windows.jpg" INSIGHT_APPEARANCE_VARIANTS_DIR="$PWD" INSIGHT_APPEARANCE_CLASSIC_CAPTURE="$PWD/interface-classic.jpg" INSIGHT_APPEARANCE_MAC_CAPTURE="$PWD/interface-macos.jpg" INSIGHT_COMPACT_CAPTURE="$PWD/compact-context.jpg" GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight panel resizing, symbol types and contextual help GUI' 'Insight language-aware Context links GUI' 'Insight legacy generated palette recovery GUI' 'Insight Python Context and tools GUI' 'Insight open window batch actions GUI' 'Insight escaped web search URLs' 'Insight native Search Web and Search Engines GUI' 'Insight shared AI profiles and parallel answer selection GUI' 'Insight native panel activation and focus commands GUI' 'Insight native Reload Modified Files guarded batches GUI' 'Insight native code outlining and block browser GUI' 'Insight classic and macOS interface styles GUI' 'Insight compact macOS menus and live materials GUI' 'Insight macOS interface style startup restore GUI' 'Insight macOS appearance variant startup GUI' 'Insight CSS visual themes GUI' 'Insight CSS visual theme restore GUI' 'Insight CSS theme panel override GUI' 'Insight CSS theme and Cyrillic font assets'
           cp _native/meson-logs/testlog.txt compact-testlog.txt
-      - name: Check SSH connection startup and failures
+      - name: Check SSH IO and archive helpers
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.menu-palettes.outcome == 'success' && steps.source-routes.outcome == 'success' && steps.ai-layout.outcome == 'success' }}
         run: |
-          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight remote IO' 'Insight remote archive packing' 'Insight native SSH shell connection GUI'
+          GEANY_INSIGHT_PREFIX="$PWD/_native-install" GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s "-screen 0 1600x1200x24" meson test -C _native --print-errorlogs 'Insight remote IO' 'Insight remote archive packing'
           cp _native/meson-logs/testlog.txt ssh-console-testlog.txt
       - name: Run guarded text transfer checks
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' && steps.menu-palettes.outcome == 'success' && steps.source-routes.outcome == 'success' && steps.ai-layout.outcome == 'success' }}

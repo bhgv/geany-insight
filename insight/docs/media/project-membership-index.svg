@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="320" viewBox="0 0 900 320" role="img" aria-labelledby="title desc">
+<title id="title">Project files and indexed symbols</title>
+<desc id="desc">Project membership includes eligible regular files. Supported source content contributes symbols. Unknown and binary files can remain project members without symbols.</desc>
+<rect width="900" height="320" rx="12" fill="#f3f6fa"/>
+<g font-family="sans-serif" fill="#223348">
+<text x="24" y="34" font-size="21" font-weight="bold">Project membership and symbol indexing</text>
+<rect x="24" y="62" width="350" height="174" rx="8" fill="#fff" stroke="#8799ad"/>
+<text x="42" y="92" font-size="18" font-weight="bold">Project files</text>
+<text x="42" y="125" font-size="16">work.cpp · logic.v · shared.inc</text>
+<text x="42" y="157" font-size="16">notes.unknown · data.bin</text>
+<text x="42" y="204" font-size="14">Membership rules decide which files belong.</text>
+<path d="M390 145H493" fill="none" stroke="#51779e" stroke-width="3"/>
+<path d="M481 138L495 145L481 152" fill="none" stroke="#51779e" stroke-width="3"/>
+<text x="402" y="121" font-size="13">Parse source</text>
+<rect x="512" y="62" width="364" height="174" rx="8" fill="#e7f3e9" stroke="#8799ad"/>
+<text x="530" y="92" font-size="18" font-weight="bold">Indexed symbols</text>
+<text x="530" y="125" font-size="16">Functions · modules · declarations</text>
+<text x="530" y="165" font-size="15">Unsupported or binary content can</text>
+<text x="530" y="188" font-size="15">contribute no symbols.</text>
+<text x="24" y="273" font-size="16">Reindexing follows membership rules; zero symbols does not remove a project member.</text>
+<text x="24" y="299" font-size="14">A visible file row does not imply that the file contains indexed symbols.</text>
+</g></svg>

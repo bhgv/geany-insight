@@ -1320,4 +1320,5 @@ install_data(
   'insight/docs/media/file-compare-merge.jpg',
   'insight/docs/media/file-compare-symbols.jpg',
   'insight/docs/media/file-compare-scope.jpg',
+  'insight/docs/media/project-membership-index.svg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

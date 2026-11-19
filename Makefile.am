@@ -977,3 +977,7 @@ dist_insightdocmedia_DATA += insight/docs/media/file-compare-symbols.jpg
 EXTRA_DIST += insight/tests/diff-gui/symbol-changes.inc
 
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-scope.jpg
+
+EXTRA_DIST += insight/tests/overview-gui/steps-1.inc insight/tests/overview-gui/steps-2.inc
+
+dist_insightdocmedia_DATA += insight/docs/media/project-membership-index.svg
