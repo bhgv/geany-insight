@@ -122,13 +122,13 @@ static void wizard_flow(void)
     g_free(original_host);
 #ifdef G_OS_WIN32
     gchar *console = insight_remote_program("geany-insight-ssh-console", external);
-    gchar *client = insight_remote_program("ssh", external);
+    gchar *console_client = insight_remote_program("ssh", external);
     g_assert_nonnull(console);
     GError *console_error = NULL;
-    g_assert_true(setup_console_spawn(console, client, "-V", TRUE, &console_error));
+    g_assert_true(setup_console_spawn(console, console_client, "-V", TRUE, &console_error));
     g_assert_no_error(console_error);
     g_free(console);
-    g_free(client);
+    g_free(console_client);
 #endif
 
     gtk_entry_set_text(GTK_ENTRY(wizard->password), "isolated-тест-password");
