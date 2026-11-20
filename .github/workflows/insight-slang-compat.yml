@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Checkout runs on the host; Node 24 does not support the old container libc.
       - name: Build and exercise direct slang C++ APIs on the original toolchain
         run: |
