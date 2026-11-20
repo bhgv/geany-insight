@@ -3577,3 +3577,8 @@ Enter one command beginning with ssh, for example: ssh user@server	Введит�
 Install ssh and the geany-insight-ssh-console helper beside the editor.	Установите ssh и помощник geany-insight-ssh-console рядом с редактором.
 SSH console opened. Enter the password there. This separate login does not verify the wizard connection.	SSH-консоль открыта. Введите пароль в ней. Этот отдельный вход не подтверждает подключение мастера.
 Install xterm or x-terminal-emulator to open a separate SSH console.	Установите xterm или x-terminal-emulator для открытия отдельной SSH-консоли.
+SSH diagnostics (kept until the next check)	Диагностика SSH (сохраняется до следующей проверки)
+Some servers require an interactive terminal during login. You can open the SSH terminal without this command check; the connection is not marked verified.	Некоторые серверы требуют интерактивный терминал при входе. Можно открыть SSH-терминал без этой проверки команд; подключение не помечается проверенным.
+Connect terminal without command check	Открыть терминал без проверки команд
+SSH reached the server, but remote startup requested sudo without a terminal. Use an interactive SSH console. For debugging, remote startup scripts must also allow noninteractive commands.	SSH достиг сервера, но команды входа вызвали sudo без терминала. Используйте интерактивную SSH-консоль. Для отладки сценарии входа должны также допускать неинтерактивные команды.
+Cannot create SSH settings.	Не удалось создать настройки SSH.

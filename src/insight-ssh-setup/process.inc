@@ -98,11 +98,14 @@ static void setup_worker(GTask *task, gpointer source, gpointer data, GCancellab
         g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_NO_SPACE, "SSH setup output exceeds 64 KiB.");
     if (!error)
         g_subprocess_wait(job->process, cancel, &error);
-    if (!error && !g_subprocess_get_successful(job->process))
+    if (!error)
     {
         if (output.output->len && errors.output->len)
             g_string_append_c(output.output, '\n');
         g_string_append_len(output.output, errors.output->str, errors.output->len);
+    }
+    if (!error && !g_subprocess_get_successful(job->process))
+    {
         gchar *diagnostic = setup_failure_output(output.output->str);
         g_set_error(&error, G_IO_ERROR, G_IO_ERROR_FAILED, "%s",
                     *diagnostic ? diagnostic : "SSH setup command failed.");

@@ -90,7 +90,7 @@ static void wizard_flow(void)
                                 "2; printf 'GEANY-SSH-KEY-INSTALLED\\n';;\n"
                                 "*/missing/fixture-program*) printf 'GEANY-SSH-CHECK:login\\n'; printf "
                                 "'Remote program must be an executable file.\\n' >&2; exit 3;;\n"
-                                "*GEANY-SSH-READY*) printf 'GEANY-SSH-READY\\n';;\n"
+                                "*GEANY-SSH-READY*) printf 'fixture stderr note\\n' >&2; printf 'GEANY-SSH-READY\\n';;\n"
                                 "*) exit 4;;\nesac\n",
                                 -1, NULL));
         g_chmod(client, 0700);
@@ -156,6 +156,14 @@ static void wizard_flow(void)
     setup_job_start(wizard, SETUP_TEST);
     settle(wizard);
     g_assert_true(wizard->verified);
+    GtkTextBuffer *log_buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(wizard->diagnostics));
+    GtkTextIter log_begin, log_end;
+    gtk_text_buffer_get_bounds(log_buffer, &log_begin, &log_end);
+    gchar *log_text = gtk_text_buffer_get_text(log_buffer, &log_begin, &log_end, FALSE);
+    g_assert_nonnull(strstr(log_text, "fixture stderr note"));
+    g_assert_null(strstr(log_text, "GEANY-SSH-READY"));
+    g_free(log_text);
+
     gtk_entry_set_text(GTK_ENTRY(wizard->user), "changed");
     g_assert_false(wizard->verified);
     gtk_entry_set_text(GTK_ENTRY(wizard->user), "developer");
@@ -222,6 +230,54 @@ static void wizard_flow(void)
     g_free(directory);
 }
 
+/* EN: Verify persistent sudo diagnostics and explicit terminal-only bypass; no server or credential access is needed.
+ * RU: Проверяет сохранённую диагностику sudo и явный обход только для терминала; сервер и доступ к паролям не нужны. */
+static void interactive_startup(void)
+{
+    gchar *directory = g_dir_make_tmp("insight interactive startup-XXXXXX", NULL);
+    InsightSshSetup initial = {.host = "test-server", .user = "developer", .port = 22,
+                               .program = "/opt/example/app", .remember = TRUE};
+    gboolean applied = FALSE;
+    GtkWidget *window = insight_ssh_setup_show(NULL, directory, directory, &initial, FALSE, connected, &applied);
+    g_object_ref_sink(window);
+    SshSetupWizard *wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
+    wizard->page = 2;
+    setup_update(wizard);
+    GError *error = g_error_new_literal(G_IO_ERROR, G_IO_ERROR_FAILED,
+        "sudo: a terminal is required to read the password; either use the -S option to read from standard input");
+    setup_check_diagnostics(wizard, NULL, error);
+    g_assert_false(wizard->verified);
+    g_assert_nonnull(strstr(gtk_label_get_text(GTK_LABEL(wizard->status)), "SSH reached the server"));
+    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(wizard->diagnostics));
+    GtkTextIter begin, end;
+    gtk_text_buffer_get_bounds(buffer, &begin, &end);
+    gchar *text = gtk_text_buffer_get_text(buffer, &begin, &end, FALSE);
+    g_assert_nonnull(strstr(text, "sudo: a terminal is required"));
+    g_assert_nonnull(strstr(text, "noninteractive commands"));
+    g_free(text);
+    capture(wizard, "INSIGHT_SSH_DIAGNOSTIC_CAPTURE");
+    g_clear_error(&error);
+    gtk_entry_set_text(GTK_ENTRY(wizard->host), "-invalid");
+    setup_connect_unchecked(NULL, wizard);
+    g_assert_false(applied);
+    gtk_entry_set_text(GTK_ENTRY(wizard->host), "test-server");
+    setup_connect_unchecked(NULL, wizard);
+    g_assert_true(applied);
+    g_assert_false(wizard->verified);
+    g_object_unref(window);
+    applied = FALSE;
+    window = insight_ssh_setup_show(NULL, directory, directory, &initial, TRUE, connected, &applied);
+    g_object_ref_sink(window);
+    wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
+    setup_connect_unchecked(NULL, wizard);
+    g_assert_false(applied);
+    g_assert_false(wizard->verified);
+    gtk_widget_destroy(window);
+    g_object_unref(window);
+    cleanup_tree(directory);
+    g_free(directory);
+}
+
 /* EN: Run the actual production-widget flow when a GTK display is available; argc/argv configure GLib tests.
  * RU: Выполняет сценарий настоящего виджета при доступном GTK-дисплее; argc/argv настраивают тесты GLib. */
 int main(int argc, char **argv)
@@ -230,5 +286,6 @@ int main(int argc, char **argv)
     if (!gtk_init_check(&argc, &argv))
         return 77;
     g_test_add_func("/ssh/wizard-flow", wizard_flow);
+    g_test_add_func("/ssh/interactive-startup", interactive_startup);
     return g_test_run();
 }

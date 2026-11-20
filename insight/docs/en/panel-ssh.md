@@ -104,3 +104,9 @@ The first wizard page has an editable **SSH command** field. Paste `ssh HwHiAiUs
 **Close console when SSH exits** is off initially: successful logouts and errors both retain output, display the SSH exit code and wait for Enter. Turn it on to close automatically after SSH finishes. The console is independent of the wizard and stays open if the wizard closes. A separate console login does not mark the wizard verified or start a debugger; use **Check connection** for that. Linux needs `x-terminal-emulator` or `xterm` for the separate window.
 
 ![Explicit SSH command](../media/ssh-command-console.svg)
+
+## Servers with interactive login commands
+
+A console login can succeed while the wizard's command check fails. For example, a server startup script may invoke `sudo` and report `a terminal is required` when SSH runs a command without a terminal. This is a remote command/startup problem, not evidence that the SSH password was rejected. The check page now retains **SSH diagnostics**, including stderr even when SSH returns success. Output remains until the next check; the editor does not supply a sudo password or change server scripts.
+
+For an ordinary SSH terminal, **Connect terminal without command check** opens the interactive terminal after validating the form, without declaring the command check passed. Debugger setup has no bypass: its remote startup and gdbserver commands must work noninteractively. An independent console login does not satisfy that requirement. Authentication or remote command behavior is not changed by this UI path.

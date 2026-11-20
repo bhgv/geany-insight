@@ -45,7 +45,7 @@ jobs:
       - name: Verify credentials and public keys
         run: ./ssh-model-test
       - name: Drive real GTK wizard and capture its pages
-        run: INSIGHT_SSH_SERVER_CAPTURE="$PWD/ssh-setup-server.jpg" INSIGHT_SSH_KEYS_CAPTURE="$PWD/ssh-setup-keys.jpg" INSIGHT_SSH_DEBUG_CAPTURE="$PWD/ssh-setup-debug.jpg" GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' ./ssh-wizard-test
+        run: INSIGHT_SSH_DIAGNOSTIC_CAPTURE="$PWD/ssh-setup-diagnostics.jpg" INSIGHT_SSH_SERVER_CAPTURE="$PWD/ssh-setup-server.jpg" INSIGHT_SSH_KEYS_CAPTURE="$PWD/ssh-setup-keys.jpg" INSIGHT_SSH_DEBUG_CAPTURE="$PWD/ssh-setup-debug.jpg" GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' ./ssh-wizard-test
       - uses: actions/upload-artifact@v4
         if: always()
         with:

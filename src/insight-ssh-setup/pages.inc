@@ -194,6 +194,22 @@ static void setup_pages(SshSetupWizard *wizard, const InsightSshSetup *initial)
     setup_job_button(box, "Check connection", "insight-ssh-setup-check", SETUP_TEST, wizard);
     setup_note(box, "If the check fails, read the explanation below, go back and correct the "
                     "server, login or key. No application is started by this check.");
+    setup_note(box, "SSH diagnostics (kept until the next check)");
+    GtkWidget *diagnostic_scroll = gtk_scrolled_window_new(NULL, NULL);
+    gtk_widget_set_size_request(diagnostic_scroll, -1, 130);
+    wizard->diagnostics = gtk_text_view_new();
+    gtk_widget_set_name(wizard->diagnostics, "insight-ssh-setup-diagnostics");
+    gtk_text_view_set_editable(GTK_TEXT_VIEW(wizard->diagnostics), FALSE);
+    gtk_text_view_set_monospace(GTK_TEXT_VIEW(wizard->diagnostics), TRUE);
+    gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(wizard->diagnostics), GTK_WRAP_WORD_CHAR);
+    gtk_container_add(GTK_CONTAINER(diagnostic_scroll), wizard->diagnostics);
+    gtk_box_pack_start(GTK_BOX(box), diagnostic_scroll, TRUE, TRUE, 0);
+    if (!wizard->debugging)
+    {
+        setup_note(box, "Some servers require an interactive terminal during login. You can open the SSH terminal without this command check; the connection is not marked verified.");
+        setup_button(box, "Connect terminal without command check", "insight-ssh-connect-unchecked",
+                     G_CALLBACK(setup_connect_unchecked), wizard);
+    }
     box = setup_page(wizard, check + 1);
     wizard->summary = setup_note(box, "Connection verified.");
 }

@@ -150,6 +150,32 @@ static gboolean setup_save(SshSetupWizard *wizard, const InsightSshSetup *settin
     return ok;
 }
 
+/* EN: Open a validated ordinary terminal for wizard in data without claiming command verification; button is unused.
+ * Reject debugger/busy/closed contexts. Save only nonsecret settings and surface validation/write failures.
+ * RU: Открывает обычный терминал wizard из data после проверки полей, не заявляя проверку команд; button не используется.
+ * Отклоняет отладку, занятый/закрытый мастер; сохраняет лишь несекретные настройки и показывает ошибки проверки/записи. */
+static void setup_connect_unchecked(GtkWidget *button, gpointer data)
+{
+    (void)button;
+    SshSetupWizard *wizard = data;
+    if (wizard->debugging || wizard->process || wizard->closed)
+        return;
+    InsightSshSetup settings = {0};
+    GError *error = NULL;
+    gchar *folder = g_build_filename(wizard->configdir, "insight", NULL);
+    if (g_mkdir_with_parents(folder, 0700))
+        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_FAILED, "Cannot create SSH settings.");
+    g_free(folder);
+    if (!error && setup_collect(wizard, &settings, &error) && setup_save(wizard, &settings, &error))
+    {
+        wizard->done(&settings, wizard->data);
+        gtk_widget_destroy(wizard->window);
+        return;
+    }
+    gtk_label_set_text(GTK_LABEL(wizard->status), error ? insight_tr(error->message) : "Invalid SSH settings");
+    g_clear_error(&error);
+}
+
 /* EN: Handle navigation/connection response for wizard data; dialog is the
  * owned wizard window. RU: Обрабатывает переходы/подключение response для
  * wizard data; dialog — окно мастера. */

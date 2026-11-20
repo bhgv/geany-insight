@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300">
- <rect width="900" height="300" rx="12" fill="#eef2f6"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="410" viewBox="0 0 900 410">
+ <rect width="900" height="410" rx="12" fill="#eef2f6"/>
  <g font-family="sans-serif" fill="#19334a">
   <text x="24" y="35" font-size="22" font-weight="bold">SSH command / Команда SSH</text>
   <rect x="24" y="54" width="852" height="48" rx="6" fill="white" stroke="#a6bacb"/>
@@ -13,5 +13,9 @@
   <text x="444" y="189" font-size="17">☐ Off: keep output / Выкл.: оставить вывод</text>
   <text x="444" y="223" font-size="17">☑ On: close window / Вкл.: закрыть окно</text>
   <text x="444" y="259" font-size="15">Default: off / По умолчанию: выключено</text>
+  <rect x="24" y="285" width="852" height="102" rx="8" fill="white" stroke="#a6bacb"/>
+  <text x="42" y="312" font-size="17" font-weight="bold">sudo requires a terminal / sudo требует терминал → SSH diagnostics / Диагностика SSH</text>
+  <text x="42" y="342" font-size="16">Terminal / Терминал → Open without command check / Открыть без проверки команд</text>
+  <text x="42" y="372" font-size="16">Debugger / Отладчик → Noninteractive commands must work / Команды должны работать без TTY</text>
  </g>
 </svg>

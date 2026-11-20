@@ -17,6 +17,23 @@ static gboolean setup_timeout(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+/* EN: Retain output/error for wizard's last check and explain a sudo terminal requirement without blaming SSH authentication.
+ * RU: Сохраняет output/error последней проверки wizard и объясняет запрос терминала sudo без обвинения SSH-авторизации. */
+static void setup_check_diagnostics(SshSetupWizard *wizard, const gchar *output, const GError *error)
+{
+    gchar *raw = setup_failure_output(error ? error->message : (output ? output : ""));
+    gboolean sudo_terminal = strstr(raw, "sudo:") &&
+        (strstr(raw, "terminal is required") || strstr(raw, "no tty present"));
+    const gchar *hint = sudo_terminal ? insight_tr(
+        "SSH reached the server, but remote startup requested sudo without a terminal. Use an interactive SSH console. For debugging, remote startup scripts must also allow noninteractive commands.") : "";
+    gchar *text = *hint ? g_strconcat(raw, "\n\n", hint, NULL) : g_strdup(raw);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(wizard->diagnostics)), text, -1);
+    if (sudo_terminal)
+        gtk_label_set_text(GTK_LABEL(wizard->status), hint);
+    g_free(text);
+    g_free(raw);
+}
+
 /* EN: Finish result for window data, ignoring callbacks after destruction;
  * source is unused. RU: Завершает result для окна data, игнорируя ответы после
  * уничтожения; source не используется. */
@@ -105,6 +122,8 @@ static void setup_job_done(GObject *source, GAsyncResult *result, gpointer data)
             gtk_label_set_text(GTK_LABEL(wizard->status), valid);
             g_free(valid);
         }
+        if (job->kind == SETUP_TEST)
+            setup_check_diagnostics(wizard, output, error);
         setup_update(wizard);
         if (output && job->kind == SETUP_GENERATE && !error)
             setup_job_start(wizard, SETUP_PUBLIC);
@@ -122,6 +141,8 @@ static void setup_job_start(SshSetupWizard *wizard, SetupJob kind)
     if (wizard->process || wizard->closed)
         return;
     wizard->timed_out = FALSE;
+    if (kind == SETUP_TEST)
+        gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(wizard->diagnostics)), "", -1);
     wizard->verified = FALSE;
     InsightSshSetup settings = {0};
     GError *error = NULL;

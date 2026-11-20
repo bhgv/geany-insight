@@ -100,6 +100,7 @@ def channel_worker(channel, server):
             channel.send_exit_status(3)
             return
         elif 'GEANY-SSH-READY' in command:
+            channel.send_stderr(b'fixture stderr note\n')
             channel.sendall(b'GEANY-SSH-READY\n')
         else:
             raise AssertionError('Unexpected fixture command')

@@ -23,7 +23,7 @@ typedef struct
     GtkWidget *window, *stack, *heading, *status, *next, *back;
     GtkWidget *host, *user, *port, *identity, *password, *remember, *config;
     GtkWidget *public_text, *program, *directory, *local_source, *remote_source, *server_port, *start_server;
-    GtkWidget *summary, *command, *console_close;
+    GtkWidget *summary, *command, *console_close, *diagnostics;
     gchar *configdir, *client_bin, *public_key, *auth, *key_stage, *key_destination;
     GSubprocess *process;
     GCancellable *cancel;
@@ -39,6 +39,7 @@ typedef struct
     SetupJob kind;
 } SetupTask;
 static void setup_update(SshSetupWizard *wizard);
+static void setup_connect_unchecked(GtkWidget *button, gpointer data);
 static void setup_job_start(SshSetupWizard *wizard, SetupJob kind);
 static gboolean setup_collect(SshSetupWizard *wizard, InsightSshSetup *settings, GError **error);
 #include "insight-ssh-setup/process.inc"
