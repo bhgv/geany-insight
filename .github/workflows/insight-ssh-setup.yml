@@ -16,6 +16,8 @@ on:
       - 'src/insight-debuggers/gdb-remote-model.inc'
       - 'insight/tools/package_native_windows.py'
       - 'src/insight-askpass.c'
+      - 'src/insight-ssh-console.c'
+      - 'insight/tests/ssh_console_runner_test.py'
       - '.github/workflows/insight-ssh-setup.yml'
   workflow_dispatch:
 permissions:
@@ -32,6 +34,10 @@ jobs:
         run: |
           cc -Wall -Wextra -Werror=implicit-function-declaration -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_test.c insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c -o ssh-model-test $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -Wall -Wextra -Werror=implicit-function-declaration -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c insight/desktop/ssh_auth.c insight/desktop/ssh_setup.c insight/desktop/remote_io.c insight/desktop/remote_credentials.c -o ssh-wizard-test $(pkg-config --libs gtk+-3.0 gio-2.0)
+      - name: Verify persistent SSH console with a real client
+        run: |
+          cc -Wall -Wextra $(pkg-config --cflags gio-2.0) src/insight-ssh-console.c -o ssh-console-test $(pkg-config --libs gio-2.0)
+          python3 insight/tests/ssh_console_runner_test.py ./ssh-console-test /usr/bin/ssh
       - name: Build and verify password reuse in production askpass
         run: |
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) src/insight-askpass.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o ssh-askpass-test $(pkg-config --libs gtk+-3.0 gio-2.0)
@@ -77,6 +83,7 @@ jobs:
           cc -fsyntax-only -DGTK -DGEANY_PRIVATE -I. -Isrc -Isrc/tagmanager -Ictags/main -Iscintilla/include $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/native_debugger_compile_fixture.c
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_setup_gui_test.c $common -o ssh-wizard-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
           cc -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) insight/tests/ssh_native_client_test.c $common -o ssh-tunnel-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
+          cc -Wall -Wextra $(pkg-config --cflags gio-2.0) src/insight-ssh-console.c -o ssh-console-test.exe $(pkg-config --libs gio-2.0)
           cc -mwindows -Wall -Wextra -Iinsight/desktop $(pkg-config --cflags gtk+-3.0 gio-2.0) src/insight-askpass.c insight/desktop/ssh_auth.c insight/desktop/remote_credentials.c -o ssh-askpass-test.exe $(pkg-config --libs gtk+-3.0 gio-2.0)
       - name: Verify real Windows password and server-key dialogs
         run: |
@@ -85,7 +92,11 @@ jobs:
           ./ssh-dialog-test.exe "Trust fixture server (yes/no)"
       - name: Place compiled askpass into the Unicode runtime directory
         shell: pwsh
-        run: Copy-Item ./ssh-askpass-test.exe (Join-Path $env:INSIGHT_NATIVE_SSH_BIN 'geany-insight-askpass.exe')
+        run: |
+          Copy-Item ./ssh-askpass-test.exe (Join-Path $env:INSIGHT_NATIVE_SSH_BIN 'geany-insight-askpass.exe')
+          Copy-Item ./ssh-console-test.exe (Join-Path $env:INSIGHT_NATIVE_SSH_BIN 'geany-insight-ssh-console.exe')
+      - name: Verify native Windows console retention and exit codes
+        run: python insight/tests/ssh_console_runner_test.py "$INSIGHT_NATIVE_SSH_BIN/geany-insight-ssh-console.exe" "$INSIGHT_NATIVE_SSH_BIN/ssh.exe"
       - name: Verify saved passwords and legacy passphrases in Windows askpass
         run: python insight/tests/ssh_auth_helper_test.py "$INSIGHT_NATIVE_SSH_BIN/geany-insight-askpass.exe"
       - name: Drive Windows GTK through real native OpenSSH

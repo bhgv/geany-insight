@@ -988,3 +988,7 @@ dist_insightdocmedia_DATA += insight/docs/media/file-compare-mouse.svg
 
 EXTRA_DIST += insight/tests/diff-gui/symbol-counterpart.inc
 dist_insightdocmedia_DATA += insight/docs/media/file-compare-counterpart.svg
+
+EXTRA_DIST += insight/tests/ssh_console_runner_test.py
+
+dist_insightdocmedia_DATA += insight/docs/media/ssh-command-console.svg

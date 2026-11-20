@@ -96,3 +96,11 @@ Ai открывает отдельное изменяемое по размер�
 ## Высота терминала и строка состояния
 
 Локальный, SSH и TTY занимают общую высоту страницы. Справка SSH/TTY и переход к диагностике SSH находятся на правой полосе значков. Статус выводится справа в свободной части ряда «Локальный / SSH / TTY». Корешки имеют приоритет: длинный текст обрезается справа, полностью доступен в тултипе; отдельная строка под терминалом не резервируется.
+
+## Explicit SSH command and console lifetime
+
+The first wizard page has an editable **SSH command** field. Paste `ssh HwHiAiUser@192.168.0.185`, or use **Fill command from fields** to include the server, user, port, key and SSH config. Form changes do not overwrite a command you are editing. **Open SSH console** runs it in a separate ordinary console. On Windows the selected native `ssh.exe` receives the typed arguments using Windows quoting, without `cmd /c` or askpass. Passwords are entered directly at the SSH prompt; this mode does not reuse or save the editor's passwords. The command is not stored in the profile. Enter only `ssh` or `ssh.exe` followed by arguments, not a shell script or another executable.
+
+**Close console when SSH exits** is off initially: successful logouts and errors both retain output, display the SSH exit code and wait for Enter. Turn it on to close automatically after SSH finishes. The console is independent of the wizard and stays open if the wizard closes. A separate console login does not mark the wizard verified or start a debugger; use **Check connection** for that. Linux needs `x-terminal-emulator` or `xterm` for the separate window.
+
+![Explicit SSH command](media/ssh-command-console.svg)

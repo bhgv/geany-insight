@@ -111,6 +111,26 @@ static void wizard_flow(void)
     g_object_ref_sink(window);
     SshSetupWizard *wizard = g_object_get_data(G_OBJECT(window), "insight-ssh-setup");
     g_assert_false(gtk_entry_get_visibility(GTK_ENTRY(wizard->password)));
+    g_assert_false(gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(wizard->console_close)));
+    gchar *original_host = g_strdup(gtk_entry_get_text(GTK_ENTRY(wizard->host)));
+    gtk_entry_set_text(GTK_ENTRY(wizard->command), "ssh HwHiAiUser@192.168.0.185");
+    gtk_entry_set_text(GTK_ENTRY(wizard->host), "changed-host");
+    g_assert_cmpstr(gtk_entry_get_text(GTK_ENTRY(wizard->command)), ==, "ssh HwHiAiUser@192.168.0.185");
+    gtk_entry_set_text(GTK_ENTRY(wizard->host), original_host);
+    setup_command_fill(NULL, wizard);
+    g_assert_nonnull(strstr(gtk_entry_get_text(GTK_ENTRY(wizard->command)), original_host));
+    g_free(original_host);
+#ifdef G_OS_WIN32
+    gchar *console = insight_remote_program("geany-insight-ssh-console", external);
+    gchar *client = insight_remote_program("ssh", external);
+    g_assert_nonnull(console);
+    GError *console_error = NULL;
+    g_assert_true(setup_console_spawn(console, client, "-V", TRUE, &console_error));
+    g_assert_no_error(console_error);
+    g_free(console);
+    g_free(client);
+#endif
+
     gtk_entry_set_text(GTK_ENTRY(wizard->password), "isolated-тест-password");
     capture(wizard, "INSIGHT_SSH_SERVER_CAPTURE");
     gtk_dialog_response(GTK_DIALOG(window), GTK_RESPONSE_ACCEPT);

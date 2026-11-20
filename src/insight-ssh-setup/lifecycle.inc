@@ -311,5 +311,6 @@ GtkWidget *insight_ssh_setup_show(GtkWindow *parent, const gchar *configdir, con
     g_signal_connect(wizard->window, "destroy", G_CALLBACK(setup_closed), wizard);
     gtk_widget_show_all(wizard->window);
     setup_update(wizard);
+    setup_command_fill(NULL, wizard);
     return wizard->window;
 }

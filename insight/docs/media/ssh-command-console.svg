@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="300" viewBox="0 0 900 300">
+ <rect width="900" height="300" rx="12" fill="#eef2f6"/>
+ <g font-family="sans-serif" fill="#19334a">
+  <text x="24" y="35" font-size="22" font-weight="bold">SSH command / Команда SSH</text>
+  <rect x="24" y="54" width="852" height="48" rx="6" fill="white" stroke="#a6bacb"/>
+  <text x="39" y="85" font-family="monospace" font-size="21">ssh HwHiAiUser@192.168.0.185</text>
+  <rect x="24" y="120" width="390" height="150" rx="8" fill="#162533"/>
+  <text x="42" y="149" fill="#d9ebfa" font-size="17">Open SSH console / Открыть консоль</text>
+  <text x="42" y="185" fill="#d9ebfa" font-size="16">SSH password / Пароль → keyboard</text>
+  <text x="42" y="219" fill="#d9ebfa" font-size="16">Exit code / Код завершения: 255</text>
+  <text x="42" y="251" fill="#ffdf90" font-size="16">Press Enter to close / Enter — закрыть</text>
+  <text x="444" y="151" font-size="18" font-weight="bold">Close after SSH / Закрывать после SSH</text>
+  <text x="444" y="189" font-size="17">☐ Off: keep output / Выкл.: оставить вывод</text>
+  <text x="444" y="223" font-size="17">☑ On: close window / Вкл.: закрыть окно</text>
+  <text x="444" y="259" font-size="15">Default: off / По умолчанию: выключено</text>
+ </g>
+</svg>

@@ -339,6 +339,24 @@ static void preflight(void)
 #endif
 }
 
+/* EN: Check literal command tails, Windows option paths and rejection of unrelated or multiline commands.
+ * RU: Проверяет буквальные аргументы, пути Windows и отклонение посторонних либо многострочных команд. */
+static void console_command(void)
+{
+    const gchar *command = "ssh HwHiAiUser@192.168.0.185";
+    g_assert_cmpstr(insight_ssh_console_arguments(command, NULL), ==, "HwHiAiUser@192.168.0.185");
+    command = "  SSH.exe -i \"C:\\ключи\\id key\" -p 2222 user@host";
+    g_assert_cmpstr(insight_ssh_console_arguments(command, NULL), ==, command + 10);
+    const gchar *bad[] = {NULL, "", "ssh", "ssh   ", "scp user@host", "cmd /c ssh user@host", "ssh host\nexit"};
+    for (guint i = 0; i < G_N_ELEMENTS(bad); i++)
+    {
+        GError *error = NULL;
+        g_assert_null(insight_ssh_console_arguments(bad[i], &error));
+        g_assert_error(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT);
+        g_clear_error(&error);
+    }
+}
+
 /* EN: Register isolated SSH model checks using argc/argv for GLib test selection.
  * RU: Регистрирует изолированные проверки SSH; argc/argv выбирают тесты GLib. */
 int main(int argc, char **argv)
@@ -349,5 +367,6 @@ int main(int argc, char **argv)
     g_test_add_func("/ssh/owned-server-lifetime", server_lifetime);
     g_test_add_func("/ssh/config-port", config_port);
     g_test_add_func("/ssh/preflight", preflight);
+    g_test_add_func("/ssh/console-command", console_command);
     return g_test_run();
 }

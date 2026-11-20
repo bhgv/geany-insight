@@ -3568,3 +3568,12 @@ No matching definition in the other snapshot.	В другой версии не�
 Matching definitions in the other snapshot	Совпадающие определения в другой версии
 Place the caret inside one indexed definition.	Установите курсор внутри одного индексированного определения.
 Same definition in other version — Ctrl+Shift+F12	То же определение в другой версии — Ctrl+Shift+F12
+SSH command	Команда SSH
+Paste a working ssh command. This console uses normal keyboard authentication, not saved editor passwords. Enter passwords only at the SSH prompt.	Вставьте рабочую команду ssh. В этой консоли пароль вводится с клавиатуры; сохранённые пароли редактора не используются. Вводите пароль только в ответ на запрос SSH.
+Fill command from fields	Заполнить команду из полей
+Close console when SSH exits	Закрывать консоль после завершения SSH
+Open SSH console	Открыть SSH-консоль
+Enter one command beginning with ssh, for example: ssh user@server	Введите одну команду с ssh в начале, например: ssh user@server
+Install ssh and the geany-insight-ssh-console helper beside the editor.	Установите ssh и помощник geany-insight-ssh-console рядом с редактором.
+SSH console opened. Enter the password there. This separate login does not verify the wizard connection.	SSH-консоль открыта. Введите пароль в ней. Этот отдельный вход не подтверждает подключение мастера.
+Install xterm or x-terminal-emulator to open a separate SSH console.	Установите xterm или x-terminal-emulator для открытия отдельной SSH-консоли.

@@ -126,6 +126,14 @@ static void setup_pages(SshSetupWizard *wizard, const InsightSshSetup *initial)
                     "files. Leave this off to remember only for this connection.");
     setup_button(box, "Forget saved SSH passwords", "insight-ssh-setup-forget", G_CALLBACK(setup_forget),
                  wizard);
+    wizard->command = setup_entry(box, "SSH command", "ssh ", "insight-ssh-setup-command");
+    gtk_entry_set_placeholder_text(GTK_ENTRY(wizard->command), "ssh user@server");
+    setup_note(box, "Paste a working ssh command. This console uses normal keyboard authentication, not saved editor passwords. Enter passwords only at the SSH prompt.");
+    setup_button(box, "Fill command from fields", "insight-ssh-command-fill", G_CALLBACK(setup_command_fill), wizard);
+    wizard->console_close = gtk_check_button_new_with_label(insight_tr("Close console when SSH exits"));
+    gtk_widget_set_name(wizard->console_close, "insight-ssh-console-close");
+    gtk_box_pack_start(GTK_BOX(box), wizard->console_close, FALSE, FALSE, 0);
+    setup_button(box, "Open SSH console", "insight-ssh-command-open", G_CALLBACK(setup_command_open), wizard);
     box = setup_page(wizard, 1);
     setup_note(box, "Optional: use an existing private key, or create a new one "
                     "here. The new private key has no passphrase and stays on this computer. Only the public "

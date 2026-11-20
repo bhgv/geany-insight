@@ -1130,6 +1130,9 @@ executable('geany',
 	win_subsystem: 'windows',
 )
 
+executable('geany-insight-ssh-console', 'src/insight-ssh-console.c',
+ dependencies: deps, install: true, win_subsystem: 'console')
+
 i18n = import('i18n')
 executable('geany-insight-askpass', 'src/insight-askpass.c', 'insight/desktop/remote_credentials.c',
  'insight/desktop/ssh_auth.c', dependencies: deps, install: true, win_subsystem: 'windows')
@@ -1323,4 +1326,5 @@ install_data(
   'insight/docs/media/project-membership-index.svg',
   'insight/docs/media/file-compare-mouse.svg',
   'insight/docs/media/file-compare-counterpart.svg',
+  'insight/docs/media/ssh-command-console.svg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

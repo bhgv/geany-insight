@@ -23,7 +23,7 @@ typedef struct
     GtkWidget *window, *stack, *heading, *status, *next, *back;
     GtkWidget *host, *user, *port, *identity, *password, *remember, *config;
     GtkWidget *public_text, *program, *directory, *local_source, *remote_source, *server_port, *start_server;
-    GtkWidget *summary;
+    GtkWidget *summary, *command, *console_close;
     gchar *configdir, *client_bin, *public_key, *auth, *key_stage, *key_destination;
     GSubprocess *process;
     GCancellable *cancel;
@@ -44,5 +44,6 @@ static gboolean setup_collect(SshSetupWizard *wizard, InsightSshSetup *settings,
 #include "insight-ssh-setup/process.inc"
 #include "insight-ssh-setup/jobs.inc"
 #include "insight-ssh-setup/keys.inc"
+#include "insight-ssh-setup/command.inc"
 #include "insight-ssh-setup/pages.inc"
 #include "insight-ssh-setup/lifecycle.inc"

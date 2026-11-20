@@ -190,3 +190,30 @@ gchar *insight_ssh_server_command(const gchar *directory, guint port, GError **e
     g_free(quoted);
     return command;
 }
+
+/* EN: Return a borrowed argument tail from bounded command beginning with ssh/ssh.exe; reject multiline or other programs with error.
+ * RU: Возвращает заимствованный хвост ограниченной command с ssh/ssh.exe; отклоняет многострочный ввод и другие программы через error. */
+const gchar *insight_ssh_console_arguments(const gchar *command, GError **error)
+{
+    if (command && strlen(command) <= 16384 && g_utf8_validate(command, -1, NULL) &&
+        !strpbrk(command, "\r\n"))
+    {
+        while (g_ascii_isspace(*command))
+            command++;
+        const gchar *end = command;
+        while (*end && !g_ascii_isspace(*end))
+            end++;
+        gsize length = end - command;
+        if ((length == 3 && !g_ascii_strncasecmp(command, "ssh", 3)) ||
+            (length == 7 && !g_ascii_strncasecmp(command, "ssh.exe", 7)))
+        {
+            while (g_ascii_isspace(*end))
+                end++;
+            if (*end)
+                return end;
+        }
+    }
+    g_set_error_literal(error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                        "Enter one command beginning with ssh, for example: ssh user@server");
+    return NULL;
+}

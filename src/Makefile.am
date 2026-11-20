@@ -24,7 +24,7 @@ AM_CPPFLAGS = \
 	@GTK_CFLAGS@ \
 	$(MAC_INTEGRATION_CFLAGS)
 
-bin_PROGRAMS = geany geany-insight-askpass
+bin_PROGRAMS = geany geany-insight-askpass geany-insight-ssh-console
 lib_LTLIBRARIES = libgeany.la
 
 geany_SOURCES = main.c
@@ -661,7 +661,7 @@ libgeany_la_SOURCES += \
  insight-remote/connection.inc insight-remote/roots.inc insight-remote/scp.inc insight-remote/uploads.inc insight-remote/transport.inc insight-remote/actions.inc \
  insight-remote/profile.inc insight-remote/interface.inc insight-remote/transfer-results.inc \
  insight-ssh-setup.c insight-ssh-setup.h \
- insight-ssh-setup/process.inc insight-ssh-setup/jobs.inc insight-ssh-setup/keys.inc insight-ssh-setup/pages.inc insight-ssh-setup/lifecycle.inc \
+ insight-ssh-setup/process.inc insight-ssh-setup/jobs.inc insight-ssh-setup/keys.inc insight-ssh-setup/command.inc insight-ssh-setup/pages.inc insight-ssh-setup/lifecycle.inc \
  ../insight/desktop/file_patterns.c ../insight/desktop/file_patterns.h \
  ../insight/desktop/keyword_search.c ../insight/desktop/keyword_search.h \
  ../insight/desktop/search_state.c ../insight/desktop/search_state.h \
@@ -725,3 +725,6 @@ libgeany.la geany$(EXEEXT): Makefile
 libgeany_la_SOURCES += ../insight/desktop/slang_completion.c ../insight/desktop/slang_completion.h
 
 libgeany_la_SOURCES += ../insight/desktop/include_language.c ../insight/desktop/include_language.h
+
+geany_insight_ssh_console_SOURCES = insight-ssh-console.c
+geany_insight_ssh_console_LDADD = $(GTK_LIBS) $(INTLLIBS)

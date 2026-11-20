@@ -13,4 +13,5 @@ gchar *insight_ssh_debug_check_command(const gchar *program, const gchar *direct
                                        GError **error);
 gchar *insight_ssh_check_command(const gchar *program, GError **error);
 gchar *insight_ssh_server_command(const gchar *directory, guint port, GError **error);
+const gchar *insight_ssh_console_arguments(const gchar *command, GError **error);
 #endif
