@@ -45,7 +45,7 @@ static gint run_client(const gchar *client, const gchar *arguments)
     if (!ok)
     {
         gchar *message = g_win32_error_message(failure);
-        g_printerr("Cannot start SSH: %s\n", message);
+        fprintf(stderr, "Cannot start SSH: %s\n", message);
         g_free(message);
         return 127;
     }
@@ -69,7 +69,7 @@ static gint run_client(const gchar *client, const gchar *arguments)
                           NULL, NULL, &status, &error);
     }
     if (!ok)
-        g_printerr("Cannot start SSH: %s\n", error ? error->message : "invalid command");
+        fprintf(stderr, "Cannot start SSH: %s\n", error ? error->message : "invalid command");
     g_clear_error(&error);
     g_strfreev(argv);
     g_free(line);
@@ -94,13 +94,13 @@ int main(int argc, char **argv)
         return 127;
     g_unsetenv("SSH_ASKPASS");
     g_unsetenv("SSH_ASKPASS_REQUIRE");
-    g_print("SSH console / SSH-консоль\nClient / Клиент: %s\n", argv[1]);
+    printf("SSH console / SSH-консоль\nClient / Клиент: %s\n", argv[1]);
     fflush(stdout);
     gint code = run_client(argv[1], argv[2]);
-    g_print("\nSSH exit code / Код завершения SSH: %d\n", code);
+    printf("\nSSH exit code / Код завершения SSH: %d\n", code);
     if (strcmp(argv[3], "close"))
     {
-        g_print("Press Enter to close / Нажмите Enter для закрытия...");
+        printf("Press Enter to close / Нажмите Enter для закрытия...");
         fflush(stdout);
         while (getchar() != '\n' && !feof(stdin))
         {
