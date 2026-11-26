@@ -156,7 +156,11 @@ static void structural_selection(GtkMenuItem *item, gpointer data)
         return;
     }
     InsightCodeDialect dialect;
-    if (!source_dialect(doc->file_type, &dialect))
+    gboolean hdl_match = mode == 1 && doc->file_type &&
+        (!g_strcmp0(doc->file_type->name, "Verilog") || !g_strcmp0(doc->file_type->name, "SystemVerilog"));
+    if (hdl_match)
+        dialect = INSIGHT_CODE_VERILOG;
+    else if (!source_dialect(doc->file_type, &dialect))
     {
         ui_set_statusbar(TRUE, "Structural selection: this language has no lexical mask yet");
         return;
