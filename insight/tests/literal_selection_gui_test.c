@@ -73,6 +73,18 @@ static void selection_is(GeanyDocument *doc, const gchar *expected)
     g_free(text);
 }
 
+/* EN: Activate doc through its actual GTK notebook ancestors, without relying on private libgeany symbols.
+ * RU: Активирует doc через настоящих предков GTK notebook, не используя закрытые символы libgeany. */
+static void show_document(GeanyDocument *doc)
+{
+    GtkWidget *child = GTK_WIDGET(doc->editor->sci);
+    for (GtkWidget *parent = gtk_widget_get_parent(child); parent;
+         child = parent, parent = gtk_widget_get_parent(parent))
+        if (GTK_IS_NOTEBOOK(parent))
+            gtk_notebook_set_current_page(GTK_NOTEBOOK(parent), gtk_notebook_page_num(GTK_NOTEBOOK(parent), child));
+    gtk_widget_grab_focus(GTK_WIDGET(doc->editor->sci));
+}
+
 /* EN: Exercise real structural history menus in window/doc, including reverse anchors, documents and invalidation.
  * RU: Проверяет настоящее меню истории window/doc, включая обратные якоря, документы и сброс состояния. */
 static void history_cases(GeanyDocument *doc, GtkWidget *window, GtkWidget *match)
@@ -129,12 +141,12 @@ static void history_cases(GeanyDocument *doc, GtkWidget *window, GtkWidget *matc
     selection_is(other, "\"other\"");
     gtk_menu_item_activate(GTK_MENU_ITEM(shrink));
     g_assert_cmpint(sci_get_current_position(other->editor->sci), ==, 0);
-    document_show_tab(doc);
+    show_document(doc);
     gtk_menu_item_activate(GTK_MENU_ITEM(shrink));
     g_assert_cmpint(sci_get_current_position(sci), ==, start);
     document_set_text_changed(other, FALSE);
     g_assert_true(document_close(other));
-    document_show_tab(doc);
+    show_document(doc);
     doc->readonly = FALSE;
     SEND(sci, SCI_SETREADONLY, 0, 0);
     gtk_menu_item_activate(GTK_MENU_ITEM(match));
