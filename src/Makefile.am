@@ -735,3 +735,5 @@ libgeany_la_SOURCES += insight-paste/state.inc insight-paste/insert.inc insight-
 libgeany_la_SOURCES += insight-custom-commands/files.inc ../insight/desktop/custom-command/bulk.inc
 
 libgeany_la_SOURCES += insight-custom-commands/selection.inc ../insight/desktop/custom-command/selection.inc
+
+libgeany_la_SOURCES += insight-custom-commands/output-target.inc insight-custom-commands/output-io.inc insight-custom-commands/output-review.inc

@@ -77,3 +77,5 @@ metadata stripped. It is a native test fixture running the complete application.
 - `custom-command-bulk.svg`: original explanatory diagram of open/modified-file argv expansion; not an application screenshot.
 
 - `custom-command-selection.svg`: original diagram of non-materializing Preview and process-owned UTF-8 selection snapshots; not a screenshot.
+
+- `custom-command-output.svg`: original explanatory diagram of isolated stdout and guarded editor application; not a screenshot.

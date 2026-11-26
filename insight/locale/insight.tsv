@@ -3602,3 +3602,12 @@ Select text in a source document for %s	Выделите текст в исхо�
 Selection snapshot needs one nonempty normal selection up to 1 MiB	Для снимка нужно одно непустое обычное выделение до 1 MiB
 Selection snapshot requires 1–1048576 bytes of UTF-8 text without NUL	Для снимка требуется 1–1048576 байт текста UTF-8 без NUL
 Selection snapshot is already materialized or unavailable	Снимок выделения уже создан либо недоступен
+Open stdout in new buffer	Открыть stdout в новом буфере
+Review stdout replacement…	Предпросмотр замены из stdout…
+Review stdout replacement	Предпросмотр замены из stdout
+Successful nonempty UTF-8 stdout up to 1 MiB; writable source and selection must still match Run	Успешный непустой stdout UTF-8 до 1 MiB; доступный для записи исходник и выделение должны совпадать с Run
+Only stdout replaces the Run-time selection. Stderr stays in the log. One Undo; no disk writes.	Только stdout заменяет выделение на момент запуска. Stderr остаётся в журнале. Один Undo; без записи на диск.
+Source/selection changed or source is read-only. Run the command again before replacing text.	Исходник/выделение изменились либо исходник доступен только для чтения. Перед заменой запустите команду снова.
+Source changed. Close this preview and run the command again.	Исходник изменился. Закройте предпросмотр и запустите команду снова.
+Stdout applied to the source buffer. Use Undo to revert.	Stdout применён к исходному буферу. Для возврата используйте Undo.
+Cannot build stdout replacement preview	Не удалось построить предпросмотр замены из stdout

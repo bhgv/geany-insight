@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="320" viewBox="0 0 760 320">
+<rect width="760" height="320" rx="12" fill="#f2f5fa"/>
+<g font-family="sans-serif" fill="#24324a">
+<text x="22" y="30" font-size="19">Command output → editor / Вывод команды → редактор</text>
+<g fill="#fff" stroke="#ccd6e5"><rect x="20" y="54" width="220" height="110" rx="7"/><rect x="273" y="54" width="467" height="110" rx="7"/></g>
+<text x="35" y="80" font-size="15">Process / Процесс</text>
+<text x="35" y="111" font-size="14">stdout: exact UTF-8</text><text x="35" y="138" font-size="14">stderr: diagnostics</text>
+<path d="M244 108h23m-6-6 6 6-6 6" fill="none" stroke="#4277aa" stroke-width="2"/>
+<text x="289" y="80" font-size="14">Combined log / Общий журнал: stdout + stderr</text>
+<text x="289" y="111" font-size="14">Editor payload / Текст для редактора: stdout only</text>
+<text x="289" y="138" font-size="13">Exit 0 · Complete · UTF-8 · No NUL · ≤ 1 MiB</text>
+<g fill="#dcecff" stroke="#acc5e5"><rect x="20" y="187" width="344" height="70" rx="7"/><rect x="395" y="187" width="345" height="70" rx="7"/></g>
+<text x="35" y="212" font-size="14">New unsaved buffer / Новый буфер</text>
+<text x="35" y="237" font-size="13">Source untouched / Без изменения исходника</text>
+<text x="410" y="212" font-size="14">Before / After → Apply / Применить</text>
+<text x="410" y="237" font-size="13">Same source + selection / Тот же исходник + выделение</text>
+<text x="22" y="288" font-size="13">Run-time snapshot · Guarded Apply · One Undo · No automatic disk writes</text>
+<text x="22" y="309" font-size="13">Снимок при Run · Проверка перед Apply · Один Undo · Без автоматической записи на диск</text>
+</g></svg>

@@ -94,3 +94,19 @@ One nonempty ordinary selection up to 1 MiB is supported: forward or reversed, n
 **Preview** validates selection and displays a planned path without creating a directory or file. **Run** captures selection again, validates all arguments and the working directory, then creates a new private temporary directory and file. Selection changes after Preview are included; source edits during a process do not change its snapshot. Unix permissions are 0700 for the directory and 0600 for the file. Snapshot encoding is always UTF-8, independent of the original disk encoding.
 
 The file is removed after the process and output capture complete, including nonzero exit, Stop and closing the command window. Creation/spawn failures release owned resources too. Only the owned file and empty directory are removed; extra child-created files are not recursively deleted. Cleanup cannot be guaranteed after editor/OS crashes. Snapshot contents are not saved in command profiles; source, clipboard and Undo stay unchanged. `%s` is not a working directory or a persistent file for detached child tasks.
+
+## Command output back into the editor
+
+![Output streams and explicit application](../media/custom-command-output.svg)
+
+The **Output** tab adds **Open stdout in new buffer** and **Review stdout replacement…**. Both require a completed successful run with nonempty UTF-8 stdout without NUL, at most 1 MiB. Stdout/stderr are drained independently; the combined log displays both as callbacks arrive, while editor actions use only exact stdout bytes, excluding the launch line and stderr. The combined log does not reconstruct a total chronological ordering of writes across streams.
+
+**Open stdout** creates a new unsaved unnamed buffer with exact line endings. Source stays untouched. Use normal Save As to save the result.
+
+**Review replacement** shows numbered, syntax-colored before/after panes for the file and selection captured at **Run**. An empty selection inserts at the caret. **Apply** revalidates source identity, active tab, filename/type, bytes, edit revision, exact anchor/caret, write permission and ordinary selection mode. Editing followed by Undo invalidates old results too. Switched, closed, renamed or edited destinations are refused. Source changes while a review is open also block Apply.
+
+Apply replaces only the captured range, selects inserted bytes and creates one Undo/Redo action. Cancel preserves source, selection and Undo; identical output creates no edit. Source is limited to 8 MiB; replacement boundaries cannot split UTF-8 or CRLF. Multiple/rectangular/virtual selections are not replacement destinations. Output can still be opened separately.
+
+Error/signal exit, Stop, truncated capture, empty, binary or invalid UTF-8 stdout cannot be applied. Exceeding 1 MiB disables editor actions while retaining the combined log within its existing bounds. **Clear output** discards retained stdout too; clearing during a run does not turn its later suffix into an applicable result. A new Run captures a new destination. These actions do not automatically write disk or clipboard.
+
+Example: select JSON, run `python3 -m json.tool %s`, then choose **Review stdout replacement… → Apply**. Stderr diagnostics stay in the log instead of becoming source code.

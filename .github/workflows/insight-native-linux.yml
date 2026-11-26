@@ -230,6 +230,18 @@ jobs:
               assert rows and all(str(root / 'lib/geany/clang') in line for line in rows), (name, output)
           subprocess.run([str(root / 'bin/geany'), '--version'], check=True)
           PY
+      - name: Verify isolated stdout and guarded replacement review
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' meson test -C _native --print-errorlogs 'Insight native stdout replacement review GUI'
+      - name: Publish stdout review diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: stdout-review-diagnostics
+          path: _native/meson-logs/testlog.txt
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Verify selection snapshot creation and process cleanup
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |

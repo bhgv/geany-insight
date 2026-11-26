@@ -1054,3 +1054,6 @@ custom_command_selection_test = executable('test_insight_custom_command_selectio
 test('Insight custom command selection snapshots', custom_command_selection_test)
 custom_command_selection_gui_test = executable('test_insight_custom_command_selection_gui', '../insight/tests/custom_command_selection_gui_test.c', dependencies: test_deps)
 test('Insight native selection custom commands GUI', custom_command_selection_gui_test, timeout: 75, is_parallel: false)
+
+custom_command_output_gui_test = executable('test_insight_custom_command_output_gui', '../insight/tests/custom_command_output_gui_test.c', dependencies: test_deps)
+test('Insight native stdout replacement review GUI', custom_command_output_gui_test, timeout: 75, is_parallel: false)
