@@ -29,8 +29,8 @@ InsightCustomCommand *insight_custom_command_copy(const InsightCustomCommand *co
     return copy;
 }
 
-/* EN: Validate command fields and optional named-group pattern; report error without modifying command.
- * RU: Проверяет поля command и необязательный шаблон с именованными группами; сообщает error без изменения команды. */
+/* EN: Validate command fields and optional named-group pattern; return TRUE when valid, FALSE/error otherwise, without edits.
+ * RU: Проверяет поля command и необязательный именованный шаблон; возвращает TRUE при успехе либо FALSE/error, без правок. */
 static gboolean command_valid(InsightCustomCommand *command, GError **error)
 {
     if (!command || !field(command->name, 128) || !*command->name ||

@@ -43,8 +43,8 @@ void insight_custom_link_free(gpointer data)
     g_free(link);
 }
 
-/* EN: Strip bounded ANSI SGR sequences from input, retaining all other bytes; return owned stripped text.
- * RU: Удаляет ограниченные ANSI SGR из input, сохраняя остальные байты; возвращает собственный очищенный текст. */
+/* EN: Strip bounded ANSI SGR sequences and outer whitespace from input; return owned text.
+ * RU: Удаляет ограниченные ANSI SGR и внешние пробелы из input; возвращает собственный текст. */
 static gchar *diagnostic_plain(const gchar *input)
 {
     GString *plain = g_string_new(NULL);
@@ -68,8 +68,8 @@ static gchar *diagnostic_plain(const gchar *input)
     return text;
 }
 
-/* EN: Validate a decimal coordinate text; optional permits absent/empty text as zero, otherwise require 1..G_MAXINT.
- * RU: Проверяет десятичную координату text; optional разрешает отсутствие/пустоту как ноль, иначе требуется 1..G_MAXINT. */
+/* EN: Parse decimal text into value; optional permits absent/empty text as zero. Return TRUE for valid/optional input, FALSE otherwise.
+ * RU: Разбирает десятичный text в value; optional допускает отсутствие/пустоту как ноль. TRUE при допустимом вводе, иначе FALSE. */
 static gboolean diagnostic_number(const gchar *text, gboolean optional, guint *value)
 {
     *value = 0;
