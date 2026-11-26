@@ -1041,3 +1041,6 @@ test('Insight literal delimiter selection', literal_selection_test)
 literal_selection_gui_test = executable('test_insight_literal_selection_gui',
  '../insight/tests/literal_selection_gui_test.c', dependencies: test_deps)
 test('Insight native literal delimiter selection GUI', literal_selection_gui_test, timeout: 45, is_parallel: false)
+
+paste_policy_gui_test = executable('test_insight_paste_policy_gui', '../insight/tests/paste_policy_gui_test.c', dependencies: test_deps)
+test('Insight unified paste policy native GUI', paste_policy_gui_test, timeout: 55, is_parallel: false)

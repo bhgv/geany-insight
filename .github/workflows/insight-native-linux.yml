@@ -121,6 +121,7 @@ on:
       - insight/desktop/backup_store.*
       - src/insight-revisions.*
       - src/insight-command-list.*
+      - src/insight-paste/**
       - src/insight-paste.*
       - src/keybindings.c
       - src/sciwrappers.c
@@ -227,6 +228,18 @@ jobs:
               assert rows and all(str(root / 'lib/geany/clang') in line for line in rows), (name, output)
           subprocess.run([str(root / 'bin/geany'), '--version'], check=True)
           PY
+      - name: Verify unified paste and existing text tools
+        if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
+        run: |
+          GEANY_RUN_GUI_TESTS=1 GSETTINGS_BACKEND=memory NO_AT_BRIDGE=1 xvfb-run -a -s '-screen 0 1600x1200x24' meson test -C _native --print-errorlogs 'Insight unified paste policy native GUI' 'Insight intelligent paste transforms' 'Insight intelligent paste native GUI' 'Insight native Calculate selection and calculator GUI' 'Insight native Insert File Save Selection Save Copy GUI' 'Insight native Paragraph and Lines GUI' 'Insight native line insertion commands and preview GUI' 'Insight native word cut and character line deletion GUI'
+      - name: Publish paste policy diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: paste-policy-diagnostics
+          path: _native/meson-logs/testlog.txt
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Verify literal selection and lexical masking
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |

@@ -192,15 +192,19 @@ Commands work in read-only, never edit source text or create Undo entries, and r
 
 ![Selection and navigation menu in the running Linux editor](../media/selection-navigation.jpg)
 
-### Selection after intelligent paste
+### Selection after paste
 
-**Options → After intelligent paste** offers three persistent choices: **Cursor at end of pasted text** (default), **Cursor at start of pasted text**, and **Select pasted text**. The choice applies to successful intelligent whole-line insertion through ordinary Paste, Paste Line and Clips. A selected block can immediately be copied, moved or replaced.
+**Options → After paste** offers three persistent choices: **Cursor at end of pasted text** (default), **Cursor at start of pasted text**, and **Select pasted text**. They apply to ordinary Paste, partial selection replacement, Paste Line and Clips, including languages that forbid intelligent paste.
 
-![Three post-paste positions](../media/paste-position.svg)
+**Always select pasted text** overrides the cursor position choice. It does not enable intelligent paste or change indentation. Turning it off restores the selected position policy.
 
-Positions use the transformed block, including its destination indentation and EOLs. At an unterminated EOF, the separator added to the previous line is excluded from the selected block. Each insertion remains one Undo action. The setting is saved in `insight-paste.conf`; missing or out-of-range values use the default. Failed saves restore the previous menu choice and report an error.
+![Unified post-paste policy](../media/paste-position.svg)
 
-This series covers intelligent whole-line insertion only. Partial/native fallback, multiple/rectangular selections, file types forbidding intelligent paste and mouse drag/drop keep their existing behavior. A separate always-select override and general selection policy for native partial-text paste remain open Source Insight porting items.
+Intelligent whole-line insertion retains its indentation rules. At an unterminated EOF, the separator added to the previous line is excluded from the selected block. Ordinary clipboard insertion respects Scintilla's paste EOL conversion setting; a plain Clip retains its original bytes. Each handled insertion is one Undo action; range boundaries account for UTF-8 and CRLF.
+
+Pending clipboard insertion is cancelled after text edits (including edit followed by Undo), switching tabs, closing the destination, changing its selection, language, write permission or paste preferences. Captured text cannot land in another destination. Settings live in `insight-paste.conf` with backward-compatible existing keys. Failed writes restore the previous menu choice/check state.
+
+The ordinary-text policy supports one normal UTF-8 selection and valid text up to 1 MiB. Multiple/rectangular selections, virtual space, other widgets and unsupported text use native paste without this policy guarantee. Mouse drag/drop is outside this option.
 
 ## Live interface captions
 

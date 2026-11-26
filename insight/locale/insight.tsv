@@ -3586,3 +3586,7 @@ Select matching brackets or quotes	Выделить парные скобки и
 Place the caret on or immediately after a bracket or quote delimiter	Установите курсор на разделитель скобки или кавычки либо сразу после него
 Shrink structural selection	Сузить структурное выделение
 No previous structural selection to restore	Нет предыдущего структурного выделения для восстановления
+After paste	После вставки
+Cursor or selection after ordinary or intelligent text paste	Курсор или выделение после обычной либо интеллектуальной вставки
+Always select pasted text	Всегда выделять вставленный текст
+Override the cursor position choice without changing indentation rules	Выделять независимо от выбранной позиции курсора, не меняя правила отступов

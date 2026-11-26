@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Shared document clipboard and guarded paste entry points.
+ * RU: Общие команды буфера документов и защищённой вставки. */
 #ifndef INSIGHT_PASTE_H
 #define INSIGHT_PASTE_H
 #include "editor.h"
@@ -15,7 +17,7 @@ typedef enum {
 gboolean insight_line_clipboard(ScintillaObject *, InsightLineClipboard);
 gboolean insight_paste_move_lines(ScintillaObject *, gint direction, guint count);
 void insight_paste_notify(GeanyEditor *, SCNotification *);
-/* TRUE means a guarded clipboard request or intelligent text insert was handled. */
+/* TRUE means a guarded clipboard request, intelligent insert or policy-controlled plain insert was handled. */
 gboolean insight_paste_clipboard(ScintillaObject *);
 gboolean insight_paste_text(ScintillaObject *, const gchar *);
 #endif
