@@ -79,3 +79,5 @@ metadata stripped. It is a native test fixture running the complete application.
 - `custom-command-selection.svg`: original diagram of non-materializing Preview and process-owned UTF-8 selection snapshots; not a screenshot.
 
 - `custom-command-output.svg`: original explanatory diagram of isolated stdout and guarded editor application; not a screenshot.
+
+- `custom-command-diagnostics.svg`: original diagram of saved patterns, automatic completion parsing and explicit source navigation; not a screenshot.

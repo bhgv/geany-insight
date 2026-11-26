@@ -4,8 +4,12 @@
 #ifndef INSIGHT_CUSTOM_COMMAND_H
 #define INSIGHT_CUSTOM_COMMAND_H
 #include <gio/gio.h>
-typedef struct { gchar *name,*command,*directory; } InsightCustomCommand;
+typedef struct {
+    gchar *name, *command, *directory, *diagnostic_pattern;
+    gboolean parse_on_finish;
+} InsightCustomCommand;
 void insight_custom_command_free(gpointer);
+InsightCustomCommand *insight_custom_command_copy(const InsightCustomCommand *);
 /* Parse first, substitute each argument second. Substituted text can never
  * introduce another argument or an implicit shell operator. Keys are case
  * sensitive for one-letter SI tokens, upper-case for long path variables. */
@@ -30,4 +34,6 @@ typedef struct { gchar *path,*message;guint line,column; } InsightCustomLink;
  * paths resolve against the captured launch directory; numbers are 1-based. */
 InsightCustomLink *insight_custom_source_link(const gchar *,const gchar *);
 void insight_custom_link_free(gpointer);
+GRegex *insight_custom_diagnostic_regex(const gchar *, GError **);
+InsightCustomLink *insight_custom_source_link_pattern(const gchar *, const gchar *, GRegex *, GError **);
 #endif

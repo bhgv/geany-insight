@@ -1057,3 +1057,8 @@ test('Insight native selection custom commands GUI', custom_command_selection_gu
 
 custom_command_output_gui_test = executable('test_insight_custom_command_output_gui', '../insight/tests/custom_command_output_gui_test.c', dependencies: test_deps)
 test('Insight native stdout replacement review GUI', custom_command_output_gui_test, timeout: 75, is_parallel: false)
+
+custom_command_diagnostics_test = executable('test_insight_custom_command_diagnostics', '../insight/tests/custom_command_diagnostics_test.c', '../insight/desktop/custom_command.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight custom diagnostic patterns and profiles', custom_command_diagnostics_test)
+custom_command_diagnostics_gui_test = executable('test_insight_custom_command_diagnostics_gui', '../insight/tests/custom_command_diagnostics_gui_test.c', dependencies: test_deps)
+test('Insight native saved diagnostic patterns GUI', custom_command_diagnostics_gui_test, timeout: 60, is_parallel: false)

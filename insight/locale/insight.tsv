@@ -3611,3 +3611,11 @@ Source/selection changed or source is read-only. Run the command again before re
 Source changed. Close this preview and run the command again.	Исходник изменился. Закройте предпросмотр и запустите команду снова.
 Stdout applied to the source buffer. Use Undo to revert.	Stdout применён к исходному буферу. Для возврата используйте Undo.
 Cannot build stdout replacement preview	Не удалось построить предпросмотр замены из stdout
+Parse source links when command completes	Разбирать ссылки на исходники после завершения команды
+Custom diagnostic regex (empty: built-in formats)	Свой regex диагностики (пусто: встроенные форматы)
+Named groups: file and line required; column and message optional. No command-variable expansion.	Именованные группы: file и line обязательны; column и message необязательны. Без подстановок переменных команды.
+Check diagnostic pattern	Проверить шаблон диагностики
+Diagnostic pattern is valid	Шаблон диагностики корректен
+Built-in GCC, MSVC and Python diagnostic formats selected	Выбраны встроенные форматы диагностики GCC, MSVC и Python
+Diagnostic pattern must be one UTF-8 line up to 1024 bytes	Шаблон диагностики должен быть одной строкой UTF-8 до 1024 байт
+Diagnostic pattern requires named groups file and line	Шаблон диагностики требует именованные группы file и line

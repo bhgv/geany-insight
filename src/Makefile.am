@@ -737,3 +737,7 @@ libgeany_la_SOURCES += insight-custom-commands/files.inc ../insight/desktop/cust
 libgeany_la_SOURCES += insight-custom-commands/selection.inc ../insight/desktop/custom-command/selection.inc
 
 libgeany_la_SOURCES += insight-custom-commands/output-target.inc insight-custom-commands/output-io.inc insight-custom-commands/output-review.inc
+
+libgeany_la_SOURCES += ../insight/desktop/custom-command/profiles.inc ../insight/desktop/custom-command/links.inc
+
+libgeany_la_SOURCES += insight-custom-commands/profiles.inc insight-custom-commands/diagnostics.inc

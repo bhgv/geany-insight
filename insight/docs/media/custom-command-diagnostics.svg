@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="310" viewBox="0 0 760 310">
+<rect width="760" height="310" rx="12" fill="#f2f5fa"/>
+<g font-family="sans-serif" fill="#24324a">
+<text x="22" y="30" font-size="19">Saved diagnostics / Сохраняемая диагностика</text>
+<g fill="#fff" stroke="#ccd6e5"><rect x="20" y="53" width="335" height="103" rx="7"/><rect x="390" y="53" width="350" height="103" rx="7"/></g>
+<text x="35" y="79" font-size="14">Profile / Профиль команды</text>
+<text x="35" y="106" font-size="13">Pattern: file · line · column? · message?</text>
+<text x="35" y="134" font-size="13">☑ Parse when done / Разобрать по завершении</text>
+<path d="M361 105h23m-6-6 6 6-6 6" fill="none" stroke="#4277aa" stroke-width="2"/>
+<text x="405" y="79" font-size="14">Run / Запуск</text>
+<text x="405" y="106" font-size="13">stdout + stderr → captured output</text>
+<text x="405" y="134" font-size="13">Nonzero exit also parsed / Ошибки тоже разбираются</text>
+<rect x="20" y="179" width="720" height="67" rx="7" fill="#dcecff"/>
+<text x="35" y="204" font-size="14">File / Файл · Line / Строка · Column / Колонка · Message / Сообщение</text>
+<text x="35" y="229" font-size="13">Open source / Открыть исходник → explicit navigation / явный переход</text>
+<text x="22" y="275" font-size="13">Manual Parse tests edited patterns on the existing log / Parse проверяет новый шаблон на старом журнале</text>
+<text x="22" y="298" font-size="13">Bounded regex · Captured launch directory · No source edits / Ограничения · Каталог запуска · Без правок</text>
+</g></svg>

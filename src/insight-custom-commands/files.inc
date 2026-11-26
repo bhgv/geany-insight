@@ -38,11 +38,11 @@ static InsightCustomFile *command_file(GeanyDocument *doc, const gchar *root)
 }
 
 /* EN: Prepare v's current command into owned argv/directory/context, even when later validation fails.
- * Rebuild file/selection snapshots into selection for every call; no processes or file creation occur. Return FALSE/error on invalid input.
+ * Rebuild file/selection snapshots into selection and validate diagnostics into regex for every call; no processes or file creation occur. Return FALSE/error on invalid input.
  * RU: Готовит текущую команду v в собственные argv/directory/context, даже при последующей ошибке проверки.
- * Каждый вызов заново фиксирует файлы/выделение в selection; без запусков и создания файлов. FALSE/error при неверном вводе. */
+ * Каждый вызов фиксирует файлы/выделение в selection и проверяет диагностику в regex; без запусков и создания файлов. FALSE/error при неверном вводе. */
 static gboolean prepare(CommandView *v, gchar ***argv, gchar **directory,
-    GHashTable **context, InsightCustomSelection **selection, GError **error)
+    GHashTable **context, InsightCustomSelection **selection, GRegex **regex, GError **error)
 {
     *context = context_values();
     for (guint i = 0; i < 9; i++)
@@ -50,6 +50,9 @@ static gboolean prepare(CommandView *v, gchar ***argv, gchar **directory,
         gchar key[2] = {(gchar)('1' + i), 0};
         value(*context, key, gtk_entry_get_text(GTK_ENTRY(v->arguments[i])));
     }
+    *regex = insight_custom_diagnostic_regex(gtk_entry_get_text(GTK_ENTRY(v->diagnostic_pattern)), error);
+    if (error && *error)
+        return FALSE;
     gboolean requested = insight_custom_selection_requested(gtk_entry_get_text(GTK_ENTRY(v->command)), error);
     if (error && *error)
         return FALSE;

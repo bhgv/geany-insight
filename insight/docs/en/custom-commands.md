@@ -59,9 +59,9 @@ On **Diagnostics**, **Parse Source Links** scans a snapshot of the latest comman
 
 Double-click a row or choose Open source. First/Previous/Next link and **F4 / Shift+F4** within this tool window use native editor navigation history. The file opens in the editor without closing the tool window; the reported line is used, while the optional column is displayed as diagnostic metadata. Missing files and line numbers beyond the current buffer are reported. No code or Undo contents are modified by navigation.
 
-Relative paths resolve against the **captured launch directory**, even if another project is active when you parse the log. The tool's internal `chdir`, remote path mappings and custom regular-expression templates are not inferred. Foreign Windows drive/UNC paths are declined on non-Windows systems. Synthetic stdin/URI locations and invalid coordinates are omitted. Run and Clear reset the old diagnostic list; new output is included only on the next explicit Parse. Copying or saving the output retains the full log.
+Relative paths resolve against the **captured launch directory**, even if another project is active when you parse the log. The tool's internal `chdir`, remote path mappings and custom regular-expression templates are not inferred. Foreign Windows drive/UNC paths are declined on non-Windows systems. Synthetic stdin/URI locations and invalid coordinates are omitted. Run and Clear reset the old diagnostic list; new output is included on the next explicit Parse or an enabled automatic parse at completion. Copying or saving the output retains the full log.
 
-This is a bounded set of built-in diagnostic formats, rather than all Source Insight custom parsing patterns. Reference: [Parse Source Links](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Parse_Source_Links.htm).
+Built-in formats can be replaced with the saved named-group patterns described below. Reference: [Parse Source Links](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Parse_Source_Links.htm).
 
 ## Commands over open and modified files
 
@@ -110,3 +110,29 @@ Apply replaces only the captured range, selects inserted bytes and creates one U
 Error/signal exit, Stop, truncated capture, empty, binary or invalid UTF-8 stdout cannot be applied. Exceeding 1 MiB disables editor actions while retaining the combined log within its existing bounds. **Clear output** discards retained stdout too; clearing during a run does not turn its later suffix into an applicable result. A new Run captures a new destination. These actions do not automatically write disk or clipboard.
 
 Example: select JSON, run `python3 -m json.tool %s`, then choose **Review stdout replacement… → Apply**. Stderr diagnostics stay in the log instead of becoming source code.
+
+## Custom diagnostic patterns and automatic parsing
+
+![Diagnostic settings and parsing](../media/custom-command-diagnostics.svg)
+
+On **Diagnostics**, enter a **Custom diagnostic regex** and optionally enable **Parse source links when command completes**. Both values are saved with the command profile, retained during reordering and restored on reopening. Old profiles retain manual built-in GCC/MSVC/Python parsing by default.
+
+An empty pattern selects built-in formats. A nonempty pattern uses GLib/PCRE regex with required named groups `file` and `line`; `column` and `message` are optional. Capture order is unrestricted. Without `message`, the entire line is displayed; without `column`, no column is assigned. Coordinates must be ASCII decimal integers from 1 through `G_MAXINT`. URI/stdin and invalid paths/coordinates do not become links. A custom pattern replaces built-in formats for that parse rather than extending them. Command variables such as `%f` and `%s` are not expanded inside patterns.
+
+For `S|src/unit name.v|12|3|warning`:
+
+```regex
+^S\|(?<file>[^|]+)\|(?<line>[0-9]+)\|(?<column>[0-9]+)\|(?<message>.*)$
+```
+
+For line-before-file output such as `L12@src/unit name.v`:
+
+```regex
+^L(?<line>[0-9]+)@(?<file>.+)$
+```
+
+**Check diagnostic pattern** validates syntax and required groups without launching a process or reading source files. Save and Run validate too: errors do not overwrite saved profiles or start a process. **Parse Source Links** applies the current edited pattern to the existing log, so adjustments can be tested without rerunning the tool; an invalid pattern leaves old rows intact.
+
+Automatic parsing uses settings captured at Run and begins after the process and stdout/stderr capture complete. Nonzero exit is still parsed, making compiler failures useful. Stop, read failures and truncated capture skip automatic parsing. Matches reveal Diagnostics and select the first row, but never open source automatically. Navigation remains explicit through Open source, double-click or F4; column is metadata and navigation uses the line.
+
+Paths always resolve against the retained launch directory, even after switching files/projects. Custom captures do not normalize backslashes into POSIX path separators; remote mappings and the tool's internal `chdir` are not inferred. Pattern size is one UTF-8 line up to 1024 bytes; output lines are limited to 64 KiB and results to 1000 records. Custom matching is limited to 10000 match steps and depth 256; an error/limit stops the current parse and appears in status. This is not Source Insight's legacy regex dialect.

@@ -32,6 +32,9 @@ typedef struct {
  OutputTarget *target;
  GByteArray *stdout_bytes;
  GtkWidget *stdout_open, *stdout_review;
+ GtkWidget *diagnostic_pattern, *parse_on_finish;
+ GRegex *launch_regex;
+ gboolean launch_parse;
  gboolean stdout_lost;
  guint readers, output_serial;
  InsightCustomSelection *selection;
@@ -39,6 +42,8 @@ typedef struct {
 } CommandView;
 enum {LINK_FILE,LINK_LINE,LINK_COLUMN,LINK_MESSAGE,LINK_FIELDS};
 static void link_count(CommandView *);
+static void parse_links(GtkWidget *, gpointer);
+static void parse_links_using(CommandView *, GRegex *, gboolean);
 static GtkWidget *command_window;
 #include "insight-custom-commands/output-target.inc"
 static CommandView *view_ref(CommandView *v) {v->refs++;return v;}
@@ -63,6 +68,7 @@ static void view_unref(gpointer data)
     g_clear_object(&v->cancel);
     output_target_unref(v->target);
     g_clear_pointer(&v->stdout_bytes, g_byte_array_unref);
+    g_clear_pointer(&v->launch_regex, g_regex_unref);
     g_free(v);
 }
 /* EN: Retain status key for v and repaint the stable selectable status label; closed views retain state only.
@@ -166,8 +172,9 @@ static void preview(GtkWidget *button, gpointer data)
     gchar *directory = NULL;
     GHashTable *map = NULL;
     InsightCustomSelection *selection = NULL;
+    GRegex *regex = NULL;
     GError *error = NULL;
-    gboolean ok = prepare(v, &argv, &directory, &map, &selection, &error);
+    gboolean ok = prepare(v, &argv, &directory, &map, &selection, &regex, &error);
     g_free(v->context_argv);
     g_free(v->context_directory);
     g_free(v->context_variables);
@@ -189,6 +196,8 @@ static void preview(GtkWidget *button, gpointer data)
     render_context(v);
     insight_compare_ui_reveal(v->context);
     insight_custom_selection_free(selection);
+    if (regex)
+        g_regex_unref(regex);
     g_hash_table_unref(map);
     g_strfreev(argv);
     g_free(directory);
@@ -229,6 +238,8 @@ static void finished(CommandView *v)
         else
             note(v, "Command exited with status %d");
         controls(v);
+        if (v->launch_parse && !v->stopped && !v->limited)
+            parse_links_using(v, v->launch_regex, FALSE);
     }
 }
 static void waited(GObject *process,GAsyncResult *result,gpointer data) {
@@ -253,8 +264,9 @@ static void run(GtkWidget *button, gpointer data)
     gchar *directory = NULL;
     GHashTable *map = NULL;
     InsightCustomSelection *selection = NULL;
+    GRegex *regex = NULL;
     GError *error = NULL;
-    if (!prepare(v, &argv, &directory, &map, &selection, &error))
+    if (!prepare(v, &argv, &directory, &map, &selection, &regex, &error))
     {
         note(v, error ? error->message : "Invalid custom command template");
         goto done;
@@ -274,6 +286,10 @@ static void run(GtkWidget *button, gpointer data)
         note(v, error->message);
         goto done;
     }
+    g_clear_pointer(&v->launch_regex, g_regex_unref);
+    v->launch_regex = regex;
+    regex = NULL;
+    v->launch_parse = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->parse_on_finish));
     v->target = output_target_capture();
     v->selection = selection;
     selection = NULL;
@@ -305,6 +321,8 @@ static void run(GtkWidget *button, gpointer data)
     output_read_start(v, g_subprocess_get_stdout_pipe(v->process), TRUE);
     output_read_start(v, g_subprocess_get_stderr_pipe(v->process), FALSE);
 done:
+    if (regex)
+        g_regex_unref(regex);
     insight_custom_selection_free(selection);
     g_clear_error(&error);
     g_strfreev(argv);
@@ -316,12 +334,6 @@ static void stop(GtkWidget *button,gpointer data) {(void)button;CommandView *v=d
 static void link_count(CommandView *v) {
  if(v->closed || !v->links_status) return;guint count=gtk_tree_model_iter_n_children(GTK_TREE_MODEL(v->links),NULL);
  gchar *text=g_strdup_printf(insight_tr("Parsed %u source links (limit 1000)"),count);gtk_label_set_text(GTK_LABEL(v->links_status),text);g_free(text);
-}
-static void parse_links(GtkWidget *button,gpointer data) {
- (void)button;CommandView *v=data;if(!v->launch_directory) {note(v,"Run a command before parsing source links");return;}
- GtkTextBuffer *buffer=gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output));GtkTextIter a,z;gtk_text_buffer_get_iter_at_offset(buffer,&a,MIN(v->output_start,gtk_text_buffer_get_char_count(buffer)));gtk_text_buffer_get_end_iter(buffer,&z);gchar *text=gtk_text_buffer_get_text(buffer,&a,&z,FALSE);gchar **lines=g_strsplit(text,"\n",-1);g_free(text);stop_scroll(v->links_view);gtk_list_store_clear(v->links);guint count=0;
- for(guint i=0;lines[i] && count<1000;i++) {InsightCustomLink *link=insight_custom_source_link(lines[i],v->launch_directory);if(!link) continue;GtkTreeIter row;gtk_list_store_append(v->links,&row);gtk_list_store_set(v->links,&row,LINK_FILE,link->path,LINK_LINE,link->line,LINK_COLUMN,link->column,LINK_MESSAGE,link->message,-1);insight_custom_link_free(link);count++;}
- g_strfreev(lines);link_count(v);GtkTreePath *first=gtk_tree_path_new_from_indices(0,-1);if(count) gtk_tree_view_set_cursor(GTK_TREE_VIEW(v->links_view),first,NULL,FALSE);gtk_tree_path_free(first);insight_compare_ui_reveal(v->links_view);
 }
 static void open_link(GtkWidget *button,gpointer data) {
  (void)button;CommandView *v=data;GtkTreeModel *model;GtkTreeIter row;
@@ -342,23 +354,8 @@ static void link_button(GtkWidget *button,gpointer data) {move_link(data,GPOINTE
 static gboolean command_key(GtkWidget *widget,GdkEventKey *event,gpointer data) {
  (void)widget;if(event->keyval!=GDK_KEY_F4 || (event->state&(GDK_CONTROL_MASK|GDK_MOD1_MASK|GDK_SUPER_MASK|GDK_META_MASK))) return FALSE;move_link(data,event->state&GDK_SHIFT_MASK ? -1:1);return TRUE;
 }
-static void select_profile(GtkComboBox *box,gpointer data) {CommandView *v=data;if(v->loading) return;gint at=gtk_combo_box_get_active(box);if(at<0 || at>=(gint)v->commands->len) return;InsightCustomCommand *c=g_ptr_array_index(v->commands,at);gtk_entry_set_text(GTK_ENTRY(v->name),c->name);gtk_entry_set_text(GTK_ENTRY(v->command),c->command);gtk_entry_set_text(GTK_ENTRY(v->directory),c->directory);}
-static GPtrArray *clone_commands(CommandView *v) {GPtrArray *list=g_ptr_array_new_with_free_func(insight_custom_command_free);for(guint i=0;i<v->commands->len;i++) {InsightCustomCommand *old=g_ptr_array_index(v->commands,i),*c=g_new0(InsightCustomCommand,1);c->name=g_strdup(old->name);c->command=g_strdup(old->command);c->directory=g_strdup(old->directory);g_ptr_array_add(list,c);}return list;}
-static void rebuild(CommandView *v,gint at) {v->loading=TRUE;gtk_combo_box_text_remove_all(GTK_COMBO_BOX_TEXT(v->profiles));for(guint i=0;i<v->commands->len;i++) gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(v->profiles),((InsightCustomCommand *)g_ptr_array_index(v->commands,i))->name);gtk_combo_box_set_active(GTK_COMBO_BOX(v->profiles),at);v->loading=FALSE;if(at>=0) select_profile(GTK_COMBO_BOX(v->profiles),v);}
-static gboolean persist(CommandView *v,GPtrArray *list,gint at) {
- GError *error=NULL;gchar *dir=g_path_get_dirname(v->path);gint made=g_mkdir_with_parents(dir,0700);g_free(dir);if(made || !insight_custom_commands_save(v->path,list,&error)) {note(v,error ? error->message:"Cannot create custom command settings directory");g_clear_error(&error);g_ptr_array_unref(list);return FALSE;}
- g_ptr_array_unref(v->commands);v->commands=list;rebuild(v,at);note(v,"Custom commands saved");return TRUE;
-}
-static void edit_profile(GtkWidget *button,gpointer data) {
- CommandView *v=data;if(v->process) return;gint action=GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button),"custom-action")),at=gtk_combo_box_get_active(GTK_COMBO_BOX(v->profiles));
- if(action==0) {gtk_combo_box_set_active(GTK_COMBO_BOX(v->profiles),-1);gtk_entry_set_text(GTK_ENTRY(v->name),"");gtk_entry_set_text(GTK_ENTRY(v->command),"");gtk_entry_set_text(GTK_ENTRY(v->directory),"%j");gtk_widget_grab_focus(v->name);return;}
- GPtrArray *list=clone_commands(v);
- if(action==1) {InsightCustomCommand *c=g_new0(InsightCustomCommand,1);c->name=g_strdup(gtk_entry_get_text(GTK_ENTRY(v->name)));c->command=g_strdup(gtk_entry_get_text(GTK_ENTRY(v->command)));c->directory=g_strdup(gtk_entry_get_text(GTK_ENTRY(v->directory)));if(at>=0) {insight_custom_command_free(g_ptr_array_index(list,at));g_ptr_array_index(list,at)=c;}else {at=list->len;g_ptr_array_add(list,c);}}
- else if(at<0) {g_ptr_array_unref(list);return;}
- else if(action==2) {g_ptr_array_remove_index(list,at);at=MIN(at,(gint)list->len-1);}
- else {gint next=at+(action==3 ? -1:1);if(next<0 || next>=(gint)list->len) {g_ptr_array_unref(list);return;}gpointer tmp=g_ptr_array_index(list,at);g_ptr_array_index(list,at)=g_ptr_array_index(list,next);g_ptr_array_index(list,next)=tmp;at=next;}
- if(persist(v,list,at) && at<0) {gtk_entry_set_text(GTK_ENTRY(v->name),"");gtk_entry_set_text(GTK_ENTRY(v->command),"");}
-}
+#include "insight-custom-commands/profiles.inc"
+
 /* EN: Handle Clear/Copy/Save log button for view data; Clear also invalidates retained stdout editor actions.
  * RU: Выполняет Clear/Copy/Save журнала из button для окна data; Clear также отменяет действия с сохранённым stdout. */
 static void output_action(GtkWidget *button, gpointer data)
@@ -415,6 +412,8 @@ static void output_action(GtkWidget *button, gpointer data)
 static GtkWidget *button(GtkWidget *row,const gchar *label,const gchar *name,GCallback action,CommandView *v,gboolean lock) {GtkWidget *b=gtk_button_new_with_label("");gtk_widget_set_name(b,name);insight_i18n_key(G_OBJECT(b),"label",label);gtk_box_pack_start(GTK_BOX(row),b,FALSE,FALSE,0);g_signal_connect(b,"clicked",action,v);if(lock) g_ptr_array_add(v->locked,b);return b;}
 static GtkWidget *entry(GtkWidget *page,const gchar *label,const gchar *name,const gchar *tip,CommandView *v) {GtkWidget *row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,6),*l=gtk_label_new(NULL),*e=gtk_entry_new();insight_i18n_key(G_OBJECT(l),"label",label);gtk_widget_set_name(e,name);insight_ai_ui_entry(e,tip,1);insight_i18n_key(G_OBJECT(e),"tooltip-text",tip);gtk_box_pack_start(GTK_BOX(row),l,FALSE,FALSE,0);gtk_box_pack_start(GTK_BOX(row),e,TRUE,TRUE,0);gtk_box_pack_start(GTK_BOX(page),row,FALSE,FALSE,0);g_ptr_array_add(v->locked,e);return e;}
 static GtkWidget *text_view(GtkWidget *page,const gchar *name,gboolean expand) {GtkWidget *scroll=gtk_scrolled_window_new(NULL,NULL),*view=gtk_text_view_new();gtk_widget_set_name(view,name);gtk_text_view_set_editable(GTK_TEXT_VIEW(view),FALSE);gtk_text_view_set_monospace(GTK_TEXT_VIEW(view),TRUE);gtk_text_view_set_wrap_mode(GTK_TEXT_VIEW(view),GTK_WRAP_WORD_CHAR);gtk_container_add(GTK_CONTAINER(scroll),view);gtk_box_pack_start(GTK_BOX(page),scroll,expand,expand,0);return view;}
+#include "insight-custom-commands/diagnostics.inc"
+
 static void locale(gpointer data) {CommandView *v=data;if(!v->closed) {render_context(v);link_count(v);insight_i18n_key(G_OBJECT(v->window),"title","Custom Commands");if(v->title) insight_i18n_key(G_OBJECT(v->title),"label","Custom Commands");}if(!v->closed && v->status_key) {gchar *key=g_strdup(v->status_key);note(v,key);g_free(key);}}
 #include "insight-custom-commands/output-review.inc"
 
@@ -434,6 +433,7 @@ static void show(GtkMenuItem *item,gpointer unused) {
  GtkWidget *refresh=gtk_button_new_with_label("");insight_i18n_key(G_OBJECT(refresh),"label","Refresh context");gtk_box_pack_start(GTK_BOX(context),refresh,FALSE,FALSE,0);g_signal_connect(refresh,"clicked",G_CALLBACK(preview),v);v->context=text_view(context,"insight-custom-command-context",FALSE);GtkWidget *sc=gtk_widget_get_parent(v->context);gtk_widget_set_size_request(sc,-1,180);
  row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(output),row,FALSE,FALSE,0);const gchar *outs[]={"Clear output","Copy output","Save command output"};for(guint i=0;i<3;i++) {gchar *name=g_strdup_printf("insight-custom-command-output-%u",i);GtkWidget *b=button(row,outs[i],name,G_CALLBACK(output_action),v,FALSE);g_object_set_data(G_OBJECT(b),"output-action",GINT_TO_POINTER(i));g_free(name);}
  output_editor_buttons(v,output);
+ diagnostic_options(v,diagnostics);
  row=gtk_box_new(GTK_ORIENTATION_HORIZONTAL,4);gtk_box_pack_start(GTK_BOX(diagnostics),row,FALSE,FALSE,0);button(row,"Parse Source Links","insight-custom-command-parse-links",G_CALLBACK(parse_links),v,FALSE);const gchar *link_labels[]={"First link","Previous link","Next link"};const gint directions[]={0,-1,1};for(guint i=0;i<3;i++) {gchar *name=g_strdup_printf("insight-custom-command-link-%u",i);GtkWidget *b=button(row,link_labels[i],name,G_CALLBACK(link_button),v,FALSE);g_object_set_data(G_OBJECT(b),"link-direction",GINT_TO_POINTER(directions[i]));g_free(name);}button(row,"Open source","insight-custom-command-open-link",G_CALLBACK(open_link),v,FALSE);
  v->links_status=gtk_label_new(NULL);gtk_label_set_xalign(GTK_LABEL(v->links_status),0);g_object_set_data(G_OBJECT(v->links_status),"insight-no-i18n",GINT_TO_POINTER(1));gtk_box_pack_start(GTK_BOX(diagnostics),v->links_status,FALSE,FALSE,0);
  v->links=gtk_list_store_new(LINK_FIELDS,G_TYPE_STRING,G_TYPE_UINT,G_TYPE_UINT,G_TYPE_STRING);v->links_view=gtk_tree_view_new_with_model(GTK_TREE_MODEL(v->links));g_object_unref(v->links);gtk_widget_set_name(v->links_view,"insight-custom-command-links");gtk_tree_view_set_tooltip_column(GTK_TREE_VIEW(v->links_view),LINK_FILE);gtk_tree_view_set_search_column(GTK_TREE_VIEW(v->links_view),LINK_MESSAGE);
