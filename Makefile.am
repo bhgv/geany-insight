@@ -1004,3 +1004,7 @@ EXTRA_DIST += insight/tests/intelligent-paste/positions.inc
 EXTRA_DIST += insight/tests/custom_command_bulk_test.c insight/tests/custom_command_bulk_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/custom-command-bulk.svg
+
+EXTRA_DIST += insight/tests/custom_command_selection_test.c insight/tests/custom_command_selection_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/custom-command-selection.svg

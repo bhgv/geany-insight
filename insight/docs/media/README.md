@@ -75,3 +75,5 @@ metadata stripped. It is a native test fixture running the complete application.
 - `project-database.svg`: explanatory diagram of persisted membership/indexes and incremental refresh; not a screenshot.
 
 - `custom-command-bulk.svg`: original explanatory diagram of open/modified-file argv expansion; not an application screenshot.
+
+- `custom-command-selection.svg`: original diagram of non-materializing Preview and process-owned UTF-8 selection snapshots; not a screenshot.

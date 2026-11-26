@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300">
+<rect width="760" height="300" rx="12" fill="#f2f5fa"/>
+<g font-family="sans-serif" fill="#24324a">
+<text x="22" y="30" font-size="19">Selection snapshots / Снимки выделения для %s</text>
+<rect x="20" y="52" width="720" height="62" rx="7" fill="#fff" stroke="#ccd6e5"/>
+<text x="35" y="77" font-size="15">Preview / Предпросмотр</text>
+<text x="35" y="99" font-size="13">Selection → planned path only / Выделение → только план пути, без файла</text>
+<g fill="#dcecff" stroke="#acc5e5"><rect x="20" y="137" width="218" height="89" rx="7"/><rect x="272" y="137" width="218" height="89" rx="7"/><rect x="524" y="137" width="216" height="89" rx="7"/></g>
+<g font-size="14"><text x="35" y="161">Run / Запуск</text><text x="287" y="161">Process / Процесс</text><text x="539" y="161">Cleanup / Очистка</text></g>
+<g font-size="12"><text x="35" y="184">Current UTF-8 selection</text><text x="35" y="204">Текущее выделение UTF-8</text><text x="287" y="184">Private temporary file</text><text x="287" y="204">Частный временный файл</text><text x="539" y="184">Exit · Stop · Close</text><text x="539" y="204">Выход · Стоп · Закрыть</text></g>
+<g fill="none" stroke="#4277aa" stroke-width="2"><path d="M243 181h23m-6-6 6 6-6 6"/><path d="M495 181h23m-6-6 6 6-6 6"/></g>
+<text x="22" y="257" font-size="13">Exact CRLF / UTF-8 · One file per launch · Source, clipboard and Undo unchanged</text>
+<text x="22" y="281" font-size="13">Точные CRLF / UTF-8 · Один файл на запуск · Исходник, буфер обмена и Undo сохранены</text>
+</g></svg>

@@ -24,14 +24,34 @@ typedef struct {
  GtkWidget *window,*tabs,*profiles,*name,*command,*directory,*run,*stop,*status,*context,*output,*title,*arguments[9],*links_view,*links_status;
  GtkListStore *links;gint output_start;gchar *launch_directory;
  GPtrArray *commands,*locked;gchar *path,*status_key,*context_argv,*context_directory,*context_variables,*context_error;gint exit_code;
+ InsightCustomSelection *selection;
  GSubprocess *process;GCancellable *cancel;GString *pending;gsize received;guint lines,line_bytes,follow_idle;gdouble follow_baseline;
 } CommandView;
 enum {LINK_FILE,LINK_LINE,LINK_COLUMN,LINK_MESSAGE,LINK_FIELDS};
 static void link_count(CommandView *);
 static GtkWidget *command_window;
 static CommandView *view_ref(CommandView *v) {v->refs++;return v;}
-static void view_unref(gpointer data) {
- CommandView *v=data;if(--v->refs) return;g_ptr_array_unref(v->commands);g_ptr_array_unref(v->locked);g_free(v->path);g_free(v->status_key);g_free(v->context_argv);g_free(v->context_directory);g_free(v->context_variables);g_free(v->context_error);g_free(v->launch_directory);g_clear_object(&v->process);g_clear_object(&v->cancel);g_string_free(v->pending,TRUE);g_free(v);
+/* EN: Release retained view data; final ownership also removes any leftover selection snapshot.
+ * RU: Освобождает удерживаемые данные data; последний владелец также удаляет оставшийся снимок выделения. */
+static void view_unref(gpointer data)
+{
+    CommandView *v = data;
+    if (--v->refs)
+        return;
+    g_ptr_array_unref(v->commands);
+    g_ptr_array_unref(v->locked);
+    g_free(v->path);
+    g_free(v->status_key);
+    g_free(v->context_argv);
+    g_free(v->context_directory);
+    g_free(v->context_variables);
+    g_free(v->context_error);
+    g_free(v->launch_directory);
+    insight_custom_selection_free(v->selection);
+    g_clear_object(&v->process);
+    g_clear_object(&v->cancel);
+    g_string_free(v->pending, TRUE);
+    g_free(v);
 }
 /* EN: Retain status key for v and repaint the stable selectable status label; closed views retain state only.
  * RU: Сохраняет ключ key для v и обновляет стабильную выделяемую строку статуса; закрытые окна сохраняют лишь состояние. */
@@ -73,6 +93,7 @@ static GHashTable *context_values(void) {
  for(guint i=0;i<G_N_ELEMENTS(names);i++) {gchar *path=insight_project_path_variable(names[i],root,project,NULL);value(map,names[i],path);g_free(path);}
  g_free(root);g_free(dir);return map;
 }
+#include "insight-custom-commands/selection.inc"
 #include "insight-custom-commands/files.inc"
 
 /* EN: Quote borrowed argv for display only; return owned complete text bounded by the launch argument limits.
@@ -105,17 +126,48 @@ static void render_context(CommandView *v)
     g_string_append_printf(text, "\n\n%s\n%s", insight_tr("Available context variables:"), v->context_variables);
     g_string_append_printf(text, "\n%s\n", insight_tr("Bulk file arguments: %f%o = named open files; %f%m = named modified files"));
     g_string_append(text, insight_tr("Also supports %r, %n, %b and %e. Files are read from disk; buffers are not saved."));
+    g_string_append_printf(text, "\n%s", insight_tr("Selection snapshot: %s is UTF-8. Preview creates no file; Run captures the current selection."));
     stop_scroll(v->context);
     gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)), text->str, -1);
     g_string_free(text, TRUE);
 }
-static void preview(GtkWidget *button,gpointer data) {
- (void)button;CommandView *v=data;gchar **argv=NULL,*directory=NULL;GHashTable *map=NULL;GError *error=NULL;gboolean ok=prepare(v,&argv,&directory,&map,&error);
- g_free(v->context_argv);g_free(v->context_directory);g_free(v->context_variables);g_free(v->context_error);
- v->context_argv=ok ? display_argv(argv):NULL;v->context_directory=ok ? g_filename_display_name(directory):NULL;v->context_error=ok ? NULL:g_strdup(error ? error->message:"Invalid custom command template");
- GString *variables=g_string_new(NULL);GList *keys=g_hash_table_get_keys(map);keys=g_list_sort(keys,(GCompareFunc)g_strcmp0);
- for(GList *p=keys;p;p=p->next) {const gchar *key=p->data;g_string_append_printf(variables,strlen(key)==1 ? "%%%s = %s\n":"%%%s%% = %s\n",key,(gchar *)g_hash_table_lookup(map,key));}g_list_free(keys);v->context_variables=g_string_free(variables,FALSE);
- render_context(v);insight_compare_ui_reveal(v->context);g_hash_table_unref(map);g_strfreev(argv);g_free(directory);g_clear_error(&error);
+/* EN: Capture v's preview only, releasing any selection plan without materializing it; button is unused.
+ * RU: Фиксирует только предпросмотр v, освобождая план выделения без создания файла; button не используется. */
+static void preview(GtkWidget *button, gpointer data)
+{
+    (void)button;
+    CommandView *v = data;
+    gchar **argv = NULL;
+    gchar *directory = NULL;
+    GHashTable *map = NULL;
+    InsightCustomSelection *selection = NULL;
+    GError *error = NULL;
+    gboolean ok = prepare(v, &argv, &directory, &map, &selection, &error);
+    g_free(v->context_argv);
+    g_free(v->context_directory);
+    g_free(v->context_variables);
+    g_free(v->context_error);
+    v->context_argv = ok ? display_argv(argv) : NULL;
+    v->context_directory = ok ? g_filename_display_name(directory) : NULL;
+    v->context_error = ok ? NULL : g_strdup(error ? error->message : "Invalid custom command template");
+    GString *variables = g_string_new(NULL);
+    GList *keys = g_hash_table_get_keys(map);
+    keys = g_list_sort(keys, (GCompareFunc)g_strcmp0);
+    for (GList *p = keys; p; p = p->next)
+    {
+        const gchar *key = p->data;
+        g_string_append_printf(variables, strlen(key) == 1 ? "%%%s = %s\n" : "%%%s%% = %s\n",
+            key, (gchar *)g_hash_table_lookup(map, key));
+    }
+    g_list_free(keys);
+    v->context_variables = g_string_free(variables, FALSE);
+    render_context(v);
+    insight_compare_ui_reveal(v->context);
+    insight_custom_selection_free(selection);
+    g_hash_table_unref(map);
+    g_strfreev(argv);
+    g_free(directory);
+    g_clear_error(&error);
 }
 static gboolean follow_output(gpointer data) {
  CommandView *v=data;v->follow_idle=0;if(v->closed) return G_SOURCE_REMOVE;
@@ -140,8 +192,25 @@ static void decode(CommandView *v,const guint8 *bytes,gsize size,gboolean eof) {
  while(i<v->pending->len) {const gchar *p=v->pending->str+i;if(!*p) {g_string_append(text,"␀");i++;continue;}gunichar c=g_utf8_get_char_validated(p,v->pending->len-i);if(c==(gunichar)-2 && !eof) break;if(c==(gunichar)-1 || c==(gunichar)-2) {g_string_append(text,"�");i++;}else if(c==0) {g_string_append(text,"␀");i++;}else {gsize n=g_utf8_next_char(p)-p;g_string_append_len(text,p,n);i+=n;}}
  g_string_erase(v->pending,0,i);append(v,text->str,text->len);g_string_free(text,TRUE);
 }
-static void finished(CommandView *v) {
- if(v->reading || v->waiting) return;g_clear_object(&v->process);g_clear_object(&v->cancel);if(!v->closed) {if(v->limited) note(v,"Output limit reached; command stopped");else if(v->stopped) note(v,"Command stopped");else note(v,"Command exited with status %d");controls(v);}
+/* EN: Finish v only after both child wait and output drain complete; remove its snapshot even after window closure.
+ * RU: Завершает v лишь после ожидания процесса и чтения вывода; удаляет снимок и после закрытия окна. */
+static void finished(CommandView *v)
+{
+    if (v->reading || v->waiting)
+        return;
+    g_clear_pointer(&v->selection, insight_custom_selection_free);
+    g_clear_object(&v->process);
+    g_clear_object(&v->cancel);
+    if (!v->closed)
+    {
+        if (v->limited)
+            note(v, "Output limit reached; command stopped");
+        else if (v->stopped)
+            note(v, "Command stopped");
+        else
+            note(v, "Command exited with status %d");
+        controls(v);
+    }
 }
 static void waited(GObject *process,GAsyncResult *result,gpointer data) {
  CommandView *v=data;GError *error=NULL;gboolean ok=g_subprocess_wait_finish(G_SUBPROCESS(process),result,&error);v->exit_code=ok && g_subprocess_get_if_exited(G_SUBPROCESS(process)) ? g_subprocess_get_exit_status(G_SUBPROCESS(process)):-1;g_clear_error(&error);v->waiting=FALSE;finished(v);view_unref(v);
@@ -154,14 +223,78 @@ static void read_ready(GObject *stream,GAsyncResult *result,gpointer data) {
  if(error && !g_error_matches(error,G_IO_ERROR,G_IO_ERROR_CANCELLED) && v->process) {v->stopped=TRUE;g_subprocess_force_exit(v->process);}
  if(!v->closed) decode(v,(const guint8 *)"",0,TRUE);g_clear_error(&error);v->reading=FALSE;finished(v);view_unref(v);
 }
-static void run(GtkWidget *button,gpointer data) {
- (void)button;CommandView *v=data;if(v->process) return;gchar **argv=NULL,*directory=NULL;GHashTable *map=NULL;GError *error=NULL;
- if(!prepare(v,&argv,&directory,&map,&error)) {note(v,error ? error->message:"Invalid custom command template");goto done;}
- GSubprocessLauncher *launcher=g_subprocess_launcher_new(G_SUBPROCESS_FLAGS_STDOUT_PIPE|G_SUBPROCESS_FLAGS_STDERR_MERGE);g_subprocess_launcher_set_cwd(launcher,directory);v->process=g_subprocess_launcher_spawnv(launcher,(const gchar *const *)argv,&error);g_object_unref(launcher);
- if(!v->process) {note(v,error->message);goto done;}
- cancel_follow(v);stop_scroll(v->output);stop_scroll(v->links_view);gtk_list_store_clear(v->links);link_count(v);g_free(v->launch_directory);v->launch_directory=g_filename_to_utf8(directory,-1,NULL,NULL,NULL);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output)),"",0);gchar *shown=display_argv(argv);append(v,shown,-1);append(v,"\n",1);v->output_start=gtk_text_buffer_get_char_count(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output)));g_free(shown);v->received=0;v->lines=v->line_bytes=0;v->limited=v->stopped=FALSE;g_string_truncate(v->pending,0);v->cancel=g_cancellable_new();v->reading=v->waiting=TRUE;note(v,"Command running");controls(v);
- g_subprocess_wait_async(v->process,NULL,waited,view_ref(v));g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(v->process),8192,G_PRIORITY_DEFAULT,v->cancel,read_ready,view_ref(v));
-done:g_clear_error(&error);g_strfreev(argv);g_free(directory);if(map) g_hash_table_unref(map);
+/* EN: Sample current command/context, materialize its optional selection, and launch one process; button is unused.
+ * data is the retained view. Failed validation/write/spawn releases the plan; successful runs own it until finished.
+ * RU: Фиксирует команду/контекст, создаёт необязательный снимок и запускает один процесс; button не используется.
+ * data — удерживаемое окно. Ошибка проверки/записи/запуска освобождает план; успешный запуск владеет им до finished.
+ */
+static void run(GtkWidget *button, gpointer data)
+{
+    (void)button;
+    CommandView *v = data;
+    if (v->process)
+        return;
+    gchar **argv = NULL;
+    gchar *directory = NULL;
+    GHashTable *map = NULL;
+    InsightCustomSelection *selection = NULL;
+    GError *error = NULL;
+    if (!prepare(v, &argv, &directory, &map, &selection, &error))
+    {
+        note(v, error ? error->message : "Invalid custom command template");
+        goto done;
+    }
+    if (selection && !insight_custom_selection_create(selection, &error))
+    {
+        note(v, error->message);
+        goto done;
+    }
+    GSubprocessLauncher *launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDOUT_PIPE | G_SUBPROCESS_FLAGS_STDERR_MERGE);
+    g_subprocess_launcher_set_cwd(launcher, directory);
+    v->process = g_subprocess_launcher_spawnv(launcher, (const gchar *const *)argv, &error);
+    g_object_unref(launcher);
+    if (!v->process)
+    {
+        note(v, error->message);
+        goto done;
+    }
+    v->selection = selection;
+    selection = NULL;
+    cancel_follow(v);
+    stop_scroll(v->output);
+    stop_scroll(v->links_view);
+    gtk_list_store_clear(v->links);
+    link_count(v);
+    g_free(v->launch_directory);
+    v->launch_directory = g_filename_to_utf8(directory, -1, NULL, NULL, NULL);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output)), "", 0);
+    gchar *shown = display_argv(argv);
+    append(v, shown, -1);
+    append(v, "\n", 1);
+    v->output_start = gtk_text_buffer_get_char_count(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->output)));
+    g_free(shown);
+    v->received = 0;
+    v->lines = 0;
+    v->line_bytes = 0;
+    v->limited = FALSE;
+    v->stopped = FALSE;
+    g_string_truncate(v->pending, 0);
+    v->cancel = g_cancellable_new();
+    v->reading = TRUE;
+    v->waiting = TRUE;
+    note(v, "Command running");
+    controls(v);
+    g_subprocess_wait_async(v->process, NULL, waited, view_ref(v));
+    g_input_stream_read_bytes_async(g_subprocess_get_stdout_pipe(v->process), 8192,
+        G_PRIORITY_DEFAULT, v->cancel, read_ready, view_ref(v));
+done:
+    insight_custom_selection_free(selection);
+    g_clear_error(&error);
+    g_strfreev(argv);
+    g_free(directory);
+    if (map)
+        g_hash_table_unref(map);
 }
 static void stop(GtkWidget *button,gpointer data) {(void)button;CommandView *v=data;if(v->process && !v->stopped) {v->stopped=TRUE;g_subprocess_force_exit(v->process);g_cancellable_cancel(v->cancel);note(v,"Stopping command");controls(v);}}
 static void link_count(CommandView *v) {

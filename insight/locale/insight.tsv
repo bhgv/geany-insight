@@ -3597,3 +3597,8 @@ Bulk file modifiers cannot select the executable	Массовые модифик
 No named modified files are open	Нет открытых именованных изменённых файлов
 No named files are open	Нет открытых именованных файлов
 Custom command executable is empty	Не задана исполняемая программа команды
+Selection snapshot: %s is UTF-8. Preview creates no file; Run captures the current selection.	Снимок выделения: %s — UTF-8. Предпросмотр не создаёт файл; запуск фиксирует текущее выделение.
+Select text in a source document for %s	Выделите текст в исходном документе для %s
+Selection snapshot needs one nonempty normal selection up to 1 MiB	Для снимка нужно одно непустое обычное выделение до 1 MiB
+Selection snapshot requires 1–1048576 bytes of UTF-8 text without NUL	Для снимка требуется 1–1048576 байт текста UTF-8 без NUL
+Selection snapshot is already materialized or unavailable	Снимок выделения уже создан либо недоступен

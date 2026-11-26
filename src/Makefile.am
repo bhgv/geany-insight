@@ -733,3 +733,5 @@ geany_insight_ssh_console_LDADD = $(GTK_LIBS) $(INTLLIBS)
 libgeany_la_SOURCES += insight-paste/state.inc insight-paste/insert.inc insight-paste/preferences.inc insight-paste/lines.inc insight-paste/tools-word.inc insight-paste/tools-characters.inc insight-paste/tools-clipboard.inc insight-paste/tools-files.inc insight-paste/tools-calculate.inc insight-paste/tools-paragraph.inc insight-paste/tools-line-insert.inc insight-paste/tools-renumber.inc insight-paste/tools-menu.inc
 
 libgeany_la_SOURCES += insight-custom-commands/files.inc ../insight/desktop/custom-command/bulk.inc
+
+libgeany_la_SOURCES += insight-custom-commands/selection.inc ../insight/desktop/custom-command/selection.inc

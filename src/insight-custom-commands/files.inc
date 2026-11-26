@@ -38,17 +38,31 @@ static InsightCustomFile *command_file(GeanyDocument *doc, const gchar *root)
 }
 
 /* EN: Prepare v's current command into owned argv/directory/context, even when later validation fails.
- * Rebuild the named-file snapshot for every call; no processes or saves occur. Return FALSE/error on invalid input.
+ * Rebuild file/selection snapshots into selection for every call; no processes or file creation occur. Return FALSE/error on invalid input.
  * RU: Готовит текущую команду v в собственные argv/directory/context, даже при последующей ошибке проверки.
- * Каждый вызов заново фиксирует именованные файлы; без запусков и сохранений. FALSE/error при неверном вводе. */
+ * Каждый вызов заново фиксирует файлы/выделение в selection; без запусков и создания файлов. FALSE/error при неверном вводе. */
 static gboolean prepare(CommandView *v, gchar ***argv, gchar **directory,
-    GHashTable **context, GError **error)
+    GHashTable **context, InsightCustomSelection **selection, GError **error)
 {
     *context = context_values();
     for (guint i = 0; i < 9; i++)
     {
         gchar key[2] = {(gchar)('1' + i), 0};
         value(*context, key, gtk_entry_get_text(GTK_ENTRY(v->arguments[i])));
+    }
+    gboolean requested = insight_custom_selection_requested(gtk_entry_get_text(GTK_ENTRY(v->command)), error);
+    if (error && *error)
+        return FALSE;
+    if (requested)
+    {
+        *selection = selection_capture(error);
+        if (!*selection)
+            return FALSE;
+        gchar *path = g_filename_to_utf8((*selection)->path, -1, NULL, NULL, error);
+        if (!path)
+            return FALSE;
+        value(*context, "s", path);
+        g_free(path);
     }
     GPtrArray *files = g_ptr_array_new_with_free_func(insight_custom_file_free);
     const gchar *root = g_hash_table_lookup(*context, "j");

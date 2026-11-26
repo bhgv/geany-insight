@@ -1049,3 +1049,8 @@ custom_command_bulk_test = executable('test_insight_custom_command_bulk', '../in
 test('Insight bulk custom command arguments', custom_command_bulk_test)
 custom_command_bulk_gui_test = executable('test_insight_custom_command_bulk_gui', '../insight/tests/custom_command_bulk_gui_test.c', dependencies: test_deps)
 test('Insight native bulk custom commands GUI', custom_command_bulk_gui_test, timeout: 60, is_parallel: false)
+
+custom_command_selection_test = executable('test_insight_custom_command_selection', '../insight/tests/custom_command_selection_test.c', '../insight/desktop/custom_command.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight custom command selection snapshots', custom_command_selection_test)
+custom_command_selection_gui_test = executable('test_insight_custom_command_selection_gui', '../insight/tests/custom_command_selection_gui_test.c', dependencies: test_deps)
+test('Insight native selection custom commands GUI', custom_command_selection_gui_test, timeout: 75, is_parallel: false)

@@ -84,3 +84,5 @@ InsightCustomLink *insight_custom_source_link(const gchar *input,const gchar *di
 }
 
 #include "custom-command/bulk.inc"
+
+#include "custom-command/selection.inc"

@@ -14,6 +14,15 @@ gchar **insight_custom_argv(const gchar *,GHashTable *,GError **);
 typedef struct { GHashTable *values; gboolean modified; } InsightCustomFile;
 void insight_custom_file_free(gpointer);
 gchar **insight_custom_argv_files(const gchar *, GHashTable *, GPtrArray *, GError **);
+typedef struct {
+    gchar *text, *directory, *path;
+    gsize length;
+    gboolean created;
+} InsightCustomSelection;
+gboolean insight_custom_selection_requested(const gchar *, GError **);
+InsightCustomSelection *insight_custom_selection_plan(const gchar *, gsize, GError **);
+gboolean insight_custom_selection_create(InsightCustomSelection *, GError **);
+void insight_custom_selection_free(InsightCustomSelection *);
 GPtrArray *insight_custom_commands_load(const gchar *,GError **);
 gboolean insight_custom_commands_save(const gchar *,GPtrArray *,GError **);
 typedef struct { gchar *path,*message;guint line,column; } InsightCustomLink;
