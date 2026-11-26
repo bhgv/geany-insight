@@ -1000,3 +1000,7 @@ dist_insightdocmedia_DATA += insight/docs/media/literal-selection.svg
 EXTRA_DIST += insight/tests/paste_policy_gui_test.c
 
 EXTRA_DIST += insight/tests/intelligent-paste/positions.inc
+
+EXTRA_DIST += insight/tests/custom_command_bulk_test.c insight/tests/custom_command_bulk_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/custom-command-bulk.svg

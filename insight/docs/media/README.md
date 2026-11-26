@@ -73,3 +73,5 @@ metadata stripped. It is a native test fixture running the complete application.
 
 - `aligned-diff.jpg`: production Diff/Merge GTK window from its isolated GUI fixture, synthetic insertion/equal lines; Linux source `16caa2b5950392bc8bf2ad88dcdc35109c56cfa6`. Left/Right above editable Result; RGB optimized progressive JPEG, quality 90, no EXIF.
 - `project-database.svg`: explanatory diagram of persisted membership/indexes and incremental refresh; not a screenshot.
+
+- `custom-command-bulk.svg`: original explanatory diagram of open/modified-file argv expansion; not an application screenshot.

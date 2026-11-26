@@ -1044,3 +1044,8 @@ test('Insight native literal delimiter selection GUI', literal_selection_gui_tes
 
 paste_policy_gui_test = executable('test_insight_paste_policy_gui', '../insight/tests/paste_policy_gui_test.c', dependencies: test_deps)
 test('Insight unified paste policy native GUI', paste_policy_gui_test, timeout: 55, is_parallel: false)
+
+custom_command_bulk_test = executable('test_insight_custom_command_bulk', '../insight/tests/custom_command_bulk_test.c', '../insight/desktop/custom_command.c', dependencies: deps, c_args: ['-UNDEBUG'])
+test('Insight bulk custom command arguments', custom_command_bulk_test)
+custom_command_bulk_gui_test = executable('test_insight_custom_command_bulk_gui', '../insight/tests/custom_command_bulk_gui_test.c', dependencies: test_deps)
+test('Insight native bulk custom commands GUI', custom_command_bulk_gui_test, timeout: 60, is_parallel: false)

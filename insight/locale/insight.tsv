@@ -3590,3 +3590,10 @@ After paste	После вставки
 Cursor or selection after ordinary or intelligent text paste	Курсор или выделение после обычной либо интеллектуальной вставки
 Always select pasted text	Всегда выделять вставленный текст
 Override the cursor position choice without changing indentation rules	Выделять независимо от выбранной позиции курсора, не меняя правила отступов
+Bulk file arguments: %f%o = named open files; %f%m = named modified files	Массовые аргументы: %f%o — именованные открытые файлы; %f%m — именованные изменённые файлы
+Also supports %r, %n, %b and %e. Files are read from disk; buffers are not saved.	Также поддерживаются %r, %n, %b и %e. Файлы читаются с диска; буферы не сохраняются.
+Use one bulk file modifier per argument	Используйте один массовый модификатор файла на аргумент
+Bulk file modifiers cannot select the executable	Массовые модификаторы файлов не могут выбирать исполняемую программу
+No named modified files are open	Нет открытых именованных изменённых файлов
+No named files are open	Нет открытых именованных файлов
+Custom command executable is empty	Не задана исполняемая программа команды

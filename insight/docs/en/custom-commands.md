@@ -27,7 +27,7 @@ Open **Tools → Custom Commands…**. This modeless tool window adds a saved ex
 
 ## Arguments and examples
 
-The template is parsed into an argument vector **before** substitutions. Values are substituted exactly once inside each argument. A filename containing spaces, quotes, dollar signs or semicolons remains one argument and cannot add another executable. Quote literal arguments that contain spaces. Ordinary shell operators are not interpreted; explicitly launch a shell if desired. For an explicit shell, pass substitutions as separate arguments and reference quoted positions such as `"$1"`, rather than inserting them into the script text. When writing shell scripts in the template, escape literal percent signs as `%%`, including printf formats. The preview quotes arguments for display; this display string is not executed and is truncated after 8192 bytes.
+The template is parsed into an argument vector **before** substitutions. Values are substituted exactly once inside each argument. A filename containing spaces, quotes, dollar signs or semicolons remains one argument and cannot add another executable. Quote literal arguments that contain spaces. Ordinary shell operators are not interpreted; explicitly launch a shell if desired. For an explicit shell, pass substitutions as separate arguments and reference quoted positions such as `"$1"`, rather than inserting them into the script text. When writing shell scripts in the template, escape literal percent signs as `%%`, including printf formats. The preview quotes arguments for display; this display string is not executed.
 
 Examples:
 
@@ -46,7 +46,7 @@ Up to 64 named commands are stored in the editor profile's `insight/custom-comma
 
 Output is decoded as UTF-8 across pipe chunks; invalid bytes use replacement characters and NUL is displayed as `␀`. The process is stopped at 4 MiB, 50000 lines or 64 KiB on one line. This is an output log, not a terminal: no VT escape interpretation or interactive stdin. Stop/Close terminates the directly launched process and cancels the local output read; it does not promise to terminate independently forked descendants. No auto-run occurs when a project opens or settings are loaded.
 
-Source Insight modifiers for all open/modified files, `%s` selection temporary files, ShellExecute and automatic per-command hotkeys are not implemented. Numbered arguments use explicit fields instead of modal argument prompts. Native GUI testing uses Linux; Windows shell syntax and runtime behavior require separate validation.
+Source Insight `%s` selection temporary files, ShellExecute and automatic per-command hotkeys are not implemented. Numbered arguments use explicit fields instead of modal argument prompts. Native GUI testing uses Linux; Windows shell syntax and runtime behavior require separate validation.
 
 Reference: [Source Insight Custom Commands](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Custom_Commands1.htm).
 
@@ -61,3 +61,23 @@ Double-click a row or choose Open source. First/Previous/Next link and **F4 / Sh
 Relative paths resolve against the **captured launch directory**, even if another project is active when you parse the log. The tool's internal `chdir`, remote path mappings and custom regular-expression templates are not inferred. Foreign Windows drive/UNC paths are declined on non-Windows systems. Synthetic stdin/URI locations and invalid coordinates are omitted. Run and Clear reset the old diagnostic list; new output is included only on the next explicit Parse. Copying or saving the output retains the full log.
 
 This is a bounded set of built-in diagnostic formats, rather than all Source Insight custom parsing patterns. Reference: [Parse Source Links](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Parse_Source_Links.htm).
+
+## Commands over open and modified files
+
+![Bulk custom-command arguments](../media/custom-command-bulk.svg)
+
+Append `%o` (all named open files) or `%m` (only named open files with modified buffers) to a filename variable:
+
+| Argument | Value for each selected file |
+| --- | --- |
+| `%f%o` / `%f%m` | Full path |
+| `%r%o` / `%r%m` | Project-relative path; absolute outside the root |
+| `%n%o` / `%n%m` | Filename including extension |
+| `%b%o` / `%b%m` | Filename stem |
+| `%e%o` / `%e%m` | Extension without dot |
+
+For example, `cc -fsyntax-only %f%o` checks named open sources in one launch. `python3 %1 %f%m` passes modified files to the script from the first Arguments field. Each filename remains a separate argument, even with spaces, quotes, `$`, `;` or `%`. Values are never reparsed. `--file=%f%o` repeats the prefixed argument per file; `%n=%f%o` uses the name and path of the same file. One bulk marker is permitted per argument, with multiple such arguments permitted per command.
+
+Preview displays the complete expanded argv. Run rebuilds the snapshot, so subsequent opens, closes and modified-state changes are included. Snapshot order follows the editor's internal document array; reordering visible tabs does not promise to change it. Read-only sources are included; unnamed buffers are skipped. `%m` uses the open buffer's modified flag, rather than Git status or disk timestamps.
+
+Commands receive on-disk paths. Buffers are not automatically saved and their text/Undo are untouched. An empty selected set, multiple bulk markers in an argument, a bulk executable or the combined 128-argument / 256-KiB bounds reject the entire launch. Bulk modifiers work in command arguments only, not the working directory. Standalone `%o` still means the project name; `%%` produces a literal percent. Saved profiles retain the template, not a file list.

@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Native saved external tools, preview, process output and diagnostic source links.
+ * RU: Пользовательские внешние инструменты, предпросмотр, вывод процессов и ссылки диагностики. */
 #include "geany.h"
 #include "insight-custom-commands.h"
 #include "app.h"
@@ -31,8 +33,19 @@ static CommandView *view_ref(CommandView *v) {v->refs++;return v;}
 static void view_unref(gpointer data) {
  CommandView *v=data;if(--v->refs) return;g_ptr_array_unref(v->commands);g_ptr_array_unref(v->locked);g_free(v->path);g_free(v->status_key);g_free(v->context_argv);g_free(v->context_directory);g_free(v->context_variables);g_free(v->context_error);g_free(v->launch_directory);g_clear_object(&v->process);g_clear_object(&v->cancel);g_string_free(v->pending,TRUE);g_free(v);
 }
-static void note(CommandView *v,const gchar *key) {
- g_free(v->status_key);v->status_key=g_strdup(key);if(!v->closed) {gchar *formatted=!strcmp(key,"Command exited with status %d") ? g_strdup_printf(insight_tr(key),v->exit_code):g_strdup(insight_tr(key));gtk_label_set_text(GTK_LABEL(v->status),formatted);g_free(formatted);}
+/* EN: Retain status key for v and repaint the stable selectable status label; closed views retain state only.
+ * RU: Сохраняет ключ key для v и обновляет стабильную выделяемую строку статуса; закрытые окна сохраняют лишь состояние. */
+static void note(CommandView *v, const gchar *key)
+{
+    g_free(v->status_key);
+    v->status_key = g_strdup(key);
+    if (v->closed)
+        return;
+    gchar *formatted = !strcmp(key, "Command exited with status %d") ?
+        g_strdup_printf(insight_tr(key), v->exit_code) : g_strdup(insight_tr(key));
+    gtk_widget_set_name(v->status, "insight-custom-command-status");
+    gtk_label_set_text(GTK_LABEL(v->status), formatted);
+    g_free(formatted);
 }
 static void controls(CommandView *v) {
  if(v->closed) return;gboolean busy=v->process!=NULL;for(guint i=0;i<v->locked->len;i++) gtk_widget_set_sensitive(g_ptr_array_index(v->locked,i),!busy);
@@ -60,25 +73,41 @@ static GHashTable *context_values(void) {
  for(guint i=0;i<G_N_ELEMENTS(names);i++) {gchar *path=insight_project_path_variable(names[i],root,project,NULL);value(map,names[i],path);g_free(path);}
  g_free(root);g_free(dir);return map;
 }
-static gboolean prepare(CommandView *v,gchar ***argv,gchar **directory,GHashTable **context,GError **error) {
- *context=context_values();for(guint i=0;i<9;i++) {gchar key[2]={(gchar)('1'+i),0};value(*context,key,gtk_entry_get_text(GTK_ENTRY(v->arguments[i])));}
- *argv=insight_custom_argv(gtk_entry_get_text(GTK_ENTRY(v->command)),*context,error);if(!*argv) return FALSE;
- gchar *expanded=insight_custom_expand(gtk_entry_get_text(GTK_ENTRY(v->directory)),*context,error);if(!expanded) return FALSE;
- if(!*expanded) {g_free(expanded);expanded=g_strdup(g_hash_table_lookup(*context,"j"));}
- if(!expanded || !g_path_is_absolute(expanded)) {g_free(expanded);g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_INVALID_ARGUMENT,"Working directory must be an absolute path");return FALSE;}
- *directory=g_filename_from_utf8(expanded,-1,NULL,NULL,error);g_free(expanded);if(!*directory) return FALSE;
- if(!g_file_test(*directory,G_FILE_TEST_IS_DIR)) {g_set_error_literal(error,G_IO_ERROR,G_IO_ERROR_NOT_DIRECTORY,"Working directory does not exist");return FALSE;}return TRUE;
+#include "insight-custom-commands/files.inc"
+
+/* EN: Quote borrowed argv for display only; return owned complete text bounded by the launch argument limits.
+ * RU: Экранирует заимствованный argv только для показа; возвращает полный собственный текст в пределах границ запуска. */
+static gchar *display_argv(gchar **argv)
+{
+    GString *text = g_string_new(NULL);
+    for (guint i = 0; argv && argv[i]; i++)
+    {
+        gchar *quoted = g_shell_quote(argv[i]);
+        if (i)
+            g_string_append_c(text, ' ');
+        g_string_append(text, quoted);
+        g_free(quoted);
+    }
+    return g_string_free(text, FALSE);
 }
-static gchar *display_argv(gchar **argv) {GString *s=g_string_new(NULL);for(guint i=0;argv && argv[i];i++) {gchar *q=g_shell_quote(argv[i]);if(i) g_string_append_c(s,' ');g_string_append(s,q);g_free(q);}if(s->len>8192) {const gchar *end=g_utf8_find_prev_char(s->str,s->str+8192);g_string_truncate(s,end ? (gsize)(end-s->str):0);g_string_append(s,"\n…");}return g_string_free(s,FALSE);}
-/* Retain captured values so language changes only repaint headings, without
- * resampling another document, touching the filesystem or changing tabs. */
-static void render_context(CommandView *v) {
- if(v->closed || !v->context_variables) return;
- GString *text=g_string_new(insight_tr("Expanded arguments (display only):"));g_string_append_c(text,'\n');
- g_string_append(text,v->context_argv ? v->context_argv:insight_tr(v->context_error ? v->context_error:"Invalid custom command template"));
- if(v->context_directory) g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Working directory"),v->context_directory);
- g_string_append_printf(text,"\n\n%s\n%s",insight_tr("Available context variables:"),v->context_variables);
- stop_scroll(v->context);gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)),text->str,-1);g_string_free(text,TRUE);
+/* EN: Repaint v's captured preview and bulk help, without resampling files or starting processes; ignore closed views.
+ * RU: Перерисовывает сохранённый предпросмотр v и справку без повторного сбора файлов или запуска; закрытые окна пропускаются. */
+static void render_context(CommandView *v)
+{
+    if (v->closed || !v->context_variables)
+        return;
+    GString *text = g_string_new(insight_tr("Expanded arguments (display only):"));
+    g_string_append_c(text, '\n');
+    g_string_append(text, v->context_argv ? v->context_argv :
+        insight_tr(v->context_error ? v->context_error : "Invalid custom command template"));
+    if (v->context_directory)
+        g_string_append_printf(text, "\n\n%s\n%s", insight_tr("Working directory"), v->context_directory);
+    g_string_append_printf(text, "\n\n%s\n%s", insight_tr("Available context variables:"), v->context_variables);
+    g_string_append_printf(text, "\n%s\n", insight_tr("Bulk file arguments: %f%o = named open files; %f%m = named modified files"));
+    g_string_append(text, insight_tr("Also supports %r, %n, %b and %e. Files are read from disk; buffers are not saved."));
+    stop_scroll(v->context);
+    gtk_text_buffer_set_text(gtk_text_view_get_buffer(GTK_TEXT_VIEW(v->context)), text->str, -1);
+    g_string_free(text, TRUE);
 }
 static void preview(GtkWidget *button,gpointer data) {
  (void)button;CommandView *v=data;gchar **argv=NULL,*directory=NULL;GHashTable *map=NULL;GError *error=NULL;gboolean ok=prepare(v,&argv,&directory,&map,&error);

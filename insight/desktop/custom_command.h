@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Bounded custom-command substitution, profile storage and diagnostic links.
+ * RU: Ограниченные подстановки команд, хранение профилей и ссылки диагностики. */
 #ifndef INSIGHT_CUSTOM_COMMAND_H
 #define INSIGHT_CUSTOM_COMMAND_H
 #include <gio/gio.h>
@@ -9,6 +11,9 @@ void insight_custom_command_free(gpointer);
  * sensitive for one-letter SI tokens, upper-case for long path variables. */
 gchar *insight_custom_expand(const gchar *,GHashTable *,GError **);
 gchar **insight_custom_argv(const gchar *,GHashTable *,GError **);
+typedef struct { GHashTable *values; gboolean modified; } InsightCustomFile;
+void insight_custom_file_free(gpointer);
+gchar **insight_custom_argv_files(const gchar *, GHashTable *, GPtrArray *, GError **);
 GPtrArray *insight_custom_commands_load(const gchar *,GError **);
 gboolean insight_custom_commands_save(const gchar *,GPtrArray *,GError **);
 typedef struct { gchar *path,*message;guint line,column; } InsightCustomLink;

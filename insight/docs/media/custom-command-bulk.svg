@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="330" viewBox="0 0 760 330">
+<rect width="760" height="330" rx="12" fill="#f2f5fa"/>
+<g font-family="sans-serif" fill="#24324a">
+<text x="22" y="30" font-size="19">Bulk custom commands / Команды для набора файлов</text>
+<g fill="#fff" stroke="#ccd6e5"><rect x="20" y="53" width="305" height="132" rx="7"/><rect x="362" y="53" width="378" height="132" rx="7"/></g>
+<text x="35" y="79" font-size="14">Named open buffers / Открытые файлы</text>
+<g font-family="monospace" font-size="14"><text x="35" y="107">main.cpp</text><text x="35" y="134">● changed name.inc</text><text x="35" y="161">read-only.v</text></g>
+<path d="M331 118h24m-6-6 6 6-6 6" fill="none" stroke="#4277aa" stroke-width="2"/>
+<text x="378" y="79" font-family="monospace" font-size="15">tool %f%o</text>
+<text x="378" y="105" font-size="13">3 files → 3 separate arguments</text>
+<text x="378" y="124" font-size="13">3 файла → 3 отдельных аргумента</text>
+<text x="378" y="151" font-family="monospace" font-size="15">tool %f%m</text>
+<text x="378" y="173" font-size="13">1 modified file / 1 изменённый файл</text>
+<rect x="20" y="202" width="720" height="55" rx="7" fill="#dcecff"/>
+<text x="35" y="225" font-size="14">Preview: captured argv / Предпросмотр: снимок аргументов</text>
+<text x="35" y="246" font-size="14">Run: fresh file set / Запуск: актуальный набор файлов</text>
+<text x="22" y="285" font-size="13">One process · Literal filenames · No auto-save · Empty set = no launch</text>
+<text x="22" y="308" font-size="13">Один процесс · Имена как данные · Без автосохранения · Пустой набор = отказ</text>
+</g></svg>

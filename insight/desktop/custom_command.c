@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Shared custom-command parsing, bounded substitutions and persistent profiles.
+ * RU: Общий разбор команд, ограниченные подстановки и постоянные профили. */
 #include "custom_command.h"
 #include "glib_compat.h"
 #include <string.h>
@@ -80,3 +82,5 @@ InsightCustomLink *insight_custom_source_link(const gchar *input,const gchar *di
  }
  g_string_free(plain,TRUE);return link;
 }
+
+#include "custom-command/bulk.inc"
