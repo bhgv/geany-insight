@@ -992,3 +992,7 @@ dist_insightdocmedia_DATA += insight/docs/media/file-compare-counterpart.svg
 EXTRA_DIST += insight/tests/ssh_console_runner_test.py
 
 dist_insightdocmedia_DATA += insight/docs/media/ssh-command-console.svg
+
+EXTRA_DIST += insight/tests/literal_selection_test.c insight/tests/literal_selection_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/literal-selection.svg

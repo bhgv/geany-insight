@@ -118,26 +118,78 @@ void insight_workbench_symbol_navigation(guint action) {
  if(action==0) show_symbol_info(NULL,NULL);
  else if(action<=3) show_function_target(NULL,GUINT_TO_POINTER(action));
 }
-static void structural_selection(GtkMenuItem *item,gpointer data) {
- (void)item; GeanyDocument *doc=document_get_current(); if(!doc) return;
- gint mode=GPOINTER_TO_INT(data); ScintillaObject *sci=doc->editor->sci;
- if(mode==2) { document_grab_focus(doc); keybindings_send_command(GEANY_KEY_GROUP_SELECT,GEANY_KEYS_SELECT_LINE); return; }
- if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)>1) {
-  ui_set_statusbar(TRUE,"Structural selection requires a single normal selection"); return;
- }
- gint length=sci_get_length(sci);
- if(length>2*1024*1024) { ui_set_statusbar(TRUE,"Structural selection supports files up to 2 MiB"); return; }
- InsightCodeDialect dialect;
- if(!source_dialect(doc->file_type,&dialect)) { ui_set_statusbar(TRUE,"Structural selection: this language has no lexical mask yet"); return; }
- gchar *text=sci_get_contents(sci,length+1); GError *error=NULL;
- gchar *mask=insight_source_code_mask(text,(gsize)length,dialect,&error);
- if(!mask) { g_free(text);ui_set_statusbar(TRUE,"Structural selection: %s",error ? error->message : "invalid text"); g_clear_error(&error); return; }
- size_t first=0,last=0;
- int found=mode==0 ? insight_select_suite(text,mask,(size_t)length,(size_t)sci_get_selection_start(sci),(size_t)sci_get_selection_end(sci),function_style(dialect),&first,&last) :
-  insight_select_match(mask,(size_t)length,(size_t)sci_get_current_position(sci),&first,&last);
- g_free(mask);g_free(text);
- if(found==1) { sci_set_selection(sci,(gint)first,(gint)last); SSM(sci,SCI_SCROLLCARET,0,0); document_grab_focus(doc); }
- else ui_set_statusbar(TRUE,found<0 ? "Structural selection could not be computed" : (mode==0 ? "No larger enclosing block" : "Place the caret on or immediately after a code bracket"));
+/* EN: Select a lexical block, matching delimiter/literal or line for the current document using mode in data.
+ * Keep source and Undo intact, allow read-only, and reject non-normal or virtual-space selections.
+ * RU: Выделяет лексический блок, пару разделителей/литерал либо строку текущего документа по mode из data.
+ * Не меняет исходник и Undo, допускает только чтение, отклоняет сложные выделения и виртуальные пробелы. */
+static void structural_selection(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    GeanyDocument *doc = document_get_current();
+    if (!doc)
+        return;
+    gint mode = GPOINTER_TO_INT(data);
+    ScintillaObject *sci = doc->editor->sci;
+    if (mode == 2)
+    {
+        document_grab_focus(doc);
+        keybindings_send_command(GEANY_KEY_GROUP_SELECT, GEANY_KEYS_SELECT_LINE);
+        return;
+    }
+    if (sci_get_selection_mode(sci) != SC_SEL_STREAM || SSM(sci, SCI_GETSELECTIONS, 0, 0) != 1 ||
+        SSM(sci, SCI_GETSELECTIONNCARETVIRTUALSPACE, 0, 0) ||
+        SSM(sci, SCI_GETSELECTIONNANCHORVIRTUALSPACE, 0, 0))
+    {
+        ui_set_statusbar(TRUE, "Structural selection requires a single normal selection");
+        return;
+    }
+    gint length = sci_get_length(sci);
+    if (length > 2 * 1024 * 1024)
+    {
+        ui_set_statusbar(TRUE, "Structural selection supports files up to 2 MiB");
+        return;
+    }
+    InsightCodeDialect dialect;
+    if (!source_dialect(doc->file_type, &dialect))
+    {
+        ui_set_statusbar(TRUE, "Structural selection: this language has no lexical mask yet");
+        return;
+    }
+    gchar *text = sci_get_contents(sci, length + 1);
+    GError *error = NULL;
+    gchar *mask = insight_source_code_mask(text, (gsize)length, dialect, &error);
+    if (!mask)
+    {
+        g_free(text);
+        ui_set_statusbar(TRUE, "Structural selection: %s", error ? error->message : "invalid text");
+        g_clear_error(&error);
+        return;
+    }
+    size_t first = 0, last = 0;
+    gint found;
+    if (mode == 0)
+        found = insight_select_suite(text, mask, length, sci_get_selection_start(sci),
+            sci_get_selection_end(sci), function_style(dialect), &first, &last);
+    else
+    {
+        gsize caret = sci_get_current_position(sci);
+        gboolean code_bracket = caret < (gsize)length && strchr("()[]{}", mask[caret]);
+        found = code_bracket ? insight_select_match(mask, length, caret, &first, &last) :
+            insight_source_select_literal(text, length, dialect, caret, &first, &last, NULL);
+        if (!found && !code_bracket)
+            found = insight_select_match(mask, length, caret, &first, &last);
+    }
+    g_free(mask);
+    g_free(text);
+    if (found == 1)
+    {
+        sci_set_selection(sci, first, last);
+        SSM(sci, SCI_SCROLLCARET, 0, 0);
+        document_grab_focus(doc);
+    }
+    else
+        ui_set_statusbar(TRUE, found < 0 ? "Structural selection could not be computed" :
+            (mode == 0 ? "No larger enclosing block" : "Place the caret on or immediately after a bracket or quote delimiter"));
 }
 static gboolean function_tag(const TMTag *tag) { return tag && tag->line && (tag->type&(tm_tag_function_t|tm_tag_method_t)); }
 static void function_navigation(GtkMenuItem *item,gpointer data) {
@@ -242,24 +294,45 @@ static void symbol_text_from_outline(GtkTreeView *view,guint command) {
  if(line && name) symbol_text_edit(doc,name,line,command);
  g_free(name);
 }
-static void create_structural_selection_menu(void) {
- GtkWidget *edit=ui_lookup_widget(main_widgets.window,"edit1_menu");
- GtkWidget *item=gtk_menu_item_new_with_label("Structural selection"),*menu=gtk_menu_new();
- gtk_menu_item_set_submenu(GTK_MENU_ITEM(item),menu); gtk_menu_shell_append(GTK_MENU_SHELL(edit),item);
- const char *labels[]={"Select enclosing block / expand","Select matching brackets","Select line"};
- const char *keys[]={"<Primary><Alt>b","<Primary><Alt>m","<Primary><Alt>l"};
- for(guint i=0;i<3;i++) {
-  GtkWidget *entry=gtk_menu_item_new_with_label(labels[i]);if(i==0) gtk_widget_set_name(entry,"insight-select-enclosing-block"); gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry);
-  g_signal_connect(entry,"activate",G_CALLBACK(structural_selection),GINT_TO_POINTER((gint)i));
-  guint key; GdkModifierType modifiers; gtk_accelerator_parse(keys[i],&key,&modifiers);
-  gtk_widget_add_accelerator(entry,"activate",wb.navigation_accels,key,modifiers,GTK_ACCEL_VISIBLE);
- }
- GtkWidget *function=gtk_menu_item_new_with_label("Select Function");gtk_widget_set_name(function,"insight-select-function");gtk_menu_shell_append(GTK_MENU_SHELL(menu),function);
- g_signal_connect(function,"activate",G_CALLBACK(select_function),NULL);
- gtk_widget_add_accelerator(function,"activate",wb.navigation_accels,GDK_KEY_f,GEANY_PRIMARY_MOD_MASK|GDK_MOD1_MASK,GTK_ACCEL_VISIBLE);
- gtk_menu_shell_append(GTK_MENU_SHELL(menu),gtk_separator_menu_item_new());
- const gchar *ops[]={"Copy Symbol","Cut Symbol","Duplicate Symbol","Paste Symbol…"};
- const gchar *ids[]={"insight-copy-symbol","insight-cut-symbol","insight-duplicate-symbol","insight-paste-symbol"};
- for(guint i=0;i<G_N_ELEMENTS(ops);i++) { GtkWidget *entry=gtk_menu_item_new_with_label(ops[i]);gtk_widget_set_name(entry,ids[i]);keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR,GEANY_KEYS_INSIGHT_COPYSYMBOL+i,entry);g_signal_connect(entry,"activate",G_CALLBACK(symbol_text_command),GUINT_TO_POINTER(i));gtk_menu_shell_append(GTK_MENU_SHELL(menu),entry); }
- gtk_widget_show_all(item);
+/* EN: Build structural selection and symbol-edit commands with stable IDs and their existing accelerators.
+ * RU: Создаёт команды структурного выделения и правки символов с устойчивыми именами и прежними клавишами. */
+static void create_structural_selection_menu(void)
+{
+    GtkWidget *edit = ui_lookup_widget(main_widgets.window, "edit1_menu");
+    GtkWidget *item = gtk_menu_item_new_with_label("Structural selection");
+    GtkWidget *menu = gtk_menu_new();
+    gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), menu);
+    gtk_menu_shell_append(GTK_MENU_SHELL(edit), item);
+    const char *labels[] = {"Select enclosing block / expand", "Select matching brackets or quotes", "Select line"};
+    const char *keys[] = {"<Primary><Alt>b", "<Primary><Alt>m", "<Primary><Alt>l"};
+    const char *names[] = {"insight-select-enclosing-block", "insight-select-matching", "insight-select-structural-line"};
+    for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
+    {
+        GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);
+        gtk_widget_set_name(entry, names[i]);
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), entry);
+        g_signal_connect(entry, "activate", G_CALLBACK(structural_selection), GINT_TO_POINTER((gint)i));
+        guint key;
+        GdkModifierType modifiers;
+        gtk_accelerator_parse(keys[i], &key, &modifiers);
+        gtk_widget_add_accelerator(entry, "activate", wb.navigation_accels, key, modifiers, GTK_ACCEL_VISIBLE);
+    }
+    GtkWidget *function = gtk_menu_item_new_with_label("Select Function");
+    gtk_widget_set_name(function, "insight-select-function");
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), function);
+    g_signal_connect(function, "activate", G_CALLBACK(select_function), NULL);
+    gtk_widget_add_accelerator(function, "activate", wb.navigation_accels, GDK_KEY_f,
+        GEANY_PRIMARY_MOD_MASK | GDK_MOD1_MASK, GTK_ACCEL_VISIBLE);
+    gtk_menu_shell_append(GTK_MENU_SHELL(menu), gtk_separator_menu_item_new());
+    const gchar *ops[] = {"Copy Symbol", "Cut Symbol", "Duplicate Symbol", "Paste Symbol…"};
+    const gchar *ids[] = {"insight-copy-symbol", "insight-cut-symbol", "insight-duplicate-symbol", "insight-paste-symbol"};
+    for (guint i = 0; i < G_N_ELEMENTS(ops); i++)
+    {
+        GtkWidget *entry = gtk_menu_item_new_with_label(ops[i]);
+        gtk_widget_set_name(entry, ids[i]);
+        keybindings_attach_menu(GEANY_KEY_GROUP_EDITOR, GEANY_KEYS_INSIGHT_COPYSYMBOL + i, entry);
+        g_signal_connect(entry, "activate", G_CALLBACK(symbol_text_command), GUINT_TO_POINTER(i));
+        gtk_menu_shell_append(GTK_MENU_SHELL(menu), entry);
+    }
+    gtk_widget_show_all(item);
 }

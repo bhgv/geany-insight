@@ -19,4 +19,7 @@ guchar *insight_source_region_membership(const char *,gsize,InsightCodeDialect,I
 /* Replace comments and quoted strings with spaces, retaining byte offsets and
  * CR/LF. Lexical only: no overload resolution, preprocessing or interpolation. */
 gchar *insight_source_code_mask(const char *,gsize,InsightCodeDialect,GError **);
+/* Select a completed lexical literal at/after its delimiter, returning 1/0/-1.
+ * Outputs are UTF-8 byte ranges including delimiters; comments and unfinished literals are excluded. */
+gint insight_source_select_literal(const gchar *, gsize, InsightCodeDialect, gsize, gsize *, gsize *, GError **);
 #endif

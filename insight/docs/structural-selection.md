@@ -77,3 +77,15 @@ Copy допускает исходник только для чтения. Пр�
 ![Реальный просмотр Paste Symbol в Linux](media/paste-symbol.jpg)
 
 Окно полного редактора под Linux/Xvfb; искусственные C-примеры из native-теста. Справа выделена вставка перед исходной функцией.
+
+## Select matching quotes and literals
+
+**Edit → Structural selection → Select matching brackets or quotes**, **Ctrl+Alt+M**, now selects completed lexical literals as well as code brackets. Place the caret on, or just after, an opening/closing delimiter. Selection includes the delimiters and uses source byte positions, including UTF-8 and CRLF. It does not edit text, clipboard or Undo and works in read-only documents.
+
+Supported forms follow the existing lexical dialects: C/C++ quoted strings and characters, C++ raw strings, Verilog double-quoted strings, Python ordinary/triple quotes, Lua ordinary/long-bracket literals, JavaScript quotes/templates and shell quotes. Comments, unfinished tokens, C++ digit separators and Verilog numeric apostrophes/escaped identifiers do not become literals. Interpolation is treated as opaque text; this is lexical selection, not an AST. Encoding/language prefixes before ordinary quotes are excluded, while raw/long delimiters belong to their token.
+
+An actual code bracket at the caret takes precedence over the preceding literal. Otherwise a literal boundary takes precedence over an adjacent preceding bracket; this lets the opening quote in `f("value")` select the string. At a shared boundary between adjacent literals, the next literal wins. Unsupported languages, multiple/rectangular selections and virtual-space selections retain their position. Source size is limited to 2 MiB.
+
+![Matching literal selection](media/literal-selection.svg)
+
+Reference: [Source Insight Select Match](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Select_Match.htm). Existing bracket and enclosing-block shortcuts are unchanged.

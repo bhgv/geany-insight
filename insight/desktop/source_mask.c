@@ -13,11 +13,12 @@ static void erase(char *out, gsize start, gsize end)
 }
 
 /* EN: Return the end of a Lua long literal at start in text of size bytes,
- * size if unterminated, or start if no opener is present.
+ * size if unterminated, or start if no opener is present; closed reports a complete token.
  * RU: Возвращает конец длинного литерала Lua в start текста размером size,
- * size для незакрытого литерала либо start, если начала нет. */
-static gsize lua_long(const char *text, gsize size, gsize start)
+ * size для незакрытого литерала либо start, если начала нет; closed сообщает завершённость. */
+static gsize lua_long(const char *text, gsize size, gsize start, gboolean *closed)
 {
+    if (closed) *closed = FALSE;
     if (start >= size || text[start] != '[') return start;
     gsize i = start + 1;
     while (i < size && text[i] == '=') i++;
@@ -28,17 +29,22 @@ static gsize lua_long(const char *text, gsize size, gsize start)
         if (text[i] != ']') continue;
         gsize j = i + 1;
         while (j < size && text[j] == '=') j++;
-        if (j - i - 1 == equals && j < size && text[j] == ']') return j + 1;
+        if (j - i - 1 == equals && j < size && text[j] == ']')
+        {
+            if (closed) *closed = TRUE;
+            return j + 1;
+        }
     }
     return size;
 }
 
 /* EN: Return the end of a C++ raw string at start in text of size bytes,
- * size if unterminated, or start for an invalid opener.
+ * size if unterminated, or start for an invalid opener; closed reports a complete token.
  * RU: Возвращает конец сырой строки C++ в start текста размером size,
- * size для незакрытой строки либо start при неверном начале. */
-static gsize raw_string(const char *text, gsize size, gsize start)
+ * size для незакрытой строки либо start при неверном начале; closed сообщает завершённость. */
+static gsize raw_string(const char *text, gsize size, gsize start, gboolean *closed)
 {
+    if (closed) *closed = FALSE;
     if (start + 2 >= size || text[start] != 'R' || text[start + 1] != '"') return start;
     gsize body = start + 2;
     while (body < size && body - start - 2 <= 16 && text[body] != '(')
@@ -51,18 +57,46 @@ static gsize raw_string(const char *text, gsize size, gsize start)
     for (gsize i = body + 1; i < size; i++)
         if (text[i] == ')' && i + delimiter + 1 < size &&
             !memcmp(text + i + 1, text + start + 2, delimiter) &&
-            text[i + delimiter + 1] == '"') return i + delimiter + 2;
+            text[i + delimiter + 1] == '"')
+        {
+            if (closed) *closed = TRUE;
+            return i + delimiter + 2;
+        }
     return size;
 }
 
+typedef struct
+{
+    gsize caret, first, last;
+    gboolean found;
+} LiteralPick;
+
+/* EN: Record a completed non-comment token [start,end) near pick's caret, with explicit delimiter widths.
+ * Prefer a token starting at the caret over an adjacent token ending there; never change source bytes.
+ * RU: Сохраняет завершённый литерал [start,end) у курсора pick с явной шириной разделителей.
+ * Начало у курсора предпочтительнее конца соседнего литерала; исходные байты не меняются. */
+static void pick_literal(LiteralPick *pick, gsize start, gsize end, gsize opening, gsize closing)
+{
+    if (!pick || opening + closing > end - start)
+        return;
+    gboolean boundary = (pick->caret >= start && pick->caret <= start + opening) ||
+        (pick->caret >= end - closing && pick->caret <= end);
+    if (boundary && (!pick->found || pick->caret == start))
+    {
+        pick->first = start;
+        pick->last = end;
+        pick->found = TRUE;
+    }
+}
+
 /* EN: Allocate a region mask for text/size using dialect. membership chooses
- * binary membership rather than display text. Return NULL and set error for
+ * binary membership rather than display text; optional pick records a literal boundary. Return NULL and set error for
  * invalid input; retain all byte positions and line endings otherwise.
  * RU: Выделяет маску region текста text/size для dialect. membership выбирает
- * бинарную принадлежность вместо текста. Возвращает NULL и error при неверных
+ * бинарную принадлежность вместо текста; необязательный pick сохраняет границы литерала. Возвращает NULL и error при неверных
  * данных; иначе сохраняет все байтовые позиции и переводы строк. */
 static gchar *region_mask(const char *text, gsize size, InsightCodeDialect dialect,
-                         InsightSourceRegion region, gboolean membership, GError **error)
+                         InsightSourceRegion region, gboolean membership, LiteralPick *pick, GError **error)
 {
     if (!text || size > 2u * 1024u * 1024u || memchr(text, 0, size) ||
         !g_utf8_validate(text, (gssize)size, NULL) || dialect < INSIGHT_CODE_C ||
@@ -80,7 +114,8 @@ static gchar *region_mask(const char *text, gsize size, InsightCodeDialect diale
     for (gsize i = 0; i < size;)
     {
         gsize start = i, end = i;
-        gboolean comment = FALSE;
+        gboolean comment = FALSE, closed = FALSE, valid_literal = TRUE;
+        gsize opening = 1, closing = 1;
         /* HDL escaped identifiers can contain quotes and comment delimiters. */
         if (dialect == INSIGHT_CODE_VERILOG && text[i] == '\\')
         {
@@ -94,9 +129,27 @@ static gchar *region_mask(const char *text, gsize size, InsightCodeDialect diale
             i++;
             continue;
         }
-        if (dialect == INSIGHT_CODE_C && text[i] == 'R') end = raw_string(text, size, i);
+        if (dialect == INSIGHT_CODE_C && text[i] == 'R')
+        {
+            end = raw_string(text, size, i, &closed);
+            if (closed)
+            {
+                gsize body = i + 2;
+                while (text[body] != '(') body++;
+                opening = body - i + 1;
+                closing = body - i;
+            }
+        }
         if (end == i && dialect == INSIGHT_CODE_LUA && text[i] == '[')
-            end = lua_long(text, size, i);
+        {
+            end = lua_long(text, size, i, &closed);
+            if (closed)
+            {
+                opening = 2;
+                while (text[i + opening - 1] == '=') opening++;
+                closing = opening;
+            }
+        }
         gboolean slash = (dialect == INSIGHT_CODE_C || dialect == INSIGHT_CODE_JS ||
             dialect == INSIGHT_CODE_VERILOG) && i + 1 < size && text[i] == '/';
         gboolean lua = dialect == INSIGHT_CODE_LUA && i + 1 < size &&
@@ -113,7 +166,7 @@ static gchar *region_mask(const char *text, gsize size, InsightCodeDialect diale
         else if (end == i && (hash || lua || (slash && text[i + 1] == '/')))
         {
             comment = TRUE;
-            if (lua) end = lua_long(text, size, i + 2);
+            if (lua) end = lua_long(text, size, i + 2, NULL);
             if (!lua || end == i + 2)
             {
                 end = i;
@@ -141,23 +194,31 @@ static gchar *region_mask(const char *text, gsize size, InsightCodeDialect diale
             gboolean triple = dialect == INSIGHT_CODE_PYTHON && i + 2 < size &&
                 text[i + 1] == quote && text[i + 2] == quote;
             gsize width = triple ? 3 : 1;
+            opening = closing = width;
             end = i + width;
             while (end < size)
             {
                 if (text[end] == '\\')
                 {
-                    end = MIN(size, end + 2);
+                    gsize escaped = end + 2 < size && text[end + 1] == '\r' && text[end + 2] == '\n' ? 3 : 2;
+                    end = MIN(size, end + escaped);
                     continue;
                 }
                 if (text[end] == quote && (!triple || (end + 2 < size &&
                     text[end + 1] == quote && text[end + 2] == quote)))
                 {
                     end += width;
+                    closed = TRUE;
                     break;
                 }
+                if ((text[end] == '\r' || text[end] == '\n') && !triple &&
+                    dialect != INSIGHT_CODE_SHELL && quote != '`')
+                    valid_literal = FALSE;
                 end++;
             }
         }
+        if (!comment && closed && valid_literal)
+            pick_literal(pick, start, end, opening, closing);
         if (end == start)
         {
             i++;
@@ -188,7 +249,7 @@ static gchar *region_mask(const char *text, gsize size, InsightCodeDialect diale
 gchar *insight_source_region_mask(const char *text, gsize size, InsightCodeDialect dialect,
                                  InsightSourceRegion region, GError **error)
 {
-    return region_mask(text, size, dialect, region, FALSE, error);
+    return region_mask(text, size, dialect, region, FALSE, NULL, error);
 }
 
 /* EN: Allocate binary membership for text/size, dialect and region; NULL/error
@@ -198,7 +259,7 @@ gchar *insight_source_region_mask(const char *text, gsize size, InsightCodeDiale
 guchar *insight_source_region_membership(const char *text, gsize size, InsightCodeDialect dialect,
                                        InsightSourceRegion region, GError **error)
 {
-    return (guchar *)region_mask(text, size, dialect, region, TRUE, error);
+    return (guchar *)region_mask(text, size, dialect, region, TRUE, NULL, error);
 }
 
 /* EN: Allocate code-only text/size for dialect; NULL/error denotes invalid input.
@@ -208,4 +269,28 @@ guchar *insight_source_region_membership(const char *text, gsize size, InsightCo
 gchar *insight_source_code_mask(const char *text, gsize size, InsightCodeDialect dialect, GError **error)
 {
     return insight_source_region_mask(text, size, dialect, INSIGHT_REGION_CODE, error);
+}
+
+/* EN: Select a complete literal at a delimiter beside caret in text/size for dialect. Return 1, 0, or -1/error.
+ * On success write byte offsets to first/last, including delimiters but excluding encoding/language prefixes.
+ * RU: Выделяет завершённый литерал у разделителя возле caret в text/size для dialect. Возвращает 1, 0 либо -1/error.
+ * При успехе записывает в first/last байтовые границы с разделителями, без префиксов кодировки/языка. */
+gint insight_source_select_literal(const gchar *text, gsize size, InsightCodeDialect dialect,
+                                    gsize caret, gsize *first, gsize *last, GError **error)
+{
+    if (!first || !last || caret > size)
+    {
+        g_set_error_literal(error, G_FILE_ERROR, G_FILE_ERROR_INVAL, "Invalid literal selection position");
+        return -1;
+    }
+    LiteralPick pick = {caret, 0, 0, FALSE};
+    gchar *mask = region_mask(text, size, dialect, INSIGHT_REGION_CODE, FALSE, &pick, error);
+    if (!mask)
+        return -1;
+    g_free(mask);
+    if (!pick.found)
+        return 0;
+    *first = pick.first;
+    *last = pick.last;
+    return 1;
 }

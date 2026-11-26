@@ -1327,4 +1327,5 @@ install_data(
   'insight/docs/media/file-compare-mouse.svg',
   'insight/docs/media/file-compare-counterpart.svg',
   'insight/docs/media/ssh-command-console.svg',
+  'insight/docs/media/literal-selection.svg',
   install_dir: cdata.get('GEANY_DATA_DIR') / 'insight' / 'docs' / 'media')

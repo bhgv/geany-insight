@@ -1034,3 +1034,10 @@ executable('test_insight_script_debugger_lifecycle_gui',
   '../insight/tests/script_debugger_lifecycle_gui_test.c', dependencies: test_deps)
 
 executable('test_insight_file_compare_gui', '../insight/tests/file_compare_gui_test.c', dependencies: test_deps)
+
+literal_selection_test = executable('test_insight_literal_selection', '../insight/tests/literal_selection_test.c',
+ '../insight/desktop/source_mask.c', dependencies: glib)
+test('Insight literal delimiter selection', literal_selection_test)
+literal_selection_gui_test = executable('test_insight_literal_selection_gui',
+ '../insight/tests/literal_selection_gui_test.c', dependencies: test_deps)
+test('Insight native literal delimiter selection GUI', literal_selection_gui_test, timeout: 45, is_parallel: false)
