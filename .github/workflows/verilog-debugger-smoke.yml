@@ -63,7 +63,7 @@ jobs:
     env:
       INSIGHT_SMOKE_CLANG: ${{ inputs.full_clang && 'internal' || 'disabled' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
