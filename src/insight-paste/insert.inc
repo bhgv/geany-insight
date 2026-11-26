@@ -114,21 +114,19 @@ gboolean insight_paste_text(ScintillaObject *sci, const gchar *text)
     return position_policy() && paste_plain(sci, text, FALSE);
 }
 
-/* EN: Apply the captured clipboard text only to the still-current unmodified destination and unchanged paste preferences.
- * RU: Применяет полученный текст буфера только к текущему неизменному назначению и неизменным настройкам вставки. */
-static void clipboard_ready(GtkClipboard *clipboard, const gchar *text, gpointer data)
+/* EN: Finish retained request r with text or native fallback only for the unchanged destination/preferences; release r.
+ * RU: Завершает удерживаемый r текстом text либо штатной вставкой native только при неизменном назначении; освобождает r. */
+static void finish_clipboard(Request *r, const gchar *text, gboolean native)
 {
-    (void)clipboard;
-    Request *r = data;
     GeanyDocument *doc = document_for_sci(r->sci);
     gboolean unchanged = doc && doc->is_valid && doc->id == r->id && document_get_current() == doc &&
         state(r->sci)->generation == r->generation &&
         SEND(r->sci, SCI_GETANCHOR, 0, 0) == r->anchor &&
         sci_get_current_position(r->sci) == r->caret && plain_allowed(r->sci) &&
         doc->file_type == r->filetype && preference_generation == r->preferences && allowed(r->sci) == r->smart;
-    if (unchanged && text && *text)
+    if (unchanged && (native || (text && *text)))
     {
-        if (!paste_whole_lines(r->sci, text) && !paste_plain(r->sci, text, TRUE))
+        if (native || (!paste_whole_lines(r->sci, text) && !paste_plain(r->sci, text, TRUE)))
             SEND(r->sci, SCI_PASTE, 0, 0);
     }
     else if (!unchanged)
@@ -143,12 +141,43 @@ static void clipboard_ready(GtkClipboard *clipboard, const gchar *text, gpointer
     g_object_unref(r->sci);
     g_free(r);
 }
-/* EN: Read GTK clipboard for retained Request data on the main loop.
- * RU: Читает буфер GTK для удерживаемого Request data в основном цикле. */
+/* EN: Read raw UTF-8 selection bytes without GTK get_text EOL normalization; retry the MIME target when missing.
+ * clipboard is the source, selection is borrowed, data owns Request until completion or retry; unsupported shapes use native Paste.
+ * RU: Читает исходные байты UTF-8 без нормализации EOL get_text GTK; при отсутствии пробует MIME.
+ * clipboard — источник, selection заимствован, data владеет Request до завершения/повтора; особые формы вставляются штатно. */
+static void clipboard_contents_ready(GtkClipboard *clipboard, GtkSelectionData *selection, gpointer data)
+{
+    gint length = gtk_selection_data_get_length(selection);
+    if (length < 0)
+    {
+        GdkAtom target = gtk_selection_data_get_target(selection);
+        if (target == gdk_atom_intern_static_string("UTF8_STRING"))
+            gtk_clipboard_request_contents(clipboard, gdk_atom_intern_static_string("text/plain;charset=utf-8"),
+                clipboard_contents_ready, data);
+        else
+            finish_clipboard(data, NULL, TRUE);
+        return;
+    }
+    const guchar *bytes = gtk_selection_data_get_data(selection);
+#ifdef G_OS_WIN32
+    /* Native Windows clipboard text may include one terminating NUL. */
+    if (length > 0 && bytes[length - 1] == 0)
+        length--;
+#endif
+    gboolean native = length > 1024 * 1024 ||
+        (length > 0 && (!bytes || memchr(bytes, 0, length) ||
+            !g_utf8_validate((const gchar *)bytes, length, NULL)));
+    gchar *text = !native && length > 0 ? g_strndup((const gchar *)bytes, length) : NULL;
+    finish_clipboard(data, text, native);
+    g_free(text);
+}
+
+/* EN: Read raw UTF-8 GTK clipboard contents for retained Request data on the main loop.
+ * RU: Читает исходное содержимое UTF-8 буфера GTK для удерживаемого Request data в основном цикле. */
 static gboolean request_clipboard(gpointer data)
 {
-    Request *r = data;
-    gtk_clipboard_request_text(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD), clipboard_ready, r);
+    gtk_clipboard_request_contents(gtk_clipboard_get(GDK_SELECTION_CLIPBOARD),
+        gdk_atom_intern_static_string("UTF8_STRING"), clipboard_contents_ready, data);
     return G_SOURCE_REMOVE;
 }
 /* EN: Capture sci for asynchronous guarded Paste when intelligent handling or a post-paste policy is active.
