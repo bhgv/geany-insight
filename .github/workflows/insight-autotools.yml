@@ -1,3 +1,5 @@
+# EN: Validate Autotools, legacy GTK/GLib linkage and bounded diagnostic parsing on the baseline engine.
+# RU: Проверяет Autotools, старые GTK/GLib и ограниченный разбор диагностики на минимальном движке.
 name: Insight Autotools and minimum GLib
 on:
   push:
@@ -69,6 +71,8 @@ jobs:
             pkg-config --modversion gio-2.0
             cc -std=c99 -Wall -Wextra -Werror insight/tests/glib_compat_test.c $(pkg-config --cflags --libs gio-2.0) -o /tmp/glib-compat
             /tmp/glib-compat
+            cc -std=c99 -Wall -Wextra -UNDEBUG insight/tests/custom_command_diagnostics_test.c insight/desktop/custom_command.c $(pkg-config --cflags --libs gio-2.0) -o /tmp/diagnostic-patterns
+            /tmp/diagnostic-patterns
           '
 
   gtk322:

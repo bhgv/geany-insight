@@ -235,6 +235,13 @@ static gboolean step(gpointer data)
     }
     else if (phase == 4)
     {
+        gchar *counter = g_build_filename(directory, "runs", NULL);
+        gchar *number = NULL;
+        gboolean ready = g_file_get_contents(counter, &number, NULL, NULL) && g_ascii_strtoull(number, NULL, 10) == 4;
+        g_free(counter);
+        g_free(number);
+        if (!ready)
+            return G_SOURCE_CONTINUE;
         g_assert_nonnull(g_object_get_data(G_OBJECT(tool), "insight-custom-command-busy"));
         click("insight-custom-command-stop");
     }
