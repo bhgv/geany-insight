@@ -998,3 +998,5 @@ EXTRA_DIST += insight/tests/literal_selection_test.c insight/tests/literal_selec
 dist_insightdocmedia_DATA += insight/docs/media/literal-selection.svg
 
 EXTRA_DIST += insight/tests/paste_policy_gui_test.c
+
+EXTRA_DIST += insight/tests/intelligent-paste/positions.inc

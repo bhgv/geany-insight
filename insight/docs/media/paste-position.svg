@@ -5,9 +5,9 @@
 <text x="22" y="57" font-size="13">Paste · Partial replacement / Замена фрагмента · Paste Line · Clips</text>
 <g fill="#fff" stroke="#ccd6e5"><rect x="20" y="78" width="226" height="93" rx="6"/><rect x="267" y="78" width="226" height="93" rx="6"/><rect x="514" y="78" width="226" height="93" rx="6"/></g>
 <g font-size="14"><text x="36" y="103">Start / Начало</text><text x="283" y="103">End / Конец</text><text x="530" y="103">Select / Выделить</text></g>
-<rect x="567" y="120" width="115" height="29" rx="3" fill="#c8e1ff"/>
-<g font-family="monospace" font-size="16"><text x="36" y="140">A pasted() B</text><text x="283" y="140">A pasted() B</text><text x="530" y="140">A pasted() B</text></g>
-<g stroke="#c83c45" stroke-width="3"><path d="M55 119v28"/><path d="M433 119v28"/></g>
+<rect x="554" y="120" width="80" height="29" rx="3" fill="#c8e1ff"/>
+<g font-family="monospace" font-size="16"><text x="36" y="140">A</text><text x="60" y="140" textLength="80" lengthAdjust="spacingAndGlyphs">pasted()</text><text x="150" y="140">B</text><text x="283" y="140">A</text><text x="307" y="140" textLength="80" lengthAdjust="spacingAndGlyphs">pasted()</text><text x="397" y="140">B</text><text x="530" y="140">A</text><text x="554" y="140" textLength="80" lengthAdjust="spacingAndGlyphs">pasted()</text><text x="644" y="140">B</text></g>
+<g stroke="#c83c45" stroke-width="3"><path d="M60 119v28"/><path d="M387 119v28"/></g>
 <rect x="20" y="190" width="720" height="49" rx="6" fill="#dcecff"/>
 <text x="36" y="212" font-size="14">☑ Always select pasted text / Всегда выделять вставленный текст</text>
 <text x="36" y="230" font-size="12">Overrides Start/End / Приоритет над началом и концом → Select / Выделить</text>
