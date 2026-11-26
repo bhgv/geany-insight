@@ -89,3 +89,17 @@ An actual code bracket at the caret takes precedence over the preceding literal.
 ![Matching literal selection](media/literal-selection.svg)
 
 Reference: [Source Insight Select Match](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Select_Match.htm). Existing bracket and enclosing-block shortcuts are unchanged.
+
+## Expand and shrink as one selection workflow
+
+| Action | Shortcut |
+| --- | --- |
+| Expand to enclosing block | Ctrl+Alt+B |
+| Select matching bracket or literal | Ctrl+Alt+M |
+| Select current line | Ctrl+Alt+L |
+| Select enclosing function | Ctrl+Alt+F |
+| Restore previous structural selection | Ctrl+Alt+Shift+B |
+
+**Shrink structural selection** restores the previous exact anchor and caret, including reversed selections. For example, select a string, expand to its argument parentheses, expand to the enclosing block, then shrink through the same ranges back to the original caret. Line and Function selections participate in the same history. A repeated command that leaves the range unchanged adds no duplicate entry. This reversible selection history is an editor extension; it is not a claim of a corresponding Source Insight command.
+
+Each editor owns up to 128 prior ranges. Switching documents preserves each independent stack; closing a document discards it. Text modifications, including Undo/Redo, clear the stack even if the original bytes are restored. Mouse clicks, observed manual selection moves and source file-type changes invalidate it as well. A complex/multiple/virtual-space selection is refused; no source mutation, clipboard operation or text Undo entry is introduced. The stack is transient and is not saved in project settings. Restoring an empty/invalidated stack leaves the current selection untouched.

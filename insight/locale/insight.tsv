@@ -3584,3 +3584,5 @@ SSH reached the server, but remote startup requested sudo without a terminal. Us
 Cannot create SSH settings.	Не удалось создать настройки SSH.
 Select matching brackets or quotes	Выделить парные скобки или кавычки
 Place the caret on or immediately after a bracket or quote delimiter	Установите курсор на разделитель скобки или кавычки либо сразу после него
+Shrink structural selection	Сузить структурное выделение
+No previous structural selection to restore	Нет предыдущего структурного выделения для восстановления

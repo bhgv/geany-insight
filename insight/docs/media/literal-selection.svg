@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="330" viewBox="0 0 900 330">
- <rect width="900" height="330" rx="14" fill="#eef3f7"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="435" viewBox="0 0 900 435">
+ <rect width="900" height="435" rx="14" fill="#eef3f7"/>
  <g font-family="sans-serif" fill="#19364b">
   <text x="24" y="36" font-size="23" font-weight="bold">Select Match · Парные разделители · Ctrl+Alt+M</text>
   <text x="24" y="67" font-size="17">Caret at delimiter → select complete literal / Курсор у разделителя → весь литерал</text>
@@ -10,8 +10,11 @@
    <text x="40" y="125">f("value with \"quotes\"");</text>
    <text x="40" y="166">auto s = R"tag(α "text")tag";</text>
    <text x="40" y="207">8'hff;   // "comment" → ignored / пропускается</text>
-  </g>
+   </g>
   <text x="24" y="260" font-size="17">UTF-8 · CRLF · C/C++ · Verilog · Python · Lua · JavaScript · shell</text>
   <text x="24" y="295" font-size="17">Read-only allowed / Только чтение — можно · Text and Undo unchanged / Текст и Undo сохранены</text>
+  <rect x="24" y="320" width="852" height="92" rx="9" fill="white" stroke="#b5c8d7"/>
+  <text x="40" y="350" font-size="18" font-weight="bold">String → Arguments → Block / Строка → Аргументы → Блок</text>
+  <text x="40" y="386" font-size="17">Ctrl+Alt+Shift+B → restore previous range / вернуть прежнее выделение</text>
  </g>
 </svg>

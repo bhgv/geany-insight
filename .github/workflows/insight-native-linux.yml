@@ -205,6 +205,10 @@ jobs:
           fi
           grep -F 'build_external_clang.py' missing-internal.log
           meson setup _minimal-provider -Dclang=disabled -Dhtml-docs=disabled -Dpdf-docs=disabled -Dapi-docs=disabled -Dgtkdoc=false -Dvte=false -Dmac-integration=disabled
+      - name: Verify completed literal boundaries before building the editor
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror $(pkg-config --cflags glib-2.0) insight/desktop/source_mask.c insight/tests/literal_selection_test.c -o /tmp/insight-literal-selection $(pkg-config --libs glib-2.0)
+          /tmp/insight-literal-selection
       - name: Configure and build the complete editor
         id: native-build
         run: |

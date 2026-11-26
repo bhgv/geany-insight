@@ -289,6 +289,7 @@ libgeany_la_SOURCES += \
 	insight-workbench/panels/layout-slots.inc \
 	insight-workbench/panels/layout-files.inc \
 	insight-workbench/symbols/symbol-info.inc \
+	insight-workbench/symbols/selection-stack.inc \
 	insight-workbench/workspace/git-and-project.inc \
 	insight-workbench/search/search-controls.inc \
 	insight-workbench/search/search-and-toolbar.inc \

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /* EN: Symbol details and source navigation.
  * RU: Сведения о символах и переходы к исходникам. */
+#include "selection-stack.inc"
 
 static void info_open(SymbolInfo *info,gboolean jump) {
  if(!info->path || !info->digest || !info->line) return;
@@ -118,9 +119,9 @@ void insight_workbench_symbol_navigation(guint action) {
  if(action==0) show_symbol_info(NULL,NULL);
  else if(action<=3) show_function_target(NULL,GUINT_TO_POINTER(action));
 }
-/* EN: Select a lexical block, matching delimiter/literal or line for the current document using mode in data.
+/* EN: Select or restore a lexical block, matching delimiter/literal or line for the current document using mode in data.
  * Keep source and Undo intact, allow read-only, and reject non-normal or virtual-space selections.
- * RU: Выделяет лексический блок, пару разделителей/литерал либо строку текущего документа по mode из data.
+ * RU: Выделяет или восстанавливает лексический блок, пару разделителей/литерал либо строку текущего документа по mode из data.
  * Не меняет исходник и Undo, допускает только чтение, отклоняет сложные выделения и виртуальные пробелы. */
 static void structural_selection(GtkMenuItem *item, gpointer data)
 {
@@ -130,17 +131,22 @@ static void structural_selection(GtkMenuItem *item, gpointer data)
         return;
     gint mode = GPOINTER_TO_INT(data);
     ScintillaObject *sci = doc->editor->sci;
-    if (mode == 2)
-    {
-        document_grab_focus(doc);
-        keybindings_send_command(GEANY_KEY_GROUP_SELECT, GEANY_KEYS_SELECT_LINE);
-        return;
-    }
-    if (sci_get_selection_mode(sci) != SC_SEL_STREAM || SSM(sci, SCI_GETSELECTIONS, 0, 0) != 1 ||
-        SSM(sci, SCI_GETSELECTIONNCARETVIRTUALSPACE, 0, 0) ||
-        SSM(sci, SCI_GETSELECTIONNANCHORVIRTUALSPACE, 0, 0))
+    if (!structural_normal(sci))
     {
         ui_set_statusbar(TRUE, "Structural selection requires a single normal selection");
+        return;
+    }
+    if (mode == 3)
+    {
+        structural_shrink(doc);
+        return;
+    }
+    if (mode == 2)
+    {
+        gint line = sci_get_current_line(sci);
+        gint first = sci_get_position_from_line(sci, line);
+        gint last = line + 1 < sci_get_line_count(sci) ? sci_get_position_from_line(sci, line + 1) : sci_get_length(sci);
+        structural_apply(doc, first, last, TRUE);
         return;
     }
     gint length = sci_get_length(sci);
@@ -183,9 +189,7 @@ static void structural_selection(GtkMenuItem *item, gpointer data)
     g_free(text);
     if (found == 1)
     {
-        sci_set_selection(sci, first, last);
-        SSM(sci, SCI_SCROLLCARET, 0, 0);
-        document_grab_focus(doc);
+        structural_apply(doc, first, last, TRUE);
     }
     else
         ui_set_statusbar(TRUE, found < 0 ? "Structural selection could not be computed" :
@@ -204,25 +208,66 @@ static void function_navigation(GtkMenuItem *item,gpointer data) {
  if(found==1) { navqueue_goto_line(doc,doc,sci_get_line_from_position(doc->editor->sci,(gint)next)+1); document_grab_focus(doc); }
  else ui_set_statusbar(TRUE,GPOINTER_TO_INT(data)>0 ? "No next function definition" : "No previous function definition");
 }
-static void select_function(GtkMenuItem *item,gpointer data) {
- (void)item;(void)data;GeanyDocument *doc=document_get_current();if(!doc) return;
- ScintillaObject *sci=doc->editor->sci;gint length=sci_get_length(sci);InsightCodeDialect dialect;
- if(length>2*1024*1024 || !source_dialect(doc->file_type,&dialect)) { ui_set_statusbar(TRUE,"Select Function supports parsed brace, Python and Lua functions in files up to 2 MiB");return; }
- if(sci_get_selection_mode(sci)!=SC_SEL_STREAM || SSM(sci,SCI_GETSELECTIONS,0,0)>1) { ui_set_statusbar(TRUE,"Select Function requires a single normal selection");return; }
- document_update_tags(doc);if(!doc->tm_file || !doc->tm_file->tags_array) { ui_set_statusbar(TRUE,"No function symbols in this document");return; }
- gchar *text=sci_get_contents(sci,length+1),*mask=insight_source_code_mask(text,(gsize)length,dialect,NULL);
- if(!mask) { g_free(text);ui_set_statusbar(TRUE,"Select Function: source could not be masked");return; }
- size_t begin=(size_t)sci_get_selection_start(sci),end=(size_t)sci_get_selection_end(sci),best=SIZE_MAX,first=0,last=0;
- gint lines=sci_get_line_count(sci);
- for(guint i=0;i<doc->tm_file->tags_array->len;i++) {
-  TMTag *tag=g_ptr_array_index(doc->tm_file->tags_array,i);if(!function_tag(tag) || tag->line>(gulong)lines) continue;
-  size_t start=(size_t)sci_get_position_from_line(sci,(gint)tag->line-1),finish=0,body=0;
-  if(start>begin) continue;
-  if(insight_function_range(text,mask,(size_t)length,start,function_style(dialect),&body,&finish)==1 && end<=finish && (begin!=end || begin<finish) && finish-start<best) { best=finish-start;first=start;last=finish; }
- }
- g_free(mask);g_free(text);
- if(best!=SIZE_MAX) { sci_set_selection(sci,(gint)first,(gint)last);SSM(sci,SCI_SCROLLCARET,0,0);document_grab_focus(doc); }
- else ui_set_statusbar(TRUE,"No complete enclosing function body");
+/* EN: Select the smallest fresh parser-confirmed function containing the current selection; item/data are unused.
+ * Record its old anchor/caret for Shrink, allow read-only, and refuse unsupported or complex selections.
+ * RU: Выделяет наименьшую актуальную функцию парсера, охватывающую выделение; item/data не используются.
+ * Сохраняет якорь/курсор для сужения, допускает только чтение, отклоняет сложные выделения и неподдерживаемые языки. */
+static void select_function(GtkMenuItem *item, gpointer data)
+{
+    (void)item;
+    (void)data;
+    GeanyDocument *doc = document_get_current();
+    if (!doc) return;
+    ScintillaObject *sci = doc->editor->sci;
+    gint length = sci_get_length(sci);
+    InsightCodeDialect dialect;
+    if (length > 2 * 1024 * 1024 || !source_dialect(doc->file_type, &dialect))
+    {
+        ui_set_statusbar(TRUE, "Select Function supports parsed brace, Python and Lua functions in files up to 2 MiB");
+        return;
+    }
+    if (!structural_normal(sci))
+    {
+        ui_set_statusbar(TRUE, "Select Function requires a single normal selection");
+        return;
+    }
+    document_update_tags(doc);
+    if (!doc->tm_file || !doc->tm_file->tags_array)
+    {
+        ui_set_statusbar(TRUE, "No function symbols in this document");
+        return;
+    }
+    gchar *text = sci_get_contents(sci, length + 1);
+    gchar *mask = insight_source_code_mask(text, length, dialect, NULL);
+    if (!mask)
+    {
+        g_free(text);
+        ui_set_statusbar(TRUE, "Select Function: source could not be masked");
+        return;
+    }
+    size_t begin = sci_get_selection_start(sci), end = sci_get_selection_end(sci);
+    size_t best = SIZE_MAX, first = 0, last = 0;
+    gint lines = sci_get_line_count(sci);
+    for (guint i = 0; i < doc->tm_file->tags_array->len; i++)
+    {
+        TMTag *tag = g_ptr_array_index(doc->tm_file->tags_array, i);
+        if (!function_tag(tag) || tag->line > (gulong)lines) continue;
+        size_t start = sci_get_position_from_line(sci, tag->line - 1), finish = 0, body = 0;
+        if (start > begin) continue;
+        if (insight_function_range(text, mask, length, start, function_style(dialect), &body, &finish) == 1 &&
+            end <= finish && (begin != end || begin < finish) && finish - start < best)
+        {
+            best = finish - start;
+            first = start;
+            last = finish;
+        }
+    }
+    g_free(mask);
+    g_free(text);
+    if (best != SIZE_MAX)
+        structural_apply(doc, first, last, TRUE);
+    else
+        ui_set_statusbar(TRUE, "No complete enclosing function body");
 }
 /* A symbol edit uses a fresh parser snapshot and accepts only complete,
  * standalone function or nominal definitions. Never use a stale outline range. */
@@ -303,9 +348,9 @@ static void create_structural_selection_menu(void)
     GtkWidget *menu = gtk_menu_new();
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), menu);
     gtk_menu_shell_append(GTK_MENU_SHELL(edit), item);
-    const char *labels[] = {"Select enclosing block / expand", "Select matching brackets or quotes", "Select line"};
-    const char *keys[] = {"<Primary><Alt>b", "<Primary><Alt>m", "<Primary><Alt>l"};
-    const char *names[] = {"insight-select-enclosing-block", "insight-select-matching", "insight-select-structural-line"};
+    const char *labels[] = {"Select enclosing block / expand", "Select matching brackets or quotes", "Select line", "Shrink structural selection"};
+    const char *keys[] = {"<Primary><Alt>b", "<Primary><Alt>m", "<Primary><Alt>l", "<Primary><Alt><Shift>b"};
+    const char *names[] = {"insight-select-enclosing-block", "insight-select-matching", "insight-select-structural-line", "insight-shrink-structural-selection"};
     for (guint i = 0; i < G_N_ELEMENTS(labels); i++)
     {
         GtkWidget *entry = gtk_menu_item_new_with_label(labels[i]);
