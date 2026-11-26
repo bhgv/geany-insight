@@ -231,6 +231,14 @@ jobs:
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
           GEANY_RUN_GUI_TESTS=1 xvfb-run -a -s '-screen 0 1600x1200x24' meson test -C _native --print-errorlogs 'Insight literal delimiter selection' 'Insight native literal delimiter selection GUI' 'Insight source mask' 'Insight Verilog source regions' 'Insight structural selection'
+      - name: Publish structural selection diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: structural-selection-diagnostics
+          path: _native/meson-logs/testlog.txt
+          if-no-files-found: ignore
+          retention-days: 3
       - name: Verify search commands before optional integrations
         if: ${{ !cancelled() && steps.native-build.outcome == 'success' }}
         run: |
