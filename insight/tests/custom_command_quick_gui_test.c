@@ -58,7 +58,8 @@ static GtkWidget *top(const gchar *name)
 static GtkWidget *required(GtkWidget *root, const gchar *name)
 {
     GtkWidget *widget = find(root, name);
-    g_assert_nonnull(widget);
+    if (!widget)
+        g_error("Missing widget %s in quick command phase %u", name, phase);
     return widget;
 }
 
@@ -168,10 +169,18 @@ static void invalid_shortcut(const gchar *shortcut)
 }
 
 /* EN: Advance real menu/key launches and safety scenarios; data is unused, ticks bound hangs.
- * RU: Продвигает настоящие запуски меню/клавишами и защитные сценарии; data не используется, ticks ограничивает ожидание. */
+ * Wait for the asynchronously installed startup menu before requiring controls.
+ * RU: Продвигает настоящие запуски меню/клавишами и защитные сценарии; data не используется, ticks ограничивает ожидание.
+ * Дожидается асинхронного меню старта перед обязательным обращением к элементам. */
 static gboolean step(gpointer data)
 {
     (void)data;
+    static guint previous = G_MAXUINT;
+    if (previous != phase)
+    {
+        g_printerr("Quick commands GUI phase %u\n", phase);
+        previous = phase;
+    }
     if (++ticks > 300)
         g_error("Quick command GUI timeout phase %u", phase);
     if (phase != 8 && tool && g_object_get_data(G_OBJECT(tool), "insight-custom-command-busy"))
@@ -187,7 +196,9 @@ static gboolean step(gpointer data)
             return G_SOURCE_CONTINUE;
         window = gtk_widget_get_toplevel(GTK_WIDGET(doc->editor->sci));
         g_assert_false(g_file_test(calls, G_FILE_TEST_EXISTS));
-        GtkWidget *alpha = required(window, "insight-saved-command-0");
+        GtkWidget *alpha = find(window, "insight-saved-command-0");
+        if (!alpha)
+            return G_SOURCE_CONTINUE;
         g_assert_nonnull(g_object_get_data(G_OBJECT(alpha), "insight-command-shortcut"));
         activate("insight-saved-command-0");
     }
