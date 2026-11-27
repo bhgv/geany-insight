@@ -1016,3 +1016,7 @@ dist_insightdocmedia_DATA += insight/docs/media/custom-command-output.svg
 EXTRA_DIST += insight/tests/custom_command_diagnostics_test.c insight/tests/custom_command_diagnostics_gui_test.c
 
 dist_insightdocmedia_DATA += insight/docs/media/custom-command-diagnostics.svg
+
+EXTRA_DIST += insight/tests/custom_command_quick_gui_test.c
+
+dist_insightdocmedia_DATA += insight/docs/media/custom-command-shortcuts.svg

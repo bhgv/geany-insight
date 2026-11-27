@@ -1,4 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+/* EN: Browse live menu commands and generate command/shortcut references, including saved external-tool accelerators.
+ * RU: Показывает действующие команды меню и справочники, включая клавиши сохранённых внешних инструментов. */
 #include "geany.h"
 #include "insight-command-list.h"
 #include "document.h"
@@ -51,31 +53,73 @@ static GHashTable *shortcut_map(void)
     }
     return map;
 }
-static gboolean collect_menu(GtkWidget *menu, const gchar *prefix, GHashTable *shortcuts, GPtrArray *commands, guint depth, guint *visited, gsize *bytes)
+/* EN: Collect visible commands from menu under prefix, borrowing shortcuts and owning additions in commands.
+ * depth/visited/bytes enforce traversal bounds; return FALSE when limits or UTF-8 validation fail.
+ * RU: Собирает видимые команды menu с prefix, заимствует shortcuts и передаёт новые элементы во владение commands.
+ * depth/visited/bytes ограничивают обход; FALSE при превышении границ или неверном UTF-8. */
+static gboolean collect_menu(GtkWidget *menu, const gchar *prefix, GHashTable *shortcuts,
+    GPtrArray *commands, guint depth, guint *visited, gsize *bytes)
 {
-    if (depth > 16) return FALSE;
-    GList *children = gtk_container_get_children(GTK_CONTAINER(menu));gboolean valid = TRUE;
+    if (depth > 16)
+        return FALSE;
+    GList *children = gtk_container_get_children(GTK_CONTAINER(menu));
+    gboolean valid = TRUE;
     for (GList *p = children; p && valid; p = p->next)
     {
         GtkWidget *item = p->data;
-        if (++*visited > CATALOG_ROWS) { valid = FALSE;break; }
-        if (!GTK_IS_MENU_ITEM(item) || GTK_IS_SEPARATOR_MENU_ITEM(item) || !gtk_widget_get_visible(item)) continue;
+        if (++*visited > CATALOG_ROWS)
+        {
+            valid = FALSE;
+            break;
+        }
+        if (!GTK_IS_MENU_ITEM(item) || GTK_IS_SEPARATOR_MENU_ITEM(item) || !gtk_widget_get_visible(item))
+            continue;
         gchar *label = menu_label(item);
-        if (!*label) { g_free(label);continue; }
-        gchar *path = *prefix ? g_strconcat(prefix, " → ", label, NULL) : g_strdup(label);g_free(label);
-        if (strlen(path) > 8192 || !g_utf8_validate(path, -1, NULL)) { g_free(path);valid = FALSE;break; }
+        if (!*label)
+        {
+            g_free(label);
+            continue;
+        }
+        gchar *path = *prefix ? g_strconcat(prefix, " → ", label, NULL) : g_strdup(label);
+        g_free(label);
+        if (strlen(path) > 8192 || !g_utf8_validate(path, -1, NULL))
+        {
+            g_free(path);
+            valid = FALSE;
+            break;
+        }
         GtkWidget *sub = gtk_menu_item_get_submenu(GTK_MENU_ITEM(item));
-        if (sub) { valid = collect_menu(sub, path, shortcuts, commands, depth + 1, visited, bytes);g_free(path);continue; }
-        Command *command = g_new0(Command, 1);g_weak_ref_init(&command->widget, item);command->path = path;
-        command->key = g_strdup(g_hash_table_lookup(shortcuts, item));
-        gchar *tooltip = gtk_widget_get_tooltip_text(item);command->description = field(tooltip);g_free(tooltip);
+        if (sub)
+        {
+            valid = collect_menu(sub, path, shortcuts, commands, depth + 1, visited, bytes);
+            g_free(path);
+            continue;
+        }
+        Command *command = g_new0(Command, 1);
+        g_weak_ref_init(&command->widget, item);
+        command->path = path;
+        const gchar *shortcut = g_hash_table_lookup(shortcuts, item);
+        if (!shortcut)
+            shortcut = g_object_get_data(G_OBJECT(item), "insight-command-shortcut");
+        command->key = g_strdup(shortcut);
+        gchar *tooltip = gtk_widget_get_tooltip_text(item);
+        command->description = field(tooltip);
+        g_free(tooltip);
         gsize size = strlen(command->path) + (command->key ? strlen(command->key) : 0) + strlen(command->description) + 3;
-        if (size > CATALOG_BYTES || *bytes > CATALOG_BYTES - size) { command_free(command);valid = FALSE;break; }
+        if (size > CATALOG_BYTES || *bytes > CATALOG_BYTES - size)
+        {
+            command_free(command);
+            valid = FALSE;
+            break;
+        }
         *bytes += size;
         gchar *search = g_strjoin(" ", command->path, command->key ? command->key : "", command->description, NULL);
-        command->folded = g_utf8_casefold(search, -1);g_free(search);g_ptr_array_add(commands, command);
+        command->folded = g_utf8_casefold(search, -1);
+        g_free(search);
+        g_ptr_array_add(commands, command);
     }
-    g_list_free(children);return valid;
+    g_list_free(children);
+    return valid;
 }
 static GPtrArray *collect_commands(void)
 {
@@ -95,42 +139,83 @@ static gboolean append_row(GString *text, const gchar *a, const gchar *b, const 
     if (valid) g_string_append_printf(text, "%s\t%s\t%s\n", left, middle, right);
     g_free(left);g_free(middle);g_free(right);return valid;
 }
+/* EN: Append non-native saved-command shortcuts to text, updating count and preserving shared limits; return success.
+ * RU: Добавляет ненативные клавиши сохранённых команд в text, обновляя count и соблюдая общие границы; возвращает успех. */
+static gboolean append_saved_keys(GString *text, guint *count)
+{
+    GPtrArray *commands = collect_commands();
+    if (!commands)
+        return FALSE;
+    gboolean valid = TRUE;
+    for (guint i = 0; valid && i < commands->len; i++)
+    {
+        Command *command = g_ptr_array_index(commands, i);
+        GtkWidget *widget = g_weak_ref_get(&command->widget);
+        const gchar *shortcut = widget ? g_object_get_data(G_OBJECT(widget), "insight-command-shortcut") : NULL;
+        if (shortcut && *shortcut)
+            valid = ++*count <= CATALOG_ROWS && append_row(text, insight_tr("Saved commands"), command->path, shortcut);
+        if (widget)
+            g_object_unref(widget);
+    }
+    g_ptr_array_unref(commands);
+    return valid;
+}
+
+/* EN: Create an editable command/key reference from live menus; item is unused, data selects keys versus commands.
+ * Return via a new buffer or report shared size/traversal errors without executing commands.
+ * RU: Создаёт редактируемую справку по живому меню; item не используется, data выбирает клавиши либо команды.
+ * Результат — новый буфер либо сообщение о границах без выполнения команд. */
 static void create_reference(GtkMenuItem *item, gpointer data)
 {
-    (void)item;gboolean keys = GPOINTER_TO_INT(data);gboolean valid = TRUE;
-    GString *text = g_string_new(insight_tr(keys ? "Key List" : "Command List"));g_string_append(text, "\n\n");
+    (void)item;
+    gboolean keys = GPOINTER_TO_INT(data);
+    gboolean valid = TRUE;
+    GString *text = g_string_new(insight_tr(keys ? "Key List" : "Command List"));
+    g_string_append(text, "\n\n");
     if (keys)
     {
-        valid = append_row(text, insight_tr("Group"), insight_tr("Command"), insight_tr("Shortcut"));guint count = 0;
+        valid = append_row(text, insight_tr("Group"), insight_tr("Command"), insight_tr("Shortcut"));
+        guint count = 0;
         for (guint g = 0; valid && keybinding_groups && g < keybinding_groups->len; g++)
         {
             GeanyKeyGroup *group = g_ptr_array_index(keybinding_groups, g);
             for (guint i = 0; valid && group->key_items && i < group->key_items->len; i++)
             {
-                GeanyKeyBinding *key = g_ptr_array_index(group->key_items, i);if (!key) continue;
+                GeanyKeyBinding *key = g_ptr_array_index(group->key_items, i);
+                if (!key)
+                    continue;
                 gchar *label = keybindings_get_label(key);
                 gchar *shortcut = key->key ? gtk_accelerator_get_label(key->key, key->mods) : g_strdup(insight_tr("Unassigned"));
                 valid = ++count <= CATALOG_ROWS && append_row(text, insight_tr(group->label), insight_tr(label), shortcut);
-                g_free(shortcut);g_free(label);
+                g_free(shortcut);
+                g_free(label);
             }
         }
+        if (valid)
+            valid = append_saved_keys(text, &count);
     }
     else
     {
-        GPtrArray *commands = collect_commands();valid = commands != NULL;
-        if (valid) valid = append_row(text, insight_tr("Menu command"), insight_tr("Shortcut"), insight_tr("Description"));
+        GPtrArray *commands = collect_commands();
+        valid = commands != NULL;
+        if (valid)
+            valid = append_row(text, insight_tr("Menu command"), insight_tr("Shortcut"), insight_tr("Description"));
         for (guint i = 0; valid && i < commands->len; i++)
         {
-            Command *command = g_ptr_array_index(commands, i);valid = append_row(text, command->path, command->key, command->description);
+            Command *command = g_ptr_array_index(commands, i);
+            valid = append_row(text, command->path, command->key, command->description);
         }
-        if (commands) g_ptr_array_free(commands, TRUE);
+        if (commands)
+            g_ptr_array_unref(commands);
     }
     if (valid)
     {
         GeanyDocument *doc = document_new_file(keys ? "Keylist.txt" : "Command List.txt", NULL, text->str);
-        if (doc) document_set_text_changed(doc, TRUE);
+        if (doc)
+            document_set_text_changed(doc, TRUE);
     }
-    else ui_set_statusbar(TRUE, "%s", insight_tr("Command reference exceeds the 10000-item or 1 MiB limit"));
+    else
+        ui_set_statusbar(TRUE, "%s", insight_tr("Command reference exceeds the 10000-item or 1 MiB limit"));
     g_string_free(text, TRUE);
 }
 enum { COL_PATH, COL_KEY, COL_DESCRIPTION, COL_INDEX, COL_STATE, COL_COUNT };

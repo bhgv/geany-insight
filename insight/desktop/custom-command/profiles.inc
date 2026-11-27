@@ -13,6 +13,7 @@ void insight_custom_command_free(gpointer data)
     g_free(command->command);
     g_free(command->directory);
     g_free(command->diagnostic_pattern);
+    g_free(command->shortcut);
     g_free(command);
 }
 
@@ -26,6 +27,7 @@ InsightCustomCommand *insight_custom_command_copy(const InsightCustomCommand *co
     copy->directory = g_strdup(command->directory);
     copy->diagnostic_pattern = g_strdup(command->diagnostic_pattern);
     copy->parse_on_finish = command->parse_on_finish;
+    copy->shortcut = g_strdup(command->shortcut);
     return copy;
 }
 
@@ -34,7 +36,7 @@ InsightCustomCommand *insight_custom_command_copy(const InsightCustomCommand *co
 static gboolean command_valid(InsightCustomCommand *command, GError **error)
 {
     if (!command || !field(command->name, 128) || !*command->name ||
-        !field(command->command, 16384) || !*command->command || !field(command->directory, 16384))
+        !field(command->command, 16384) || !*command->command || !field(command->directory, 16384) || !field(command->shortcut ? command->shortcut : "", 128))
         return fail(error, "Invalid saved custom command");
     GRegex *regex = insight_custom_diagnostic_regex(command->diagnostic_pattern, error);
     if (command->diagnostic_pattern && *command->diagnostic_pattern && !regex)
@@ -56,6 +58,8 @@ static InsightCustomCommand *command_read(GKeyFile *key, guint index, GError **e
     GError *local = NULL;
     if (g_key_file_has_key(key, group, "diagnostic-pattern", NULL))
         command->diagnostic_pattern = g_key_file_get_string(key, group, "diagnostic-pattern", &local);
+    if (!local && g_key_file_has_key(key, group, "shortcut", NULL))
+        command->shortcut = g_key_file_get_string(key, group, "shortcut", &local);
     if (!local && g_key_file_has_key(key, group, "parse-on-finish", NULL))
         command->parse_on_finish = g_key_file_get_boolean(key, group, "parse-on-finish", &local);
     g_free(group);
@@ -154,6 +158,7 @@ gboolean insight_custom_commands_save(const gchar *path, GPtrArray *list, GError
         g_key_file_set_string(key, group, "directory", command->directory);
         g_key_file_set_string(key, group, "diagnostic-pattern", command->diagnostic_pattern ? command->diagnostic_pattern : "");
         g_key_file_set_boolean(key, group, "parse-on-finish", command->parse_on_finish);
+        g_key_file_set_string(key, group, "shortcut", command->shortcut ? command->shortcut : "");
         g_free(group);
     }
     gsize length = 0;

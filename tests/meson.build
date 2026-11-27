@@ -1062,3 +1062,6 @@ custom_command_diagnostics_test = executable('test_insight_custom_command_diagno
 test('Insight custom diagnostic patterns and profiles', custom_command_diagnostics_test)
 custom_command_diagnostics_gui_test = executable('test_insight_custom_command_diagnostics_gui', '../insight/tests/custom_command_diagnostics_gui_test.c', dependencies: test_deps)
 test('Insight native saved diagnostic patterns GUI', custom_command_diagnostics_gui_test, timeout: 60, is_parallel: false)
+
+custom_command_quick_gui_test = executable('test_insight_custom_command_quick_gui', '../insight/tests/custom_command_quick_gui_test.c', dependencies: test_deps)
+test('Insight native saved command menus and shortcuts GUI', custom_command_quick_gui_test, timeout: 90, is_parallel: false)

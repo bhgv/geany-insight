@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="350" viewBox="0 0 840 350">
+<title>Saved command quick launch / Быстрый запуск сохранённой команды</title>
+<desc>Menu or key resolves a current saved profile, protects drafts and launches the ordinary command runner. Repeat uses current context.</desc>
+<rect width="840" height="350" rx="14" fill="#f3f6fb"/>
+<g font-family="sans-serif" fill="#1f3553">
+<text x="28" y="36" font-size="22" font-weight="bold">Saved commands / Сохранённые команды</text>
+<rect x="28" y="64" width="242" height="95" rx="10" fill="#dce9fb" stroke="#5d86bc"/>
+<text x="44" y="93" font-size="17">Tools → Run saved command</text><text x="44" y="119" font-size="17">Ctrl + Shift + F9</text><text x="44" y="144" font-size="15">Repeat / Повтор</text>
+<path d="M275 111h35l-9-7m9 7-9 7" fill="none" stroke="#3c679c" stroke-width="3"/>
+<rect x="320" y="64" width="228" height="95" rx="10" fill="#fff0ca" stroke="#bf9945"/>
+<text x="337" y="93" font-size="17">Verify / Проверить</text><text x="337" y="119" font-size="15">profile • draft • busy</text><text x="337" y="144" font-size="15">профиль • черновик • запуск</text>
+<path d="M555 111h35l-9-7m9 7-9 7" fill="none" stroke="#3c679c" stroke-width="3"/>
+<rect x="600" y="64" width="212" height="95" rx="10" fill="#d8f0e3" stroke="#569e78"/>
+<text x="618" y="93" font-size="17">Run / Запустить</text><text x="618" y="119" font-size="15">current context / контекст</text><text x="618" y="144" font-size="15">stdout + diagnostics</text>
+<path d="M434 165v27l-7-9m7 9 7-9" fill="none" stroke="#a06d39" stroke-width="3"/>
+<rect x="28" y="207" width="784" height="117" rx="10" fill="#fff" stroke="#b5c6dc"/>
+<text x="46" y="237" font-size="17">Changed profile or draft? Resolve before launch.</text>
+<text x="46" y="264" font-size="17">Профиль или черновик изменился? Исправьте перед запуском.</text>
+<text x="46" y="300" font-size="15">Startup / Старт: load only • Shortcut conflicts / Конфликты клавиш: refuse</text>
+</g></svg>

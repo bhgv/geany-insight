@@ -47,7 +47,7 @@ Up to 64 named commands are stored in the editor profile's `insight/custom-comma
 
 Output is decoded as UTF-8 across pipe chunks; invalid bytes use replacement characters and NUL is displayed as `␀`. The process is stopped at 4 MiB, 50000 lines or 64 KiB on one line. This is an output log, not a terminal: no VT escape interpretation or interactive stdin. Stop/Close terminates the directly launched process and cancels the local output read; it does not promise to terminate independently forked descendants. No auto-run occurs when a project opens or settings are loaded.
 
-Source Insight ShellExecute and automatic per-command hotkeys are not implemented. Numbered arguments use explicit fields instead of modal argument prompts. Native GUI testing uses Linux; Windows shell syntax and runtime behavior require separate validation.
+Source Insight ShellExecute is not implemented. Numbered arguments use explicit fields instead of modal argument prompts. Native GUI testing uses Linux; Windows shell syntax and runtime behavior require separate validation.
 
 Reference: [Source Insight Custom Commands](https://www.sourceinsight.com/doc/v4/userguide/Manual/Command_Reference/Custom_Commands1.htm).
 
@@ -136,3 +136,20 @@ For line-before-file output such as `L12@src/unit name.v`:
 Automatic parsing uses settings captured at Run and begins after the process and stdout/stderr capture complete. Nonzero exit is still parsed, making compiler failures useful. Stop, read failures and truncated capture skip automatic parsing. Matches reveal Diagnostics and select the first row, but never open source automatically. Navigation remains explicit through Open source, double-click or F4; column is metadata and navigation uses the line.
 
 Paths always resolve against the retained launch directory, even after switching files/projects. Custom captures do not normalize backslashes into POSIX path separators; remote mappings and the tool's internal `chdir` are not inferred. Pattern size is one UTF-8 line up to 1024 bytes; output lines are limited to 64 KiB and results to 1000 records. Custom matching is limited to 10000 match steps and depth 256; an error/limit stops the current parse and appears in status. This is not Source Insight's legacy regex dialect.
+
+## Quick launch, repeat and shortcuts
+
+![Menu and shortcut launch a verified profile](../media/custom-command-shortcuts.svg)
+
+1. Open **Tools → Custom Commands…**, configure a profile and save it.
+2. Optionally set **Saved command shortcut** using GTK syntax, for example `<Primary><Shift>F9` (Ctrl+Shift+F9), click **Check shortcut**, then **Save command**. An empty field removes the binding. Use a function key or a combination with Ctrl, Alt or Super; ordinary typing and Shift+letter are rejected.
+3. Launch through **Tools → Run saved command → name** or its assigned shortcut in the main window. The tool window opens and uses normal Run, including current file context, `%s`, bulk arguments, stdout and diagnostics.
+4. **Repeat saved command** repeats the last successfully started saved-profile launch with current context. Repeat lasts for this editor session, including tool window closure. Reordering retains it; editing or deleting that profile invalidates it. A command's nonzero exit alone does not invalidate repeat.
+
+Editor, plugin and other GTK-group bindings are reserved. Check and Save reject conflicts, malformed shortcuts and duplicate profile bindings, preserving the previous settings file. On loading conflicting settings, profiles remain available by menu while unavailable bindings are omitted. All participants in a duplicate are disabled. Keyboard dispatch rechecks live conflicts.
+
+Quick launch preserves an edited draft: save it or choose **Discard draft edits** first. Discard restores the selected saved profile's fields or the empty new profile. `%1`–`%9` retain the current tool window's values across profile changes and repeats; reopening the window starts them empty. They are neither saved nor replayed from the previous launch.
+
+Menus refresh after saving, reordering or deleting. After external settings edits, use **Tools → Reload saved commands**. Each launch rereads and verifies the saved profile: an old item after edits, reorder, deletion or malformed settings cannot launch a different command. A busy tool refuses a new launch without queuing it. Editor startup and menu reload never execute tools.
+
+**Command Browser** shows saved commands, availability and active shortcuts; **Create Key List** includes these bindings. Configure profile shortcuts in the Custom Commands tool; they are saved with profiles. Profile names remain literal data during interface language changes.

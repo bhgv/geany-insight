@@ -80,11 +80,14 @@ int main(void)
     InsightCustomCommand *command = g_ptr_array_index(list, 0);
     g_assert_false(command->parse_on_finish);
     g_assert_null(command->diagnostic_pattern);
+    g_assert_null(command->shortcut);
+    command->shortcut = g_strdup("<Control><Shift>F9");
     command->diagnostic_pattern = g_strdup(pattern);
     command->parse_on_finish = TRUE;
     InsightCustomCommand *copy = insight_custom_command_copy(command);
     g_assert_cmpstr(copy->diagnostic_pattern, ==, pattern);
     g_assert_true(copy->parse_on_finish);
+    g_assert_cmpstr(copy->shortcut, ==, "<Control><Shift>F9");
     insight_custom_command_free(copy);
     g_assert_true(insight_custom_commands_save(path, list, &error));
     g_assert_no_error(error);
@@ -93,6 +96,7 @@ int main(void)
     copy = g_ptr_array_index(loaded, 0);
     g_assert_cmpstr(copy->diagnostic_pattern, ==, pattern);
     g_assert_true(copy->parse_on_finish);
+    g_assert_cmpstr(copy->shortcut, ==, "<Control><Shift>F9");
     g_ptr_array_unref(loaded);
     gchar *before = NULL;
     g_assert_true(g_file_get_contents(path, &before, NULL, NULL));

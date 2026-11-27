@@ -5,7 +5,7 @@
 #define INSIGHT_CUSTOM_COMMAND_H
 #include <gio/gio.h>
 typedef struct {
-    gchar *name, *command, *directory, *diagnostic_pattern;
+    gchar *name, *command, *directory, *diagnostic_pattern, *shortcut;
     gboolean parse_on_finish;
 } InsightCustomCommand;
 void insight_custom_command_free(gpointer);

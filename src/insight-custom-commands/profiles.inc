@@ -18,6 +18,7 @@ static void select_profile(GtkComboBox *box, gpointer data)
     gtk_entry_set_text(GTK_ENTRY(v->directory), command->directory);
     gtk_entry_set_text(GTK_ENTRY(v->diagnostic_pattern), command->diagnostic_pattern ? command->diagnostic_pattern : "");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(v->parse_on_finish), command->parse_on_finish);
+    gtk_entry_set_text(GTK_ENTRY(v->shortcut), command->shortcut ? command->shortcut : "");
 }
 
 /* EN: Deep-copy v's saved commands before a transactional edit; caller owns the returned list.
@@ -49,6 +50,13 @@ static void rebuild(CommandView *v, gint at)
 static gboolean persist(CommandView *v, GPtrArray *list, gint at)
 {
     GError *error = NULL;
+    if (!shortcuts_valid(list, &error))
+    {
+        note(v, error->message);
+        g_clear_error(&error);
+        g_ptr_array_unref(list);
+        return FALSE;
+    }
     gchar *dir = g_path_get_dirname(v->path);
     gint made = g_mkdir_with_parents(dir, 0700);
     g_free(dir);
@@ -62,6 +70,7 @@ static gboolean persist(CommandView *v, GPtrArray *list, gint at)
     g_ptr_array_unref(v->commands);
     v->commands = list;
     rebuild(v, at);
+    quick_schedule_refresh();
     note(v, "Custom commands saved");
     return TRUE;
 }
@@ -75,6 +84,7 @@ static void clear_profile(CommandView *v)
     gtk_entry_set_text(GTK_ENTRY(v->directory), "%j");
     gtk_entry_set_text(GTK_ENTRY(v->diagnostic_pattern), "");
     gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(v->parse_on_finish), FALSE);
+    gtk_entry_set_text(GTK_ENTRY(v->shortcut), "");
 }
 
 /* EN: Execute button's New/Save/Delete/Move operation on view data, preserving all diagnostic settings and atomic-save semantics.
@@ -102,6 +112,7 @@ static void edit_profile(GtkWidget *button, gpointer data)
         command->directory = g_strdup(gtk_entry_get_text(GTK_ENTRY(v->directory)));
         command->diagnostic_pattern = g_strdup(gtk_entry_get_text(GTK_ENTRY(v->diagnostic_pattern)));
         command->parse_on_finish = gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(v->parse_on_finish));
+        command->shortcut = g_strdup(gtk_entry_get_text(GTK_ENTRY(v->shortcut)));
         if (at >= 0)
         {
             insight_custom_command_free(g_ptr_array_index(list, at));

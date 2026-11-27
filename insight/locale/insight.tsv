@@ -3619,3 +3619,21 @@ Diagnostic pattern is valid	Шаблон диагностики корректе
 Built-in GCC, MSVC and Python diagnostic formats selected	Выбраны встроенные форматы диагностики GCC, MSVC и Python
 Diagnostic pattern must be one UTF-8 line up to 1024 bytes	Шаблон диагностики должен быть одной строкой UTF-8 до 1024 байт
 Diagnostic pattern requires named groups file and line	Шаблон диагностики требует именованные группы file и line
+Run saved command	Запустить сохранённую команду
+Reload saved commands	Обновить сохранённые команды
+Repeat saved command	Повторить сохранённую команду
+No saved commands	Нет сохранённых команд
+Cannot load saved commands	Не удалось загрузить сохранённые команды
+Saved shortcut is unavailable; edit the profile to resolve its conflict or syntax	Сохранённое сочетание недоступно; исправьте конфликт или синтаксис в профиле
+Saved command changed. Reload the saved command menu.	Сохранённая команда изменилась. Обновите меню сохранённых команд.
+A custom command is already running. Stop it or wait for completion.	Пользовательская команда уже выполняется. Остановите её либо дождитесь завершения.
+Save or discard custom command edits before quick launch	Перед быстрым запуском сохраните или отмените изменения команды
+Saved command shortcut is available	Сочетание сохранённой команды доступно
+Custom command draft edits discarded	Изменения черновика команды отменены
+Saved command shortcut (optional)	Сочетание сохранённой команды (необязательно)
+GTK accelerator, for example <Primary><Shift>F9. Existing editor and plugin shortcuts are reserved.	Сочетание GTK, например <Primary><Shift>F9. Занятые клавиши редактора и плагинов зарезервированы.
+Check shortcut	Проверить сочетание
+Discard draft edits	Отменить изменения черновика
+Use a valid GTK accelerator with Ctrl, Alt or Super, or a function key	Укажите корректное сочетание GTK с Ctrl, Alt или Super либо функциональную клавишу
+Shortcut is already assigned to another editor, plugin or saved command	Сочетание уже назначено команде редактора, плагина либо сохранённой команде
+Saved commands	Сохранённые команды

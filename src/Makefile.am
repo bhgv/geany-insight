@@ -741,3 +741,7 @@ libgeany_la_SOURCES += insight-custom-commands/output-target.inc insight-custom-
 libgeany_la_SOURCES += ../insight/desktop/custom-command/profiles.inc ../insight/desktop/custom-command/links.inc
 
 libgeany_la_SOURCES += insight-custom-commands/profiles.inc insight-custom-commands/diagnostics.inc
+
+libgeany_la_SOURCES += insight-custom-commands/shortcuts.inc insight-custom-commands/quick-actions.inc insight-custom-commands/quick-menu.inc
+
+libgeany_la_SOURCES += insight-custom-commands/window.inc

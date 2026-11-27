@@ -81,3 +81,5 @@ metadata stripped. It is a native test fixture running the complete application.
 - `custom-command-output.svg`: original explanatory diagram of isolated stdout and guarded editor application; not a screenshot.
 
 - `custom-command-diagnostics.svg`: original diagram of saved patterns, automatic completion parsing and explicit source navigation; not a screenshot.
+
+- `custom-command-shortcuts.svg`: original explanatory diagram of saved menu/key dispatch, current-profile validation and draft/busy guards; not a screenshot.
