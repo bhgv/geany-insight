@@ -45,10 +45,14 @@ static gboolean shortcut_parse(const gchar *text, guint *key, GdkModifierType *m
     return TRUE;
 }
 
-/* EN: Detect key/mods already claimed by native/plugin keybindings or another GTK group; exclude this feature's group.
- * RU: Проверяет занятость key/mods нативными/плагинными сочетаниями либо другой GTK-группой, исключая собственную. */
+/* EN: Detect key/mods already claimed by native/plugin keybindings or another GTK group, including fixed editor actions; exclude this feature's group.
+ * RU: Проверяет занятость key/mods нативными/плагинными сочетаниями либо другой GTK-группой и фиксированными действиями, исключая собственную. */
 static gboolean shortcut_reserved(guint key, GdkModifierType mods)
 {
+    if ((!mods && (key == GDK_KEY_F2 || key == GDK_KEY_F10)) ||
+        (mods == GDK_MOD1_MASK && key >= GDK_KEY_0 && key <= GDK_KEY_9) ||
+        (mods == (GEANY_PRIMARY_MOD_MASK | GDK_SHIFT_MASK) && (key == GDK_KEY_Page_Up || key == GDK_KEY_Page_Down)))
+        return TRUE;
     for (guint g = 0; keybinding_groups && g < keybinding_groups->len; g++)
     {
         GeanyKeyGroup *group = g_ptr_array_index(keybinding_groups, g);

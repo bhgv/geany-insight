@@ -427,8 +427,6 @@ static GtkWidget *text_view(GtkWidget *page,const gchar *name,gboolean expand) {
 static void locale(gpointer data) {CommandView *v=data;if(!v->closed) {render_context(v);link_count(v);insight_i18n_key(G_OBJECT(v->window),"title","Custom Commands");if(v->title) insight_i18n_key(G_OBJECT(v->title),"label","Custom Commands");}if(!v->closed && v->status_key) {gchar *key=g_strdup(v->status_key);note(v,key);g_free(key);}}
 #include "insight-custom-commands/output-review.inc"
 
-/* EN: Create or present the saved command tool window; item/unused are menu callback arguments only.
- * RU: Создаёт либо показывает окно сохранённых команд; item/unused используются только как аргументы меню. */
 #include "insight-custom-commands/window.inc"
 
 #include "insight-custom-commands/quick-menu.inc"

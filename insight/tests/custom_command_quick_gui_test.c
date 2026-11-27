@@ -215,6 +215,8 @@ static gboolean step(gpointer data)
     {
         expect(four);
         invalid_shortcut("<Control>s");
+        invalid_shortcut("F2");
+        invalid_shortcut("<Alt>1");
         invalid_shortcut(alpha_key);
         invalid_shortcut("x");
         set("insight-custom-shortcut", beta_key);

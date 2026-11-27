@@ -15,8 +15,8 @@ static void invalid_pattern(const gchar *pattern)
     g_clear_error(&error);
 }
 
-/* EN: Verify custom parsing and persisted backward-compatible diagnostic settings without accessing source files.
- * RU: Проверяет свой разбор и сохраняемые совместимые настройки диагностики без чтения исходников. */
+/* EN: Verify custom parsing and persisted backward-compatible diagnostic and shortcut settings without accessing source files.
+ * RU: Проверяет свой разбор и сохраняемые совместимые настройки диагностики и клавиш без чтения исходников. */
 int main(void)
 {
     GError *error = NULL;
